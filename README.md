@@ -9,7 +9,7 @@ digest that is easy to paste anywhere—including straight into ChatGPT / o1.
 ```bash
 cd /Users/isaac/tubCloud/Dokumente/PhD_Masterarbeit/PhD_Projects/Misc/arxiv-scraper-gpt_cp
 uv sync
-uv run python condmat_digest.py --top 15
+uv run python arxiv_digest.py --top 15
 ```
 
 That command will fetch the live feed, score every paper, and print the top 15.
@@ -17,7 +17,7 @@ The UV-managed `.venv` isolates dependencies (`requests`, `beautifulsoup4`).
 
 ## Configuration workflow
 
-`condmat_digest.py` ships with embedded defaults, so you can copy/paste the file
+`arxiv_digest.py` ships with embedded defaults, so you can copy/paste the file
 into ChatGPT Code Interpreter and run it without any side files.
 
 When running locally you can persist tweaks in `condmat_config.json` (auto-created
@@ -36,14 +36,14 @@ Changes apply immediately in-memory; append `--save-config` to write the new
 state back to `condmat_config.json`. Example:
 
 ```bash
-uv run python condmat_digest.py \
+uv run python arxiv_digest.py \
   --add-core "rydberg" --add-author "bloch" --save-config
 ```
 
 Inspect the current configuration at any time:
 
 ```bash
-uv run python condmat_digest.py --list-config
+uv run python arxiv_digest.py --list-config
 ```
 
 ## Saving results
@@ -53,7 +53,7 @@ review. To capture the ranked entries as structured data, add
 `--output-json path/to/digest.json`:
 
 ```bash
-uv run python condmat_digest.py --top 20 --output-json reports/condmat-2025-11-17.json
+uv run python arxiv_digest.py --top 20 --output-json reports/condmat-2025-11-17.json
 ```
 
 The JSON file includes metadata (timestamp, feed URL, section filters) plus the
@@ -61,18 +61,18 @@ top-N entries with scores, titles, authors, sections, links, and summaries. You
 can still redirect stdout to a text file if you prefer the plain digest:
 
 ```bash
-uv run python condmat_digest.py --top 5 > notes/today.txt
+uv run python arxiv_digest.py --top 5 > notes/today.txt
 ```
 
 ## ChatGPT / Code Interpreter usage
 
-1. Copy the entire contents of `condmat_digest.py` and paste it into ChatGPT.
+1. Copy the entire contents of `arxiv_digest.py` and paste it into ChatGPT.
 2. Tell ChatGPT to execute the script (the default config is embedded, so no
    sibling files are required).
 3. Optionally pass CLI-like instructions inside the same message, e.g.:
    ````
    Please run the script with:
-   python condmat_digest.py --top 10 --add-core "rydberg" --feed https://arxiv.org/list/quant-ph/new
+   python arxiv_digest.py --top 10 --add-core "rydberg" --feed https://arxiv.org/list/quant-ph/new
    ````
 4. You will receive the same digest table that you see locally.
 
@@ -84,19 +84,19 @@ allows outbound network calls (Code Interpreter / o1 / Advanced Data Analysis).
 Show only cross listings and export the updated config:
 
 ```bash
-uv run python condmat_digest.py --sections "Cross" --save-config
+uv run python arxiv_digest.py --sections "Cross" --save-config
 ```
 
 Try a one-off alternative feed without touching config:
 
 ```bash
-uv run python condmat_digest.py --feed https://arxiv.org/list/quant-ph/new
+uv run python arxiv_digest.py --feed https://arxiv.org/list/quant-ph/new
 ```
 
 Raise/lower the number of entries:
 
 ```bash
-uv run python condmat_digest.py --top 5
+uv run python arxiv_digest.py --top 5
 ```
 
 Copy/paste the resulting digest directly into notes, Slack, or ChatGPT. Each

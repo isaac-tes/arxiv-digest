@@ -20,11 +20,39 @@ import requests
 from bs4 import BeautifulSoup
 
 DEFAULT_FEED = "cond-mat"
-DEFAULT_CONFIG_PATH = Path(__file__).with_name("condmat_config.json")
+DEFAULT_CONFIG_PATH = Path(__file__).with_name("arxiv_config.json")
 
 
 def _default_core_keywords() -> List[str]:
     return [
+        "geometry",
+        "geom",
+        "quantum geometry",
+        "quantum geom",
+        "topological",
+        "topolog",
+        "anyon",
+        "1d",
+        "one-dimensional",
+        "scar",
+        "boson",
+        "bosonic BdG",
+        "Krylov",
+        "Thouless",
+        "pumping",
+        "pumping",
+        "gauge field",
+        "gauge potential",
+        "Peierls phases",
+        "topological phase transition",
+        "topological order",
+        "Chern",
+        "Hopf",
+        "Hofstadter",
+        "Harper",
+        "Hatsugai",
+        "chain",
+        "lattice",
         "mps",
         "dmrg",
         "matrix product",
@@ -38,11 +66,7 @@ def _default_core_keywords() -> List[str]:
         "reservoir",
         "reservoir engineering",
         "quantum gas",
-        "1d",
-        "one-dimensional",
         "ladder",
-        "chain",
-        "boson",
         "bosonic",
         "mott",
         "doublon",
@@ -50,30 +74,46 @@ def _default_core_keywords() -> List[str]:
         "hubbard",
         "supersolid",
         "chiral",
-        "topolog",
-        "topological",
         "spin chain",
         "kitaev",
         "ising",
         "heisenberg",
         "frustrat",
-        "anyon",
         "entanglement",
         "mpo",
-        "scar",
     ]
 
 
 def _default_named_authors() -> List[str]:
     return [
+        "mera",
+        "slager",
+        "ozawa",
+        "carusotto",
+        "goldman",
         "eckardt",
+        "pollmann",
+        "verresen",
         "barbiero",
         "lewenstein",
-        "giamarchi",
-        "pollmann",
-        "goldman",
+        "törmä",
+        "bukov",
+        "tarruell",
+        "celi",
+        "aidelsburger",
+        "cooper",
+        "dalibard",
+        "bloch",
+        "cirac",
+        "jaksch",
+        "demler",
+        "lukin",
+        "moessner",
+        "senthil",
+        "fradkin",
         "pelster",
-        "chepiga",
+        # "giamarchi",
+        # "chepiga",
     ]
 
 
@@ -92,7 +132,6 @@ def _default_low_priority_kw() -> List[str]:
         "mbe",
         "growth",
         "fabrication",
-        "magnetization",
         "stm",
         "arpes",
         "rixs",
@@ -102,7 +141,12 @@ def _default_low_priority_kw() -> List[str]:
 @dataclass
 class Config:
     feeds: Dict[str, str] = field(
-        default_factory=lambda: {DEFAULT_FEED: "https://arxiv.org/list/cond-mat/new"}
+        default_factory=lambda: {
+            "cond-mat.quant-gas": "https://arxiv.org/list/cond-mat.quant-gas/recent",
+            "cond-mat.mes-hall": "https://arxiv.org/list/cond-mat.mes-hall/recent",
+            "quant-ph": "https://arxiv.org/archive/quant-ph/new",
+            "cond-mat": "https://arxiv.org/list/cond-mat/new",
+        }
     )
     default_feed: str = DEFAULT_FEED
     core_keywords: List[str] = field(default_factory=_default_core_keywords)
@@ -278,6 +322,25 @@ def fetch_feed(url: str, sections: List[str] | None = None) -> List[dict]:
     return papers
 
 
+def fetch_feeds(urls: List[str], sections: List[str] | None = None) -> List[dict]:
+    """Fetch multiple feeds and concatenate results, deduplicating by arXiv id."""
+    all_papers: List[dict] = []
+    seen_ids = set()
+    for u in urls:
+        try:
+            papers = fetch_feed(u, sections=sections)
+        except Exception:
+            # propagate outer exception later — but continue gathering what's available
+            raise
+        for p in papers:
+            pid = p.get("id")
+            if pid in seen_ids:
+                continue
+            seen_ids.add(pid)
+            all_papers.append(p)
+    return all_papers
+
+
 def score_paper(paper: dict, cfg: Config) -> int:
     txt = " ".join(
         [
@@ -293,12 +356,14 @@ def score_paper(paper: dict, cfg: Config) -> int:
             score += 6
     for author in cfg.named_authors:
         if author.lower() in txt:
-            score += 8
+            score += 6
     subjects = paper.get("subjects", "").lower()
     if "cond-mat.quant-gas" in subjects:
-        score += 6
+        score += 4
+    if "cond-mat.mes-hall" in subjects:
+        score += 4
     if "quant-ph" in subjects:
-        score += 3
+        score += 2
     if any(token.lower() in txt for token in cfg.low_priority_kw):
         score -= 5
     if len(paper.get("abstract", "")) > 200:
@@ -363,22 +428,38 @@ def format_digest(entries: List[dict], total_papers: int, requested_top: int) ->
 
 
 def determine_feed(cfg: Config, args: argparse.Namespace) -> str:
+    # This function is kept for backward compatibility but main now supports
+    # multiple feeds via --feed (action=append). If args.feed is provided it
+    # may be a list of names/URLs; return a list of URLs.
     if args.feed:
-        key = args.feed
-        if key in cfg.feeds:
-            return cfg.feeds[key]
-        if key.startswith("http"):
-            return key
-        raise SystemExit(f"Unknown feed '{key}'. Available: {', '.join(cfg.feeds)}")
+        urls: List[str] = []
+        for key in args.feed:
+            if key in cfg.feeds:
+                urls.append(cfg.feeds[key])
+                continue
+            if key.startswith("http"):
+                urls.append(key)
+                continue
+            raise SystemExit(f"Unknown feed '{key}'. Add it first with --add-url")
+        return urls
+
     default_url = cfg.feeds.get(cfg.default_feed)
     if not default_url:
         raise SystemExit("No feeds configured. Use --add-url NAME=https://... to add one.")
-    return default_url
+    return [default_url]
 
 
 def parse_args(argv: Sequence[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Fetch + rank cond-mat arXiv papers")
-    parser.add_argument("--feed", help="Feed name from config or explicit URL", default=None)
+    parser.add_argument(
+        "--feed",
+        action="append",
+        help=(
+            "Feed name from config or explicit URL. May be provided multiple times to "
+            "fetch from several named feeds (e.g. --feed cond-mat --feed quant-ph)"
+        ),
+        default=None,
+    )
     parser.add_argument("--top", type=int, help="Override number of entries to print")
     parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG_PATH, help="Optional config JSON path")
     parser.add_argument("--no-config", action="store_true", help="Ignore config file even if present")
@@ -425,6 +506,15 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
         help="Set the default feed name to use when --feed is omitted",
     )
 
+    # enable shell completion if argcomplete is installed
+    try:
+        import argcomplete
+
+        argcomplete.autocomplete(parser)
+    except Exception:
+        # argcomplete is optional; ignore failures
+        pass
+
     return parser.parse_args(argv)
 
 
@@ -442,11 +532,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.save_config and cfg_path:
         cfg.dump(cfg_path)
 
-    feed_url = determine_feed(cfg, args)
+    feed_urls = determine_feed(cfg, args)
     try:
-        papers = fetch_feed(feed_url, sections=args.sections)
+        papers = fetch_feeds(feed_urls, sections=args.sections)
     except requests.RequestException as exc:
-        raise SystemExit(f"Failed to fetch {feed_url}: {exc}") from exc
+        # show a helpful combined message
+        raise SystemExit(f"Failed to fetch feeds {feed_urls}: {exc}") from exc
 
     top_limit = args.top if args.top is not None else cfg.top_n
     entries = build_ranked_entries(papers, cfg, top_n=top_limit)
@@ -456,7 +547,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.output_json:
         payload = {
             "generated_at": datetime.now(UTC).isoformat(),
-            "feed_url": feed_url,
+            "feed_urls": feed_urls,
             "sections": args.sections or [],
             "top_n": top_limit,
             "total_papers": len(papers),
