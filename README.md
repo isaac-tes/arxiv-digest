@@ -11,11 +11,12 @@ into ChatGPT / o1.
 ```bash
 cd /Users/isaac/tubCloud/Dokumente/PhD_Masterarbeit/PhD_Projects/Misc/arxiv-scraper-gpt_cp
 uv sync
-uv run python arxiv_digest.py --feed cond-mat --top 15
+uv run python arxiv_digest.py --top 15
 ```
 
-That command fetches the default `cond-mat` feed, scores every paper, and prints
-the top 15. Add more feeds by repeating `--feed NAME` (e.g. `--feed cond-mat --feed quant-ph`).
+That command fetches every built-in feed (`cond-mat`, `cond-mat.mes-hall`,
+`cond-mat.quant-gas`, `quant-ph`), scores the papers, and prints the top 15. Add
+or override feeds by repeating `--feed NAME` (e.g. `--feed cond-mat --feed quant-ph`).
 The UV-managed `.venv` isolates dependencies (`requests`, `beautifulsoup4`).
 
 Optional shell completion (bash/zsh) is available via `argcomplete`:
@@ -42,7 +43,7 @@ be performed via CLI flags, so you rarely need to hand-edit JSON:
 | Manage favorite authors | `--add-author surname` `--remove-author` `--rename-author "old:new"` |
 | Adjust low-priority penalties | `--add-low-priority film` `--remove-low-priority` `--rename-low-priority` |
 | Manage feed URLs | `--add-url other=https://arxiv.org/list/quant-ph/new` `--rename-url "cond-mat:cm"` `--delete-url cm` |
-| Pick / change default feed | `--set-default-feed cond-mat` or supply explicit `--feed NAME` |
+| Pick / change default feeds | Repeat `--set-default-feed cond-mat --set-default-feed quant-ph` (order preserved) |
 | Show combined config | `--list-config` |
 
 Changes apply immediately in-memory; append `--save-config` to write the new
@@ -60,26 +61,47 @@ uv run python arxiv_digest.py --list-config
 
 ### Feed selection cheatsheet
 
+- Skip `--feed` entirely to process every configured default feed (ships with
+   `cond-mat`, `cond-mat.mes-hall`, `cond-mat.quant-gas`, `quant-ph`).
 - Use a named feed: `uv run python arxiv_digest.py --feed cond-mat`
 - Combine feeds: `uv run python arxiv_digest.py --feed cond-mat --feed cond-mat.quant-gas --top 25`
 - Use a URL directly: `uv run python arxiv_digest.py --feed https://arxiv.org/list/quant-ph/new`
 - Persist a new feed name: `uv run python arxiv_digest.py --add-url qp=https://arxiv.org/list/quant-ph/new --save-config`
-- Make a feed the default: `uv run python arxiv_digest.py --set-default-feed qp --save-config`
+- Make multiple feeds default: `uv run python arxiv_digest.py --set-default-feed cond-mat --set-default-feed quant-ph --save-config`
 ```
 
 ## Saving results
 
 By default the digest is printed to stdout—great for copy/pasting or terminal
-review. To capture the ranked entries as structured data, add
-`--output-json path/to/digest.json`:
+review. To capture the ranked entries as structured data, append
+`--output-json` (path optional). When you omit the path the script writes to
+`reports/digest-YYYY-MM-DD.json` automatically:
 
 ```bash
-uv run python arxiv_digest.py --top 20 --output-json reports/condmat-2025-11-17.json
+uv run python arxiv_digest.py --top 20 --output-json
 ```
 
-The JSON file includes metadata (timestamp, list of feed URLs, section filters) plus the
-top-N entries with scores, titles, authors, sections, links, and summaries. You
-can still redirect stdout to a text file if you prefer the plain digest:
+Need a publishable write-up? Add `--output-markdown` (also optional path) to
+produce a tidy Markdown report in `reports/digest-YYYY-MM-DD.md` (the
+`reports/` folder is created automatically):
+
+```bash
+uv run python arxiv_digest.py --feed cond-mat --feed quant-ph --output-markdown
+```
+
+Specify custom destinations any time, e.g.
+
+```bash
+uv run python arxiv_digest.py --top 15 \
+   --output-json reports/condmat-2025-11-17.json \
+   --output-markdown notes/condmat-2025-11-17.md
+```
+
+The JSON file includes metadata (timestamp, list of feed URLs, section filters)
+plus the top-N entries with scores, titles, authors, sections, links, and
+summaries. The Markdown file mirrors the console output but in heading/bullet
+form so you can paste it straight into Notion, Obsidian, or a Slack channel.
+You can still redirect stdout to a text file if you prefer the plain digest:
 
 ```bash
 uv run python arxiv_digest.py --top 5 > notes/today.txt

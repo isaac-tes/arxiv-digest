@@ -19,8 +19,17 @@ from typing import Dict, List, Sequence
 import requests
 from bs4 import BeautifulSoup
 
-DEFAULT_FEED = "cond-mat"
+DEFAULT_FEEDS = [
+    "cond-mat.quant-gas",
+    "cond-mat.mes-hall",
+    "quant-ph",
+    "cond-mat",
+]
+# legacy helper for configs that still reference a single feed string
+DEFAULT_FEED = DEFAULT_FEEDS[-1]
 DEFAULT_CONFIG_PATH = Path(__file__).with_name("arxiv_config.json")
+AUTO_OUTPUT_SENTINEL = Path("__AUTO__")
+DEFAULT_REPORTS_DIR = Path("reports")
 
 
 def _default_core_keywords() -> List[str]:
@@ -148,27 +157,42 @@ class Config:
             "cond-mat": "https://arxiv.org/list/cond-mat/new",
         }
     )
-    default_feed: str = DEFAULT_FEED
+    default_feeds: List[str] = field(default_factory=lambda: list(DEFAULT_FEEDS))
     core_keywords: List[str] = field(default_factory=_default_core_keywords)
     named_authors: List[str] = field(default_factory=_default_named_authors)
     low_priority_kw: List[str] = field(default_factory=_default_low_priority_kw)
-    top_n: int = 15
+    top_n: int = 20
 
     @classmethod
     def from_json(cls, raw: Dict[str, object]) -> "Config":
         data = {**raw}
         feeds = data.get("feeds") or {}
-        default_feed = data.get("default_feed") or DEFAULT_FEED
+        hydrated_feeds = {k: str(v) for k, v in feeds.items()}
+
+        loaded_default_feeds = data.get("default_feeds")
+        if isinstance(loaded_default_feeds, list):
+            default_feeds = [str(name) for name in loaded_default_feeds if str(name) in hydrated_feeds]
+        else:
+            legacy_default = data.get("default_feed")
+            if legacy_default and str(legacy_default) in hydrated_feeds:
+                default_feeds = [str(legacy_default)]
+            else:
+                # fallback to all known feeds if nothing was configured
+                default_feeds = list(hydrated_feeds) or list(DEFAULT_FEEDS)
+
         cfg = cls(
-            feeds={k: str(v) for k, v in feeds.items()},
-            default_feed=str(default_feed),
+            feeds=hydrated_feeds or {
+                "cond-mat.quant-gas": "https://arxiv.org/list/cond-mat.quant-gas/recent",
+                "cond-mat.mes-hall": "https://arxiv.org/list/cond-mat.mes-hall/recent",
+                "quant-ph": "https://arxiv.org/archive/quant-ph/new",
+                "cond-mat": "https://arxiv.org/list/cond-mat/new",
+            },
+            default_feeds=default_feeds or list(DEFAULT_FEEDS),
             core_keywords=list(data.get("core_keywords") or _default_core_keywords()),
             named_authors=list(data.get("named_authors") or _default_named_authors()),
             low_priority_kw=list(data.get("low_priority_kw") or _default_low_priority_kw()),
             top_n=int(data.get("top_n") or 15),
         )
-        if cfg.default_feed not in cfg.feeds:
-            cfg.default_feed = next(iter(cfg.feeds), DEFAULT_FEED)
         return cfg
 
     @classmethod
@@ -180,6 +204,16 @@ class Config:
 
     def dump(self, path: Path) -> None:
         path.write_text(json.dumps(asdict(self), indent=2, ensure_ascii=False), encoding="utf-8")
+
+
+def resolve_report_path(candidate: Path | None, suffix: str, generated_at: datetime) -> Path | None:
+    """Convert argparse output flag values into concrete report paths."""
+    if candidate is None:
+        return None
+    if candidate == AUTO_OUTPUT_SENTINEL:
+        date_slug = generated_at.strftime("%Y-%m-%d")
+        return DEFAULT_REPORTS_DIR / f"digest-{date_slug}.{suffix}"
+    return candidate
 
 
 def _parse_rename_arg(value: str) -> tuple[str, str]:
@@ -239,17 +273,21 @@ def apply_cli_modifications(cfg: Config, args: argparse.Namespace) -> None:
         old, new = _parse_rename_arg(payload)
         if old in cfg.feeds:
             cfg.feeds[new] = cfg.feeds.pop(old)
-            if cfg.default_feed == old:
-                cfg.default_feed = new
+            cfg.default_feeds = [new if name == old else name for name in cfg.default_feeds]
     for name in args.delete_url:
         if name in cfg.feeds:
             cfg.feeds.pop(name)
-            if cfg.default_feed == name:
-                cfg.default_feed = next(iter(cfg.feeds), DEFAULT_FEED)
+            cfg.default_feeds = [feed for feed in cfg.default_feeds if feed != name]
     if args.set_default_feed:
-        if args.set_default_feed not in cfg.feeds:
-            raise SystemExit(f"Unknown feed '{args.set_default_feed}'. Add it first with --add-url")
-        cfg.default_feed = args.set_default_feed
+        targets = args.set_default_feed
+        if isinstance(targets, str):
+            targets = [targets]
+        new_defaults: List[str] = []
+        for feed_name in targets:
+            if feed_name not in cfg.feeds:
+                raise SystemExit(f"Unknown feed '{feed_name}'. Add it first with --add-url")
+            new_defaults.append(feed_name)
+        cfg.default_feeds = new_defaults
 
     if args.top is not None:
         cfg.top_n = args.top
@@ -427,7 +465,29 @@ def format_digest(entries: List[dict], total_papers: int, requested_top: int) ->
     return "\n".join(lines).strip()
 
 
-def determine_feed(cfg: Config, args: argparse.Namespace) -> str:
+def format_markdown(entries: List[dict], total_papers: int, requested_top: int) -> str:
+    lines = [
+        "# Daily arXiv cond-mat/quant-ph digest",
+        "",
+        f"Total papers fetched: {total_papers}. Showing top {min(requested_top, total_papers)} by relevance.",
+        "",
+    ]
+    for entry in entries:
+        lines.append(f"## {entry['rank']}. {entry['title']}")
+        lines.append(f"- **Authors:** {entry['authors']}")
+        if entry.get("section"):
+            lines.append(f"- **Section:** {entry['section']}")
+        if entry.get("subjects"):
+            lines.append(f"- **Subjects:** {entry['subjects']}")
+        if entry.get("link"):
+            lines.append(f"- **Link:** {entry['link']}")
+        lines.append("")
+        lines.append(entry.get("summary", ""))
+        lines.append("")
+    return "\n".join(lines).strip()
+
+
+def determine_feed(cfg: Config, args: argparse.Namespace) -> List[str]:
     # This function is kept for backward compatibility but main now supports
     # multiple feeds via --feed (action=append). If args.feed is provided it
     # may be a list of names/URLs; return a list of URLs.
@@ -443,10 +503,14 @@ def determine_feed(cfg: Config, args: argparse.Namespace) -> str:
             raise SystemExit(f"Unknown feed '{key}'. Add it first with --add-url")
         return urls
 
-    default_url = cfg.feeds.get(cfg.default_feed)
-    if not default_url:
-        raise SystemExit("No feeds configured. Use --add-url NAME=https://... to add one.")
-    return [default_url]
+    urls: List[str] = []
+    for feed_name in cfg.default_feeds:
+        if feed_name in cfg.feeds:
+            urls.append(cfg.feeds[feed_name])
+    if urls:
+        return urls
+
+    raise SystemExit("No feeds configured. Use --add-url NAME=https://... to add one.")
 
 
 def parse_args(argv: Sequence[str]) -> argparse.Namespace:
@@ -466,7 +530,20 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
     parser.add_argument("--save-config", action="store_true", help="Persist modified config back to --config path")
     parser.add_argument("--list-config", action="store_true", help="Print current config and exit")
     parser.add_argument("--sections", nargs="*", help="Limit scraping to specific section titles")
-    parser.add_argument("--output-json", type=Path, help="Also write digest entries to JSON")
+    parser.add_argument(
+        "--output-json",
+        nargs="?",
+        const=AUTO_OUTPUT_SENTINEL,
+        type=Path,
+        help="Write digest entries to JSON (defaults to reports/digest-YYYY-MM-DD.json)",
+    )
+    parser.add_argument(
+        "--output-markdown",
+        nargs="?",
+        const=AUTO_OUTPUT_SENTINEL,
+        type=Path,
+        help="Write digest entries to Markdown (defaults to reports/digest-YYYY-MM-DD.md)",
+    )
     parser.add_argument("--verbose", action="store_true")
 
     parser.add_argument("--add-core", action="append", default=[], help="Add a core keyword")
@@ -503,6 +580,7 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
     parser.add_argument("--delete-url", action="append", default=[], metavar="NAME", help="Delete a feed")
     parser.add_argument(
         "--set-default-feed",
+        action="append",
         help="Set the default feed name to use when --feed is omitted",
     )
 
@@ -539,27 +617,38 @@ def main(argv: Sequence[str] | None = None) -> int:
         # show a helpful combined message
         raise SystemExit(f"Failed to fetch feeds {feed_urls}: {exc}") from exc
 
+    generated_at = datetime.now(UTC)
     top_limit = args.top if args.top is not None else cfg.top_n
     entries = build_ranked_entries(papers, cfg, top_n=top_limit)
     digest = format_digest(entries, len(papers), top_limit)
     print(digest)
 
-    if args.output_json:
+    json_path = resolve_report_path(args.output_json, "json", generated_at)
+    markdown_path = resolve_report_path(args.output_markdown, "md", generated_at)
+
+    if json_path:
         payload = {
-            "generated_at": datetime.now(UTC).isoformat(),
+            "generated_at": generated_at.isoformat(),
             "feed_urls": feed_urls,
             "sections": args.sections or [],
             "top_n": top_limit,
             "total_papers": len(papers),
             "entries": entries,
         }
-        args.output_json.parent.mkdir(parents=True, exist_ok=True)
-        args.output_json.write_text(
+        json_path.parent.mkdir(parents=True, exist_ok=True)
+        json_path.write_text(
             json.dumps(payload, indent=2, ensure_ascii=False),
             encoding="utf-8",
         )
         if args.verbose:
-            print(f"Saved digest JSON to {args.output_json}")
+            print(f"Saved digest JSON to {json_path}")
+
+    if markdown_path:
+        markdown = format_markdown(entries, len(papers), top_limit)
+        markdown_path.parent.mkdir(parents=True, exist_ok=True)
+        markdown_path.write_text(markdown, encoding="utf-8")
+        if args.verbose:
+            print(f"Saved digest Markdown to {markdown_path}")
     return 0
 
 
