@@ -1,0 +1,8 @@
+[project]
+name = "arxiv-scraper-gpt-cp"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+	"requests>=2.32.0",
+	"beautifulsoup4>=4.12.0",
+]
