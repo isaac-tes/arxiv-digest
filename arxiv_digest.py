@@ -1,6 +1,6 @@
-"""One-stop cond-mat arXiv scraper + relevance filter.
+"""One-stop cond-mat-quant-ph arXiv scraper + relevance filter.
 
-This script combines fetching the latest cond-mat submissions and ranking them
+This script combines fetching the latest cond-mat-quant-ph submissions and ranking them
 according to researcher-defined heuristics. It can be run as-is, imported, or
 pasted into ChatGPT / Code Interpreter. Configuration may be tweaked via CLI
 flags without hand-editing the file.
