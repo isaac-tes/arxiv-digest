@@ -12,6 +12,7 @@ import json
 import re
 import sys
 from dataclasses import asdict, dataclass, field
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Dict, List, Sequence
 
@@ -313,28 +314,50 @@ def summarize(text: str) -> str:
     return " ".join(sentences[:2])
 
 
-def render_digest(papers: List[dict], cfg: Config, top_n: int | None = None) -> str:
-    top = top_n or cfg.top_n
+def build_ranked_entries(papers: List[dict], cfg: Config, top_n: int | None = None) -> List[dict]:
+    limit = max(top_n or cfg.top_n, 1)
+    scored = []
+    for paper in papers:
+        scored.append(
+            {
+                **paper,
+                "score": score_paper(paper, cfg),
+            }
+        )
+    scored.sort(key=lambda item: (-item["score"], item.get("title", "")))
+    entries: List[dict] = []
+    for idx, paper in enumerate(scored[:limit], start=1):
+        title = (paper.get("title", "") or "").strip() or "(Untitled)"
+        authors = (paper.get("authors", "") or "").strip() or "(No authors listed)"
+        entry = {
+            "rank": idx,
+            "id": paper.get("id", ""),
+            "title": title,
+            "authors": authors,
+            "link": (paper.get("link", "") or "").strip(),
+            "subjects": (paper.get("subjects", "") or "").strip(),
+            "section": (paper.get("section", "") or "").strip(),
+            "summary": summarize(paper.get("abstract", "")),
+            "score": paper["score"],
+        }
+        entries.append(entry)
+    return entries
+
+
+def format_digest(entries: List[dict], total_papers: int, requested_top: int) -> str:
     lines = [
         "Daily arXiv cond-mat digest — (real papers)",
-        f"Total papers fetched: {len(papers)}. Showing top {min(top, len(papers))} by relevance.",
+        f"Total papers fetched: {total_papers}. Showing top {min(requested_top, total_papers)} by relevance.",
         "",
     ]
-    scored = [dict(p, score=score_paper(p, cfg)) for p in papers]
-    scored.sort(key=lambda item: (-item["score"], item.get("title", "")))
-    for idx, paper in enumerate(scored[:top], start=1):
-        title = paper.get("title", "").strip() or "(Untitled)"
-        authors = paper.get("authors", "").strip() or "(No authors listed)"
-        link = paper.get("link", "").strip()
-        summary = summarize(paper.get("abstract", ""))
-        section = paper.get("section", "")
-        lines.append(f"{idx}. {title}")
-        lines.append(f"   {authors}")
-        if section:
-            lines.append(f"   Section: {section}")
-        if link:
-            lines.append(f"   {link}")
-        lines.append(f"   {summary}")
+    for entry in entries:
+        lines.append(f"{entry['rank']}. {entry['title']}")
+        lines.append(f"   {entry['authors']}")
+        if entry.get("section"):
+            lines.append(f"   Section: {entry['section']}")
+        if entry.get("link"):
+            lines.append(f"   {entry['link']}")
+        lines.append(f"   {entry['summary']}")
         lines.append("")
     return "\n".join(lines).strip()
 
@@ -362,6 +385,7 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
     parser.add_argument("--save-config", action="store_true", help="Persist modified config back to --config path")
     parser.add_argument("--list-config", action="store_true", help="Print current config and exit")
     parser.add_argument("--sections", nargs="*", help="Limit scraping to specific section titles")
+    parser.add_argument("--output-json", type=Path, help="Also write digest entries to JSON")
     parser.add_argument("--verbose", action="store_true")
 
     parser.add_argument("--add-core", action="append", default=[], help="Add a core keyword")
@@ -424,8 +448,27 @@ def main(argv: Sequence[str] | None = None) -> int:
     except requests.RequestException as exc:
         raise SystemExit(f"Failed to fetch {feed_url}: {exc}") from exc
 
-    digest = render_digest(papers, cfg, top_n=args.top)
+    top_limit = args.top if args.top is not None else cfg.top_n
+    entries = build_ranked_entries(papers, cfg, top_n=top_limit)
+    digest = format_digest(entries, len(papers), top_limit)
     print(digest)
+
+    if args.output_json:
+        payload = {
+            "generated_at": datetime.now(UTC).isoformat(),
+            "feed_url": feed_url,
+            "sections": args.sections or [],
+            "top_n": top_limit,
+            "total_papers": len(papers),
+            "entries": entries,
+        }
+        args.output_json.parent.mkdir(parents=True, exist_ok=True)
+        args.output_json.write_text(
+            json.dumps(payload, indent=2, ensure_ascii=False),
+            encoding="utf-8",
+        )
+        if args.verbose:
+            print(f"Saved digest JSON to {args.output_json}")
     return 0
 
 
