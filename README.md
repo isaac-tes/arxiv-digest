@@ -21,7 +21,8 @@ The UV-managed `.venv` isolates dependencies (`requests`, `beautifulsoup4`).
 into ChatGPT Code Interpreter and run it without any side files.
 
 When running locally you can persist tweaks in `condmat_config.json` (auto-created
-next to the script). Every config operation can be performed via CLI flags:
+next to the script whenever you pass `--save-config`). Every config operation can
+be performed via CLI flags, so you rarely need to hand-edit JSON:
 
 | Action | Flag(s) |
 | --- | --- |
@@ -31,7 +32,8 @@ next to the script). Every config operation can be performed via CLI flags:
 | Manage feed URLs | `--add-url other=https://arxiv.org/list/quant-ph/new` `--rename-url "cond-mat:cm"` `--delete-url cm` |
 | Pick / change default feed | `--set-default-feed cond-mat` or `--feed https://...` |
 
-Changes apply immediately; append `--save-config` to persist them. Example:
+Changes apply immediately in-memory; append `--save-config` to write the new
+state back to `condmat_config.json`. Example:
 
 ```bash
 uv run python condmat_digest.py \
@@ -42,6 +44,24 @@ Inspect the current configuration at any time:
 
 ```bash
 uv run python condmat_digest.py --list-config
+```
+
+## Saving results
+
+By default the digest is printed to stdout—great for copy/pasting or terminal
+review. To capture the ranked entries as structured data, add
+`--output-json path/to/digest.json`:
+
+```bash
+uv run python condmat_digest.py --top 20 --output-json reports/condmat-2025-11-17.json
+```
+
+The JSON file includes metadata (timestamp, feed URL, section filters) plus the
+top-N entries with scores, titles, authors, sections, links, and summaries. You
+can still redirect stdout to a text file if you prefer the plain digest:
+
+```bash
+uv run python condmat_digest.py --top 5 > notes/today.txt
 ```
 
 ## ChatGPT / Code Interpreter usage
