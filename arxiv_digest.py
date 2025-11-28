@@ -117,6 +117,8 @@ def _default_named_authors() -> List[str]:
     return [
         "mera",
         "slager",
+        "palumbo",
+        "Bzdušek",
         "ozawa",
         "carusotto",
         "goldman",
@@ -174,7 +176,7 @@ class Config:
         default_factory=lambda: {
             "cond-mat.quant-gas": "https://arxiv.org/list/cond-mat.quant-gas/recent",
             "cond-mat.mes-hall": "https://arxiv.org/list/cond-mat.mes-hall/recent",
-            "quant-ph": "https://arxiv.org/archive/quant-ph/new",
+            "quant-ph": "https://arxiv.org/list/quant-ph/new",
             "cond-mat": "https://arxiv.org/list/cond-mat/new",
         }
     )
@@ -314,7 +316,7 @@ def apply_cli_modifications(cfg: Config, args: argparse.Namespace) -> None:
         cfg.top_n = args.top
 
 
-def fetch_feed(url: str, sections: List[str] | None = None) -> List[dict]:
+def fetch_feed(url: str, sections: List[str] | None = None, verbose: bool = False) -> List[dict]:
     resp = requests.get(url, timeout=30)
     resp.raise_for_status()
     soup = BeautifulSoup(resp.text, "html.parser")
@@ -378,18 +380,22 @@ def fetch_feed(url: str, sections: List[str] | None = None) -> List[dict]:
                     "section": sec_name,
                 }
             )
+    if verbose:
+        print(f"  Found {len(papers)} papers")
+    
     return papers
 
 
-def fetch_feeds(urls: List[str], sections: List[str] | None = None) -> List[dict]:
+def fetch_feeds(urls: List[str], sections: List[str] | None = None, verbose: bool = False) -> List[dict]:
     """Fetch multiple feeds and concatenate results, deduplicating by arXiv id."""
     all_papers: List[dict] = []
     seen_ids = set()
     for u in urls:
+        if verbose:
+            print(f"Fetching {u}...")
         try:
-            papers = fetch_feed(u, sections=sections)
+            papers = fetch_feed(u, sections=sections, verbose=verbose)
         except Exception:
-            # propagate outer exception later — but continue gathering what's available
             raise
         for p in papers:
             pid = p.get("id")
@@ -632,11 +638,14 @@ def main(argv: Sequence[str] | None = None) -> int:
         cfg.dump(cfg_path)
 
     feed_urls = determine_feed(cfg, args)
+
     try:
-        papers = fetch_feeds(feed_urls, sections=args.sections)
+        papers = fetch_feeds(feed_urls, sections=args.sections, verbose=args.verbose)
     except requests.RequestException as exc:
-        # show a helpful combined message
         raise SystemExit(f"Failed to fetch feeds {feed_urls}: {exc}") from exc
+    
+    if args.verbose:
+        print(f"\nTotal papers collected: {len(papers)}")
 
     generated_at = datetime.now(UTC)
     top_limit = args.top if args.top is not None else cfg.top_n
