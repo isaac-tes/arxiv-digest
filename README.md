@@ -9,7 +9,7 @@ into ChatGPT / o1.
 ## Quick start
 
 ```bash
-cd /Users/isaac/tubCloud/Dokumente/PhD_Masterarbeit/PhD_Projects/Misc/arxiv-scraper-gpt_cp
+cd .../arxiv_scraper_cli
 uv sync
 uv run python arxiv_digest.py --top 15
 ```
