@@ -11,6 +11,7 @@ import argparse
 import json
 import re
 import sys
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -55,6 +56,14 @@ def _default_core_keywords() -> List[str]:
         "haldane",
         "landau level",
         "ll",
+        "scars",
+        "many-body localization",
+        "mbl",
+        "localization",
+        "syk",
+        "chaos",
+        "Sachdev-Ye-Kitaev",
+        "fracton",
         "synthetic dimension",
         "synthetic dim",
         "synthetic gauge",
@@ -174,8 +183,8 @@ def _default_low_priority_kw() -> List[str]:
 class Config:
     feeds: Dict[str, str] = field(
         default_factory=lambda: {
-            "cond-mat.quant-gas": "https://arxiv.org/list/cond-mat.quant-gas/recent",
-            "cond-mat.mes-hall": "https://arxiv.org/list/cond-mat.mes-hall/recent",
+            "cond-mat.quant-gas": "https://arxiv.org/list/cond-mat.quant-gas/new",
+            "cond-mat.mes-hall": "https://arxiv.org/list/cond-mat.mes-hall/new",
             "quant-ph": "https://arxiv.org/list/quant-ph/new",
             "cond-mat": "https://arxiv.org/list/cond-mat/new",
         }
@@ -185,6 +194,7 @@ class Config:
     named_authors: List[str] = field(default_factory=_default_named_authors)
     low_priority_kw: List[str] = field(default_factory=_default_low_priority_kw)
     top_n: int = 20
+    timeframe: str = "pastweek"  # 'today' or 'pastweek'
 
     @classmethod
     def from_json(cls, raw: Dict[str, object]) -> "Config":
@@ -205,9 +215,9 @@ class Config:
 
         cfg = cls(
             feeds=hydrated_feeds or {
-                "cond-mat.quant-gas": "https://arxiv.org/list/cond-mat.quant-gas/recent",
-                "cond-mat.mes-hall": "https://arxiv.org/list/cond-mat.mes-hall/recent",
-                "quant-ph": "https://arxiv.org/archive/quant-ph/new",
+                "cond-mat.quant-gas": "https://arxiv.org/list/cond-mat.quant-gas/new",
+                "cond-mat.mes-hall": "https://arxiv.org/list/cond-mat.mes-hall/new",
+                "quant-ph": "https://arxiv.org/list/quant-ph/new",
                 "cond-mat": "https://arxiv.org/list/cond-mat/new",
             },
             default_feeds=default_feeds or list(DEFAULT_FEEDS),
@@ -215,6 +225,7 @@ class Config:
             named_authors=list(data.get("named_authors") or _default_named_authors()),
             low_priority_kw=list(data.get("low_priority_kw") or _default_low_priority_kw()),
             top_n=int(data.get("top_n") or 15),
+            timeframe=str(data.get("timeframe") or "today"),
         )
         return cfg
 
@@ -316,29 +327,50 @@ def apply_cli_modifications(cfg: Config, args: argparse.Namespace) -> None:
         cfg.top_n = args.top
 
 
+def fetch_abstract(arxiv_id: str, verbose: bool = False) -> str:
+    """Fetch abstract from individual paper page."""
+    abs_url = f"https://arxiv.org/abs/{arxiv_id}"
+    try:
+        resp = requests.get(abs_url, timeout=30)
+        resp.raise_for_status()
+        soup = BeautifulSoup(resp.text, "html.parser")
+        abstract_block = soup.find("blockquote", class_="abstract")
+        if abstract_block:
+            return abstract_block.get_text(" ", strip=True).replace("Abstract:", "").strip()
+    except Exception as e:
+        if verbose:
+            print(f"  Warning: Failed to fetch abstract for {arxiv_id}: {e}")
+    return ""
+
+
 def fetch_feed(url: str, sections: List[str] | None = None, verbose: bool = False) -> List[dict]:
     resp = requests.get(url, timeout=30)
     resp.raise_for_status()
     soup = BeautifulSoup(resp.text, "html.parser")
 
-    tracked = sections or ["New submissions", "Cross", "Replacements"]
-    allowed = []
-    for h3 in soup.find_all("h3"):
-        title = h3.get_text(strip=True)
-        if any(key in title for key in tracked):
-            allowed.append((title, h3))
-
+    # The new structure uses date-based h3 headers (e.g., "Thu, 4 Dec 2025")
+    # We'll collect all papers after any h3 tag until the next h3 or end
     papers: List[dict] = []
-    for sec_name, h3 in allowed:
+    
+    # Find all h3 tags (which mark date sections)
+    h3_tags = soup.find_all("h3")
+    
+    for h3 in h3_tags:
+        section_name = h3.get_text(strip=True)
+        
+        # Find the next h3 to know where this section ends
         stop = h3.find_next("h3")
         node = h3.next_sibling
         section_nodes = []
+        
         while node and node is not stop:
             if getattr(node, "name", None) in {"dt", "dd"}:
                 section_nodes.append(node)
             node = node.next_sibling
+        
         dts = [node for node in section_nodes if node.name == "dt"]
         dds = [node for node in section_nodes if node.name == "dd"]
+        
         for dt, dd in zip(dts, dds):
             a_abs = dt.find("a", title="Abstract")
             if not a_abs:
@@ -363,12 +395,25 @@ def fetch_feed(url: str, sections: List[str] | None = None, verbose: bool = Fals
                 if subj_div
                 else ""
             )
+            
+            # Try multiple ways to find the abstract
+            abstract = ""
+            # First try: look for p with class mathjax
             abstract_p = dd.find("p", class_="mathjax")
-            abstract = (
-                abstract_p.get_text(" ", strip=True).replace("Abstract:", "").strip()
-                if abstract_p
-                else ""
-            )
+            if abstract_p:
+                abstract = abstract_p.get_text(" ", strip=True)
+            else:
+                # Second try: look for any p tag after the subjects
+                all_p = dd.find_all("p")
+                for p in all_p:
+                    text = p.get_text(" ", strip=True)
+                    # Skip empty paragraphs and very short ones
+                    if text and len(text) > 20:
+                        abstract = text
+                        break
+            
+            abstract = abstract.replace("Abstract:", "").strip()
+            
             papers.append(
                 {
                     "id": arx_id,
@@ -377,9 +422,30 @@ def fetch_feed(url: str, sections: List[str] | None = None, verbose: bool = Fals
                     "link": link,
                     "subjects": subjects,
                     "abstract": abstract,
-                    "section": sec_name,
+                    "section": section_name,
                 }
             )
+    
+    # Batch fetch missing abstracts in parallel for speed
+    papers_missing_abstract = [p for p in papers if not p["abstract"]]
+    if papers_missing_abstract:
+        if verbose:
+            print(f"  Fetching {len(papers_missing_abstract)} abstracts in parallel...")
+        
+        # Use ThreadPoolExecutor to fetch abstracts concurrently
+        # Limit to 10 concurrent requests to be respectful to arXiv servers
+        with ThreadPoolExecutor(max_workers=10) as executor:
+            future_to_paper = {executor.submit(fetch_abstract, p["id"], verbose): p for p in papers_missing_abstract}
+            
+            for future in as_completed(future_to_paper):
+                paper = future_to_paper[future]
+                try:
+                    abstract = future.result()
+                    paper["abstract"] = abstract
+                except Exception as e:
+                    if verbose:
+                        print(f"  Warning: Failed to fetch abstract for {paper['id']}: {e}")
+    
     if verbose:
         print(f"  Found {len(papers)} papers")
     
@@ -518,11 +584,19 @@ def determine_feed(cfg: Config, args: argparse.Namespace) -> List[str]:
     # This function is kept for backward compatibility but main now supports
     # multiple feeds via --feed (action=append). If args.feed is provided it
     # may be a list of names/URLs; return a list of URLs.
+    
+    # Determine timeframe to use
+    timeframe = args.timeframe if args.timeframe else cfg.timeframe
+    timeframe_suffix = "new" if timeframe == "today" else "pastweek"
+    
     if args.feed:
         urls: List[str] = []
         for key in args.feed:
             if key in cfg.feeds:
-                urls.append(cfg.feeds[key])
+                # Replace the timeframe suffix in the URL
+                base_url = cfg.feeds[key]
+                url = base_url.replace("/new", f"/{timeframe_suffix}").replace("/recent", f"/{timeframe_suffix}").replace("/pastweek", f"/{timeframe_suffix}")
+                urls.append(url)
                 continue
             if key.startswith("http"):
                 urls.append(key)
@@ -533,7 +607,10 @@ def determine_feed(cfg: Config, args: argparse.Namespace) -> List[str]:
     urls: List[str] = []
     for feed_name in cfg.default_feeds:
         if feed_name in cfg.feeds:
-            urls.append(cfg.feeds[feed_name])
+            # Replace the timeframe suffix in the URL
+            base_url = cfg.feeds[feed_name]
+            url = base_url.replace("/new", f"/{timeframe_suffix}").replace("/recent", f"/{timeframe_suffix}").replace("/pastweek", f"/{timeframe_suffix}")
+            urls.append(url)
     if urls:
         return urls
 
@@ -572,6 +649,11 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
         help="Write digest entries to Markdown (defaults to reports/digest-YYYY-MM-DD.md)",
     )
     parser.add_argument("--verbose", action="store_true")
+    parser.add_argument(
+        "--timeframe",
+        choices=["today", "pastweek"],
+        help="Select timeframe: 'today' for /new feeds (today's papers only), 'pastweek' for /pastweek feeds (last ~5 days)",
+    )
 
     parser.add_argument("--add-core", action="append", default=[], help="Add a core keyword")
     parser.add_argument("--remove-core", action="append", default=[], help="Remove a core keyword")
