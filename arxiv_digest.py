@@ -140,6 +140,8 @@ def _default_named_authors() -> List[str]:
         "bukov",
         "tarruell",
         "celi",
+        "haegeman",
+        "verstraete",
         "aidelsburger",
         "cooper",
         "dalibard",
