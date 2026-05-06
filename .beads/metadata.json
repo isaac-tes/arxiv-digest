@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "embedded",
+  "dolt_database": "arxiv_scraper_cli",
+  "project_id": "641516d7-04b7-468b-8d97-5a126f93b9e3"
+}
