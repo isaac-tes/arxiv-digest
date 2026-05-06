@@ -126,20 +126,28 @@ For more details, see README.md and docs/QUICKSTART.md.
 <!-- END BEADS INTEGRATION -->
 
 
-## Build & Test
-
-_Add your build and test commands here_
+## Build & Run
 
 ```bash
-# Example:
-# npm install
-# npm test
+uv sync                                      # install dependencies
+uv run python arxiv_digest.py --top 15       # run with defaults
+uv run python arxiv_digest.py --today --top 10
+uv run python arxiv_digest.py --pastweek --feed cond-mat --feed quant-ph
+uv run python arxiv_digest.py --list-config  # inspect current config
 ```
 
-## Architecture Overview
+No test suite currently exists. Manual testing via the above commands.
 
-_Add a brief overview of your project architecture_
+## Architecture
 
-## Conventions & Patterns
+Single-file tool (`arxiv_digest.py`). Data flow:
 
-_Add your project-specific conventions here_
+1. **Config** (`Config` dataclass) — loaded from `arxiv_config.json` (if present), then mutated by CLI flags via `apply_cli_modifications`. Persisted back with `--save-config`.
+2. **Fetch** — `fetch_feeds` → `fetch_feed` scrapes arXiv HTML list pages (BeautifulSoup). Missing abstracts are back-filled in parallel via `ThreadPoolExecutor` calling `fetch_abstract` on individual paper pages.
+3. **Score** (`score_paper`) — heuristic integer score: +6 per core keyword/author match, +4/+2 subject boosts, −5 low-priority penalty.
+4. **Rank & format** — `build_ranked_entries` sorts and slices to `top_n`; `format_digest` / `format_markdown` produce output strings.
+5. **Output** — stdout (always) + optional JSON/Markdown files under `reports/`.
+
+Feed URLs encode the timeframe: `/new` = today, `/pastweek` = last ~5 days. `determine_feed` rewrites the suffix based on `--timeframe` / `--today` / `--pastweek`.
+
+Config file (`arxiv_config.json`) is gitignored; defaults live in the `_default_*` functions at the top of the script.

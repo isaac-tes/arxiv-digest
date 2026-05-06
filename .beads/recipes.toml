@@ -1,0 +1,8 @@
+[recipes]
+  [recipes.copilot]
+    name = "copilot"
+    path = ".github/copilot-instructions.md"
+    type = "file"
+    description = ""
+    global_path = ""
+    project_path = ""

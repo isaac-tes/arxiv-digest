@@ -1,10 +1,12 @@
-# cond-mat + quant-ph arXiv digest
+# arXiv digest (cond-mat + quant-ph)
 
-Single-script workflow (`arxiv_digest.py`) that fetches multiple arXiv feeds
-(`cond-mat`, `cond-mat.mes-hall`, `cond-mat.quant-gas`, `quant-ph`, plus any you
-add), ranks papers using heuristics (keywords, authors, subject boosts, and
-penalties), and prints a tidy digest you can paste anywhere—including straight
-into ChatGPT / o1.
+Single-file tool that fetches arXiv feeds, scores papers by heuristics (keywords, authors, subject boosts/penalties), and prints a compact digest for terminal, notes, or ChatGPT.
+
+## Defaults
+
+- **Feeds**: `cond-mat`, `cond-mat.mes-hall`, `cond-mat.quant-gas`, `quant-ph`
+- **Output**: printed to stdout
+- **Config**: persists to `arxiv_config.json` with `--save-config`
 
 ## Quick start
 
@@ -14,164 +16,79 @@ uv sync
 uv run python arxiv_digest.py --top 15
 ```
 
-That command fetches every built-in feed (`cond-mat`, `cond-mat.mes-hall`,
-`cond-mat.quant-gas`, `quant-ph`), scores the papers, and prints the top 15. Add
-or override feeds by repeating `--feed NAME` (e.g. `--feed cond-mat --feed quant-ph`).
-The UV-managed `.venv` isolates dependencies (`requests`, `beautifulsoup4`).
+Fetches all default feeds, scores papers, prints top 15.
 
-Optional shell completion (bash/zsh) is available via `argcomplete`:
+## Common flags
 
-```bash
-uv run pip install argcomplete
-eval "$(register-python-argcomplete arxiv_digest.py)"
-```
+| Flag | Purpose |
+|------|---------|
+| `--feed NAME` | Select feed (repeatable); use name or full URL |
+| `--top N` | Show top N entries (default: 20) |
+| `--days N` | Limit to papers from last N days |
+| `--today` | Fetch only today's papers (equivalent to `--days 1`) |
+| `--pastweek` | Fetch last 7 days of papers (equivalent to `--days 7`) |
+| `--output-json [PATH]` | Write JSON (default: `reports/digest-YYYY-MM-DD.json`) |
+| `--output-markdown [PATH]` | Write Markdown (default: `reports/digest-YYYY-MM-DD.md`) |
+| `--save-config` | Persist config modifications |
+| `--list-config` | Show current configuration |
 
-Add the `eval` line to your shell rc file to keep completion enabled.
-
-## Configuration workflow
-
-`arxiv_digest.py` ships with embedded defaults, so you can copy/paste the file
-into ChatGPT Code Interpreter and run it without any side files.
-
-When running locally you can persist tweaks in `arxiv_config.json` (auto-created
-next to the script whenever you pass `--save-config`). Every config operation can
-be performed via CLI flags, so you rarely need to hand-edit JSON:
-
-| Action | Flag(s) |
-| --- | --- |
-| Add/remove/rename core keywords | `--add-core tebd` `--remove-core mpo` `--rename-core "anyon:anyons"` |
-| Manage favorite authors | `--add-author surname` `--remove-author` `--rename-author "old:new"` |
-| Adjust low-priority penalties | `--add-low-priority film` `--remove-low-priority` `--rename-low-priority` |
-| Manage feed URLs | `--add-url other=https://arxiv.org/list/quant-ph/new` `--rename-url "cond-mat:cm"` `--delete-url cm` |
-| Pick / change default feeds | Repeat `--set-default-feed cond-mat --set-default-feed quant-ph` (order preserved) |
-| Show combined config | `--list-config` |
-
-Changes apply immediately in-memory; append `--save-config` to write the new
-state back to `arxiv_config.json`. Example:
+## Quick examples
 
 ```bash
-uv run python arxiv_digest.py \
-  --add-core "rydberg" --add-author "bloch" --save-config
+# Today's papers only, top 10
+uv run python arxiv_digest.py --today --top 10
+
+# Past week with specific feeds
+uv run python arxiv_digest.py --pastweek --feed cond-mat --feed quant-ph
+
+# Last 3 days, top 10
+uv run python arxiv_digest.py --days 3 --top 10
+
+# Specific feeds with JSON output
+uv run python arxiv_digest.py --feed cond-mat --feed quant-ph --output-json
+
+# Add keyword and save config
+uv run python arxiv_digest.py --add-core "rydberg" --save-config
 ```
 
-Inspect the current configuration at any time:
+## Configuration
 
+Modify via CLI flags (persists with `--save-config`):
+
+- Keywords: `--add-core WORD`, `--remove-core WORD`
+- Authors: `--add-author NAME`, `--remove-author NAME`
+- Feeds: `--add-url name=URL`, `--set-default-feed NAME`
+- Low-priority: `--add-low-priority WORD`, `--remove-low-priority WORD`
+
+Example:
 ```bash
-uv run python arxiv_digest.py --list-config
-
-### Feed selection cheatsheet
-
-- Skip `--feed` entirely to process every configured default feed (ships with
-   `cond-mat`, `cond-mat.mes-hall`, `cond-mat.quant-gas`, `quant-ph`).
-- Use a named feed: `uv run python arxiv_digest.py --feed cond-mat`
-- Combine feeds: `uv run python arxiv_digest.py --feed cond-mat --feed cond-mat.quant-gas --top 25`
-- Use a URL directly: `uv run python arxiv_digest.py --feed https://arxiv.org/list/quant-ph/new`
-- Persist a new feed name: `uv run python arxiv_digest.py --add-url qp=https://arxiv.org/list/quant-ph/new --save-config`
-- Make multiple feeds default: `uv run python arxiv_digest.py --set-default-feed cond-mat --set-default-feed quant-ph --save-config`
+uv run python arxiv_digest.py --add-core "tebd" --add-author "bloch" --save-config
 ```
 
-## Saving results
+## Scoring
 
-By default the digest is printed to stdout—great for copy/pasting or terminal
-review. To capture the ranked entries as structured data, append
-`--output-json` (path optional). When you omit the path the script writes to
-`reports/digest-YYYY-MM-DD.json` automatically:
+- **+6** per core keyword match
+- **+6** per highlighted author match
+- **+4** for `cond-mat.quant-gas` or `cond-mat.mes-hall`
+- **+2** for `quant-ph`
+- **−5** for low-priority keyword matches
+- **+1** if abstract > 200 chars
 
-```bash
-uv run python arxiv_digest.py --top 20 --output-json
-```
+## ChatGPT / Code Interpreter
 
-Need a publishable write-up? Add `--output-markdown` (also optional path) to
-produce a tidy Markdown report in `reports/digest-YYYY-MM-DD.md` (the
-`reports/` folder is created automatically):
-
-```bash
-uv run python arxiv_digest.py --feed cond-mat --feed quant-ph --output-markdown
-```
-
-Specify custom destinations any time, e.g.
-
-```bash
-uv run python arxiv_digest.py --top 15 \
-   --output-json reports/condmat-2025-11-17.json \
-   --output-markdown notes/condmat-2025-11-17.md
-```
-
-The JSON file includes metadata (timestamp, list of feed URLs, section filters)
-plus the top-N entries with scores, titles, authors, sections, links, and
-summaries. The Markdown file mirrors the console output but in heading/bullet
-form so you can paste it straight into Notion, Obsidian, or a Slack channel.
-You can still redirect stdout to a text file if you prefer the plain digest:
-
-```bash
-uv run python arxiv_digest.py --top 5 > notes/today.txt
-```
-
-## ChatGPT / Code Interpreter usage
-
-1. Copy the entire contents of `arxiv_digest.py` (no other files needed).
-2. In ChatGPT (Code Interpreter / Advanced Data Analysis / o1), paste the script
-   followed by a prompt such as:
-
-   ```
-   Please save that script as arxiv_digest.py and run:
-   python arxiv_digest.py --feed cond-mat --feed quant-ph --top 12 --output-json digest.json
-   Then show me the console output.
-   ```
-
-3. ChatGPT will install dependencies in its sandbox, execute the script, and
-   return the digest (and the JSON file if requested). Any CLI flag that works
-   locally works the same way in ChatGPT.
-
-Because the script performs live HTTP requests, make sure you are in a mode
-that allows outbound network calls; the default “chat” model cannot run Python.
-
-### Suggested GUI prompt
+Copy `arxiv_digest.py` content and paste into ChatGPT with:
 
 ```
-You are ChatGPT with Code Interpreter enabled. I will paste a Python script that
-fetches and ranks arXiv papers. After pasting, please:
-1. Save it as arxiv_digest.py
-2. Run: python arxiv_digest.py --feed cond-mat --feed cond-mat.quant-gas --top 15
-3. Show me the printed digest
-
-If the script needs any packages, install them first.
+Save this as arxiv_digest.py and run:
+python arxiv_digest.py --feed cond-mat --top 12 --days 2 --output-json
+Show me the output.
 ```
 
-## Handy examples
+All CLI flags work identically in ChatGPT's sandbox. Requires Code Interpreter/Advanced Data Analysis mode for network access.
 
-Show only cross listings and export the updated config:
+## Output formats
 
-```bash
-uv run python arxiv_digest.py --sections "Cross" --save-config
-```
-
-Try a one-off alternative feed without touching config:
-
-```bash
-uv run python arxiv_digest.py --feed https://arxiv.org/list/quant-ph/new
-```
-
-Raise/lower the number of entries:
-
-```bash
-uv run python arxiv_digest.py --top 5
-```
-
-## Ranking overview
-
-The score per paper is computed in `score_paper`:
-
-- +6 per core keyword match (`core_keywords`)
-- +6 per highlighted author match (`named_authors`)
-- +4 if subjects include `cond-mat.quant-gas`
-- +4 if subjects include `cond-mat.mes-hall`
-- +2 if subjects include `quant-ph`
-- −5 if any low-priority keyword matches (`low_priority_kw`)
-- +1 if abstract length exceeds 200 characters
-
-Modify the weighting by editing `score_paper` or adjust the keyword lists via
-CLI flags / config. Order of keywords in each list does not impact scoring.
-
-Copy/paste the resulting digest directly into notes, Slack, or ChatGPT. Each
-entry includes title, authors, section, link, summary, and the associated score.
+- **Console**: copy-paste friendly digest (default)
+- **JSON**: structured data with metadata, scores, entries
+- **Markdown**: formatted for Notion/Obsidian/Slack
+- **Plain text**: redirect stdout with `> file.txt`
