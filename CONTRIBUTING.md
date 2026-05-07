@@ -1,12 +1,12 @@
 # Contributing
 
-Thanks for your interest in arxiv-scraper-cli. This is a small personal tool, but contributions, bug reports, and ideas are welcome.
+Thanks for your interest in arxiv-digest. This is a small personal tool, but contributions, bug reports, and ideas are welcome.
 
 ## Development setup
 
 ```bash
-git clone https://github.com/isaac-tes/arxiv_scraper_cli.git
-cd arxiv_scraper_cli
+git clone https://github.com/isaac-tes/arxiv-digest.git
+cd arxiv-digest
 uv sync --group dev          # CLI + GUI + tests + docs deps
 uv run pytest -q             # 74 tests, ~1s, no network
 ```
@@ -58,7 +58,7 @@ The docs site auto-deploys to GitHub Pages once the repo is public; on a private
 
 Open an issue with:
 
-- arxiv-scraper-cli version (`uv run python arxiv_digest.py --list-config | head -5` or check `pyproject.toml`)
+- arxiv-digest version (`uv run python arxiv_digest.py --list-config | head -5` or check `pyproject.toml`)
 - Python version (`python --version`)
 - OS
 - Minimal reproduction (the exact command and any non-default config)

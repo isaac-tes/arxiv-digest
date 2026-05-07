@@ -49,7 +49,7 @@ wheels = [
 ]
 
 [[package]]
-name = "arxiv-scraper-cli"
+name = "arxiv-digest"
 version = "0.2.0"
 source = { editable = "." }
 dependencies = [

@@ -1,7 +1,7 @@
 # arXiv digest (cond-mat + quant-ph)
 
-[![CI](https://github.com/isaac-tes/arxiv_scraper_cli/actions/workflows/ci.yml/badge.svg)](https://github.com/isaac-tes/arxiv_scraper_cli/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/isaac-tes/arxiv_scraper_cli/blob/main/LICENSE)
+[![CI](https://github.com/isaac-tes/arxiv-digest/actions/workflows/ci.yml/badge.svg)](https://github.com/isaac-tes/arxiv-digest/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/isaac-tes/arxiv-digest/blob/main/LICENSE)
 [![Python: 3.12+](https://img.shields.io/badge/Python-3.12+-blue.svg)](https://www.python.org/downloads/)
 
 Fetches arXiv listing pages, scores papers by your keyword / author / subject preferences, and presents the ranked digest either as a CLI report (terminal, Markdown, JSON) or a Streamlit GUI for interactive tuning.
@@ -13,7 +13,7 @@ Two front-ends, one core:
 
 Both share the same `Config` and `arxiv_config.json` — tweak in one, the other picks it up.
 
-📚 **Docs**: <https://isaac-tes.github.io/arxiv_scraper_cli/> (live once the repo is public).
+📚 **Docs**: <https://isaac-tes.github.io/arxiv-digest/> (live once the repo is public).
 
 ## Defaults
 
@@ -27,7 +27,7 @@ Both share the same `Config` and `arxiv_config.json` — tweak in one, the other
 ## Quick start
 
 ```bash
-cd .../arxiv_scraper_cli
+cd .../arxiv-digest
 uv sync                                               # base install
 uv run python arxiv_digest.py --top 15                # CLI: print top 15
 uv sync --group gui                                   # add GUI deps
@@ -43,7 +43,7 @@ arxiv-digest --top 10              # CLI command, anywhere
 arxiv-gui                          # launches the Streamlit GUI
 
 uv tool install '.[gui]' --reinstall   # upgrade after a git pull
-uv tool uninstall arxiv-scraper-cli    # remove
+uv tool uninstall arxiv-digest         # remove
 ```
 
 Prerequisite: install [uv](https://docs.astral.sh/uv/) first — `curl -LsSf https://astral.sh/uv/install.sh | sh`. Python 3.12 or newer; `uv` will install it for you if missing.
