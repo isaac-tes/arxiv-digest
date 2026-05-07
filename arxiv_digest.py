@@ -78,7 +78,6 @@ def _default_core_keywords() -> List[str]:
         "Krylov",
         "Thouless",
         "pumping",
-        "pumping",
         "gauge field",
         "gauge potential",
         "Peierls phases",
@@ -182,6 +181,34 @@ def _default_low_priority_kw() -> List[str]:
 
 
 @dataclass
+class ScoringWeights:
+    core_keyword: int = 6
+    named_author: int = 6
+    quant_gas_subject: int = 4
+    mes_hall_subject: int = 4
+    quant_ph_subject: int = 2
+    low_priority_penalty: int = -5
+    long_abstract_bonus: int = 1
+    long_abstract_threshold: int = 200
+
+    @classmethod
+    def from_json(cls, raw: Dict[str, object] | None) -> "ScoringWeights":
+        if not raw:
+            return cls()
+        defaults = cls()
+        return cls(
+            core_keyword=int(raw.get("core_keyword", defaults.core_keyword)),
+            named_author=int(raw.get("named_author", defaults.named_author)),
+            quant_gas_subject=int(raw.get("quant_gas_subject", defaults.quant_gas_subject)),
+            mes_hall_subject=int(raw.get("mes_hall_subject", defaults.mes_hall_subject)),
+            quant_ph_subject=int(raw.get("quant_ph_subject", defaults.quant_ph_subject)),
+            low_priority_penalty=int(raw.get("low_priority_penalty", defaults.low_priority_penalty)),
+            long_abstract_bonus=int(raw.get("long_abstract_bonus", defaults.long_abstract_bonus)),
+            long_abstract_threshold=int(raw.get("long_abstract_threshold", defaults.long_abstract_threshold)),
+        )
+
+
+@dataclass
 class Config:
     feeds: Dict[str, str] = field(
         default_factory=lambda: {
@@ -197,6 +224,7 @@ class Config:
     low_priority_kw: List[str] = field(default_factory=_default_low_priority_kw)
     top_n: int = 20
     timeframe: str = "pastweek"  # 'today' or 'pastweek'
+    weights: ScoringWeights = field(default_factory=ScoringWeights)
 
     @classmethod
     def from_json(cls, raw: Dict[str, object]) -> "Config":
@@ -215,6 +243,9 @@ class Config:
                 # fallback to all known feeds if nothing was configured
                 default_feeds = list(hydrated_feeds) or list(DEFAULT_FEEDS)
 
+        weights_raw = data.get("weights")
+        weights = ScoringWeights.from_json(weights_raw if isinstance(weights_raw, dict) else None)
+
         cfg = cls(
             feeds=hydrated_feeds or {
                 "cond-mat.quant-gas": "https://arxiv.org/list/cond-mat.quant-gas/new",
@@ -226,8 +257,9 @@ class Config:
             core_keywords=list(data.get("core_keywords") or _default_core_keywords()),
             named_authors=list(data.get("named_authors") or _default_named_authors()),
             low_priority_kw=list(data.get("low_priority_kw") or _default_low_priority_kw()),
-            top_n=int(data.get("top_n") or 15),
-            timeframe=str(data.get("timeframe") or "today"),
+            top_n=int(data.get("top_n") or 20),
+            timeframe=str(data.get("timeframe") or "pastweek"),
+            weights=weights,
         )
         return cfg
 
@@ -474,7 +506,21 @@ def fetch_feeds(urls: List[str], sections: List[str] | None = None, verbose: boo
     return all_papers
 
 
-def score_paper(paper: dict, cfg: Config) -> int:
+def explain_score(paper: dict, cfg: Config) -> dict:
+    """Return a per-rule breakdown of how `score_paper` arrived at its total.
+
+    Returned dict has shape:
+        {
+            "keywords": [(kw, weight), ...],     # matched core keywords
+            "authors":  [(author, weight), ...], # matched named authors
+            "subjects": {name: weight, ...},     # only included subjects that matched
+            "low_priority_hits": [kw, ...],      # matched low-priority terms
+            "low_priority_penalty": int,         # applied once if any hit, else 0
+            "abstract_bonus": int,               # weights.long_abstract_bonus or 0
+            "total": int,                        # sum of all contributions
+        }
+    """
+    weights = cfg.weights
     txt = " ".join(
         [
             paper.get("title", ""),
@@ -483,25 +529,48 @@ def score_paper(paper: dict, cfg: Config) -> int:
             paper.get("subjects", ""),
         ]
     ).lower()
-    score = 0
-    for kw in cfg.core_keywords:
-        if kw.lower() in txt:
-            score += 6
-    for author in cfg.named_authors:
-        if author.lower() in txt:
-            score += 6
     subjects = paper.get("subjects", "").lower()
+
+    matched_keywords = [kw for kw in cfg.core_keywords if kw.lower() in txt]
+    matched_authors = [a for a in cfg.named_authors if a.lower() in txt]
+    matched_low = [k for k in cfg.low_priority_kw if k.lower() in txt]
+
+    subject_hits: Dict[str, int] = {}
     if "cond-mat.quant-gas" in subjects:
-        score += 4
+        subject_hits["cond-mat.quant-gas"] = weights.quant_gas_subject
     if "cond-mat.mes-hall" in subjects:
-        score += 4
+        subject_hits["cond-mat.mes-hall"] = weights.mes_hall_subject
     if "quant-ph" in subjects:
-        score += 2
-    if any(token.lower() in txt for token in cfg.low_priority_kw):
-        score -= 5
-    if len(paper.get("abstract", "")) > 200:
-        score += 1
-    return score
+        subject_hits["quant-ph"] = weights.quant_ph_subject
+
+    penalty = weights.low_priority_penalty if matched_low else 0
+    abstract_bonus = (
+        weights.long_abstract_bonus
+        if len(paper.get("abstract", "")) > weights.long_abstract_threshold
+        else 0
+    )
+
+    total = (
+        len(matched_keywords) * weights.core_keyword
+        + len(matched_authors) * weights.named_author
+        + sum(subject_hits.values())
+        + penalty
+        + abstract_bonus
+    )
+
+    return {
+        "keywords": [(kw, weights.core_keyword) for kw in matched_keywords],
+        "authors": [(a, weights.named_author) for a in matched_authors],
+        "subjects": subject_hits,
+        "low_priority_hits": matched_low,
+        "low_priority_penalty": penalty,
+        "abstract_bonus": abstract_bonus,
+        "total": total,
+    }
+
+
+def score_paper(paper: dict, cfg: Config) -> int:
+    return explain_score(paper, cfg)["total"]
 
 
 def summarize(text: str) -> str:

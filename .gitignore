@@ -1,5 +1,11 @@
 .DS_Store
 .crossnote/
+.pytest_cache/
+__pycache__/
+*.pyc
+.streamlit/secrets.toml
+.venv/
+arxiv_config.json
 # /reports/
 
 
@@ -13,3 +19,10 @@
 .dolt/
 *.db
 .beads-credential-key
+
+# mkdocs build output
+/site/
+
+# Tooling caches
+.mypy_cache/
+.ruff_cache/
