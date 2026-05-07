@@ -1,7 +1,7 @@
 # arXiv digest (cond-mat + quant-ph)
 
 [![CI](https://github.com/isaac-tes/arxiv_scraper_cli/actions/workflows/ci.yml/badge.svg)](https://github.com/isaac-tes/arxiv_scraper_cli/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/isaac-tes/arxiv_scraper_cli/blob/main/LICENSE)
 [![Python: 3.12+](https://img.shields.io/badge/Python-3.12+-blue.svg)](https://www.python.org/downloads/)
 
 Fetches arXiv listing pages, scores papers by your keyword / author / subject preferences, and presents the ranked digest either as a CLI report (terminal, Markdown, JSON) or a Streamlit GUI for interactive tuning.

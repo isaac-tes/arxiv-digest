@@ -1,0 +1,109 @@
+site_name: arXiv Scraper CLI
+site_url: https://isaac-tes.github.io/arxiv_scraper_cli/
+site_author: isaac-tes
+site_description: >-
+  Score and rank fresh arXiv cond-mat / quant-ph papers from a CLI or a
+  Streamlit GUI.
+
+repo_name: isaac-tes/arxiv_scraper_cli
+repo_url: https://github.com/isaac-tes/arxiv_scraper_cli
+edit_uri: edit/main/docs/
+
+docs_dir: docs
+site_dir: site
+
+theme:
+  name: material
+  language: en
+  font:
+    text: Inter
+    code: JetBrains Mono
+  icon:
+    repo: fontawesome/brands/github
+  # TODO: replace with a project logo/favicon when one exists.
+  palette:
+    - scheme: default
+      primary: indigo
+      accent: teal
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - scheme: slate
+      primary: indigo
+      accent: teal
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+  features:
+    - navigation.instant
+    - navigation.instant.prefetch
+    - navigation.instant.progress
+    - navigation.tracking
+    - navigation.sections
+    - navigation.path
+    - navigation.indexes
+    - navigation.top
+    - navigation.footer
+    - search.suggest
+    - search.highlight
+    - search.share
+    - header.autohide
+    - content.code.copy
+    - content.tooltips
+    - toc.follow
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - md_in_html
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - toc:
+      permalink: true
+
+extra_javascript:
+  - javascripts/extra.js
+
+extra_css:
+  - stylesheets/extra.css
+
+plugins:
+  - search:
+      lang: en
+  - git-revision-date-localized:
+      enable_creation_date: true
+      type: timeago
+      fallback_to_build_date: true
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/isaac-tes/arxiv_scraper_cli
+      name: GitHub
+    - icon: fontawesome/solid/envelope
+      link: mailto:i.tesfaye@tu-berlin.de
+      name: Contact
+
+nav:
+  - Home: index.md
+  - Getting Started: quickstart.md
+  - Guides:
+      - GUI: gui-guide.md
+      - CLI: cli-guide.md
+      - Scoring: scoring.md
+  - Project:
+      - Contributing: contributing.md
+      - Changelog: changelog.md

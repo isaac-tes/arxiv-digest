@@ -1,11 +1,90 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
 [project]
 name = "arxiv-scraper-cli"
-version = "0.1.0"
+version = "0.2.0"
+description = "Score and rank fresh arXiv cond-mat / quant-ph papers from a CLI or a Streamlit GUI."
+readme = "README.md"
+license = { text = "MIT" }
+authors = [{ name = "isaac-tes", email = "i.tesfaye@tu-berlin.de" }]
 requires-python = ">=3.12"
+keywords = ["arxiv", "research", "cond-mat", "quant-ph", "streamlit", "cli"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering",
+]
 dependencies = [
-	"requests>=2.32.0",
-	"beautifulsoup4>=4.12.0",
+    "requests>=2.32.0",
+    "beautifulsoup4>=4.12.0",
 ]
 
-[tool.poetry.extras]
-completion = ["argcomplete>=3.0.0"]
+[project.optional-dependencies]
+cli = ["argcomplete>=3.0.0"]
+gui = [
+    "streamlit>=1.30.0",
+    "pandas>=2.0.0",
+]
+
+[project.scripts]
+arxiv-digest = "arxiv_digest:main"
+arxiv-gui = "arxiv_gui_launcher:main"
+
+[project.urls]
+Homepage = "https://github.com/isaac-tes/arxiv_scraper_cli"
+Documentation = "https://isaac-tes.github.io/arxiv_scraper_cli/"
+Issues = "https://github.com/isaac-tes/arxiv_scraper_cli/issues"
+Changelog = "https://github.com/isaac-tes/arxiv_scraper_cli/blob/main/CHANGELOG.md"
+
+[dependency-groups]
+test = [
+    "pytest>=8.0.0",
+]
+gui = [
+    "streamlit>=1.30.0",
+    "pandas>=2.0.0",
+]
+docs = [
+    "mkdocs-material>=9.7.0",
+    "mkdocs-git-revision-date-localized-plugin>=1.5.0",
+]
+dev = [
+    { include-group = "test" },
+    { include-group = "gui" },
+    { include-group = "docs" },
+]
+
+[tool.hatch.build.targets.wheel]
+only-include = [
+    "arxiv_digest.py",
+    "arxiv_gui.py",
+    "arxiv_gui_launcher.py",
+]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "arxiv_digest.py",
+    "arxiv_gui.py",
+    "arxiv_gui_launcher.py",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md",
+    "CONTRIBUTING.md",
+    "tests/",
+    "docs/",
+    "mkdocs.yml",
+    "scripts/",
+    ".python-version",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+addopts = "-q"
