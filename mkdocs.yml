@@ -1,12 +1,12 @@
 site_name: arXiv Scraper CLI
-site_url: https://isaac-tes.github.io/arxiv_scraper_cli/
+site_url: https://isaac-tes.github.io/arxiv-digest/
 site_author: isaac-tes
 site_description: >-
   Score and rank fresh arXiv cond-mat / quant-ph papers from a CLI or a
   Streamlit GUI.
 
-repo_name: isaac-tes/arxiv_scraper_cli
-repo_url: https://github.com/isaac-tes/arxiv_scraper_cli
+repo_name: isaac-tes/arxiv-digest
+repo_url: https://github.com/isaac-tes/arxiv-digest
 edit_uri: edit/main/docs/
 
 docs_dir: docs
@@ -91,7 +91,7 @@ plugins:
 extra:
   social:
     - icon: fontawesome/brands/github
-      link: https://github.com/isaac-tes/arxiv_scraper_cli
+      link: https://github.com/isaac-tes/arxiv-digest
       name: GitHub
     - icon: fontawesome/solid/envelope
       link: mailto:isaac-tes

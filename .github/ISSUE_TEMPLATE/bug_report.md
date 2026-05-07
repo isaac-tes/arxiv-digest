@@ -27,7 +27,7 @@ What actually happens (include the full traceback if applicable).
 
 ## Environment
 
-- arxiv-scraper-cli version: <!-- e.g. 0.2.0 — see pyproject.toml -->
+- arxiv-digest version: <!-- e.g. 0.2.0 — see pyproject.toml -->
 - Python version: <!-- e.g. 3.12.4 -->
 - OS: <!-- e.g. macOS 14, Ubuntu 24.04 -->
 - Streamlit version (if GUI bug): <!-- `uv run streamlit --version` -->
