@@ -21,7 +21,7 @@ PROJECT_ROOT = Path(__file__).parent.parent
 README_PATH = PROJECT_ROOT / "README.md"
 DOCS_INDEX = PROJECT_ROOT / "docs" / "index.md"
 
-_GITHUB_BLOB = "https://github.com/isaac-tes/arxiv_scraper_cli/blob/main"
+_GITHUB_BLOB = "https://github.com/isaac-tes/arxiv-digest/blob/main"
 _ROOT_FILES = frozenset(["LICENSE", "CHANGELOG.md", "CONTRIBUTING.md"])
 
 

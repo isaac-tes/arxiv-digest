@@ -1,6 +1,6 @@
 # Contributing
 
-Contribution guidelines live in [CONTRIBUTING.md](https://github.com/isaac-tes/arxiv_scraper_cli/blob/main/CONTRIBUTING.md) at the repo root.
+Contribution guidelines live in [CONTRIBUTING.md](https://github.com/isaac-tes/arxiv-digest/blob/main/CONTRIBUTING.md) at the repo root.
 
 In short:
 

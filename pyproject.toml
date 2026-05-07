@@ -3,7 +3,7 @@ requires = ["hatchling>=1.25"]
 build-backend = "hatchling.build"
 
 [project]
-name = "arxiv-scraper-cli"
+name = "arxiv-digest"
 version = "0.2.0"
 description = "Score and rank fresh arXiv cond-mat / quant-ph papers from a CLI or a Streamlit GUI."
 readme = "README.md"
@@ -38,10 +38,10 @@ arxiv-digest = "arxiv_digest:main"
 arxiv-gui = "arxiv_gui_launcher:main"
 
 [project.urls]
-Homepage = "https://github.com/isaac-tes/arxiv_scraper_cli"
-Documentation = "https://isaac-tes.github.io/arxiv_scraper_cli/"
-Issues = "https://github.com/isaac-tes/arxiv_scraper_cli/issues"
-Changelog = "https://github.com/isaac-tes/arxiv_scraper_cli/blob/main/CHANGELOG.md"
+Homepage = "https://github.com/isaac-tes/arxiv-digest"
+Documentation = "https://isaac-tes.github.io/arxiv-digest/"
+Issues = "https://github.com/isaac-tes/arxiv-digest/issues"
+Changelog = "https://github.com/isaac-tes/arxiv-digest/blob/main/CHANGELOG.md"
 
 [dependency-groups]
 test = [

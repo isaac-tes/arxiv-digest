@@ -5,8 +5,8 @@ Three install paths depending on what you want.
 ## Path 1 — clone and run (recommended for tinkering)
 
 ```bash
-git clone https://github.com/isaac-tes/arxiv_scraper_cli.git
-cd arxiv_scraper_cli
+git clone https://github.com/isaac-tes/arxiv-digest.git
+cd arxiv-digest
 uv sync --group dev                      # CLI + GUI + tests + docs
 uv run pytest -q                         # 74-test suite, ~1s
 uv run python arxiv_digest.py --top 10   # CLI sanity check
@@ -36,7 +36,7 @@ uv tool install '.[gui]' --reinstall
 To uninstall:
 
 ```bash
-uv tool uninstall arxiv-scraper-cli
+uv tool uninstall arxiv-digest
 ```
 
 ## Path 3 — paste into ChatGPT
