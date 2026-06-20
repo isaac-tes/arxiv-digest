@@ -36,6 +36,7 @@ gui = [
 [project.scripts]
 arxiv-digest = "arxiv_digest:main"
 arxiv-gui = "arxiv_gui_launcher:main"
+arxiv-desktop = "arxiv_desktop:main"
 
 [project.urls]
 Homepage = "https://github.com/isaac-tes/arxiv-digest"
