@@ -1,4 +1,4 @@
-site_name: arXiv Scraper CLI
+site_name: arXiv Digest
 site_url: https://isaac-tes.github.io/arxiv-digest/
 site_author: isaac-tes
 site_description: >-
@@ -104,6 +104,7 @@ nav:
       - GUI: gui-guide.md
       - CLI: cli-guide.md
       - Scoring: scoring.md
+      - Troubleshooting: troubleshooting.md
   - Project:
       - Contributing: contributing.md
       - Changelog: changelog.md
