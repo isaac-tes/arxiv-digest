@@ -80,6 +80,25 @@ def cfg() -> ad.Config:
     return st.session_state.cfg
 
 
+# Keyed widgets cache their value in st.session_state[key] and IGNORE the
+# `value=`/`default=` arg on rerun. So when a button handler replaces cfg()
+# from a non-widget source (Load profile, Reset, Import) the keyed widgets keep
+# showing stale state. Pop those keys before st.rerun() to force re-init from cfg.
+_WEIGHT_KEYS = [f"weight_{f.name}" for f in fields(ad.ScoringWeights)]
+_EDITOR_KEYS = [
+    "editor_core_keywords",
+    "editor_named_authors",
+    "editor_low_priority_kw",
+    "editor_feeds",
+]
+
+
+def _reset_widget_state(*keys: str) -> None:
+    """Drop cached widget state so widgets re-read from cfg() on next run."""
+    for k in keys or (*_WEIGHT_KEYS, *_EDITOR_KEYS):
+        st.session_state.pop(k, None)
+
+
 # ────────────────────────── Sidebar ──────────────────────────
 
 def render_sidebar():
@@ -96,6 +115,7 @@ def render_sidebar():
         )
         if active != "(unsaved)" and st.button("Load profile", width="stretch"):
             st.session_state.cfg = load_profile(active)
+            _reset_widget_state()
             st.success(f"Loaded {active}")
             st.rerun()
 
@@ -259,6 +279,7 @@ def _render_list_editor(label: str, attr: str):
         if st.button(f"Save {label.lower()}", key=f"save_{attr}", type="primary"):
             cleaned = [str(v).strip() for v in edited[label].tolist() if str(v).strip() and v == v]
             setattr(cfg(), attr, cleaned)
+            _reset_widget_state(f"editor_{attr}")
             st.success(f"Saved {len(cleaned)} entries.")
             st.rerun()
     with col_reset:
@@ -269,6 +290,7 @@ def _render_list_editor(label: str, attr: str):
                 "low_priority_kw": ad._default_low_priority_kw,
             }
             setattr(cfg(), attr, defaults_map[attr]())
+            _reset_widget_state(f"editor_{attr}")
             st.rerun()
 
 
@@ -310,6 +332,7 @@ def render_feeds_tab():
                 new_feeds[n] = u
         cfg().feeds = new_feeds
         cfg().default_feeds = [f for f in cfg().default_feeds if f in new_feeds]
+        _reset_widget_state("editor_feeds")
         st.success(f"Saved {len(new_feeds)} feeds.")
         st.rerun()
 
@@ -337,11 +360,13 @@ def render_scoring_tab():
     with col_apply:
         if st.button("Apply weights", type="primary"):
             cfg().weights = ad.ScoringWeights(**new_values)
+            _reset_widget_state(*_WEIGHT_KEYS)
             st.success("Weights applied.")
             st.rerun()
     with col_reset:
         if st.button("Reset to defaults"):
             cfg().weights = ad.ScoringWeights()
+            _reset_widget_state(*_WEIGHT_KEYS)
             st.rerun()
 
 
@@ -365,6 +390,7 @@ def render_profiles_tab():
             cols[0].write(p)
             if cols[1].button("Load", key=f"load_{p}"):
                 st.session_state.cfg = load_profile(p)
+                _reset_widget_state()
                 st.success(f"Loaded {p}")
                 st.rerun()
             cols[2].download_button(
@@ -390,7 +416,9 @@ def render_profiles_tab():
         try:
             raw = json.load(uploaded)
             st.session_state.cfg = ad.Config.from_json(raw)
+            _reset_widget_state()
             st.success("Profile imported into current session.")
+            st.rerun()
         except Exception as exc:
             st.error(f"Failed to parse JSON: {exc}")
 
