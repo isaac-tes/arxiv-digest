@@ -23,6 +23,11 @@ arxiv_config.json
 # mkdocs build output
 /site/
 
+# PyInstaller desktop bundle output
+/build/
+/dist/
+*.app
+
 # Tooling caches
 .mypy_cache/
 .ruff_cache/

@@ -104,6 +104,7 @@ nav:
       - GUI: gui-guide.md
       - CLI: cli-guide.md
       - Scoring: scoring.md
+      - Desktop app: desktop-bundling.md
       - Troubleshooting: troubleshooting.md
   - Project:
       - Contributing: contributing.md

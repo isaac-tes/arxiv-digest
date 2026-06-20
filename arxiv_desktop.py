@@ -84,8 +84,39 @@ def pake_build_command(
     return cmd
 
 
+def is_frozen() -> bool:
+    """True when running inside a PyInstaller bundle."""
+    return bool(getattr(sys, "frozen", False))
+
+
+def resource_path(rel: str) -> Path:
+    """Resolve a bundled data file in both source and frozen (PyInstaller) runs.
+
+    PyInstaller unpacks datas under ``sys._MEIPASS``; from source we resolve
+    relative to this file.
+    """
+    base = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
+    return base / rel
+
+
 def _app_path() -> Path:
-    return Path(__file__).resolve().parent / "arxiv_gui.py"
+    return resource_path("arxiv_gui.py")
+
+
+def run_streamlit_in_process(app: Path, host: str = DEFAULT_HOST, port: int = DEFAULT_PORT) -> None:
+    """Start Streamlit in-process via its bootstrap API (used in frozen builds).
+
+    A frozen app has no ``streamlit`` console script, so we drive the server
+    through ``streamlit.web.bootstrap`` and set options programmatically.
+    """
+    from streamlit import config as st_config
+    from streamlit.web import bootstrap
+
+    st_config.set_option("server.address", host)
+    st_config.set_option("server.port", port)
+    st_config.set_option("server.headless", True)
+    st_config.set_option("browser.gatherUsageStats", False)
+    bootstrap.run(str(app), False, [], {})
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -110,6 +141,21 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     print(f"Starting {APP_NAME} server on {url} ...")
+
+    if is_frozen():
+        # Frozen build: no console script — run the server in-process and open
+        # the window from a watcher thread once the port answers.
+        import threading
+
+        def _open_when_ready() -> None:
+            if wait_for_port(host, port):
+                print(f"Server ready. Opening {url}")
+                webbrowser.open(url)
+
+        threading.Thread(target=_open_when_ready, daemon=True).start()
+        run_streamlit_in_process(app, host, port)
+        return 0
+
     server = subprocess.Popen(streamlit_command(app, host, port))
     try:
         if not wait_for_port(host, port):

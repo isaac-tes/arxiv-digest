@@ -46,3 +46,31 @@ def test_port_is_open_detects_listening_socket():
 def test_wait_for_port_times_out_fast_on_dead_port():
     # Unused high port; should return False quickly, not hang.
     assert dt.wait_for_port("127.0.0.1", 1, timeout=0.5, interval=0.1) is False
+
+
+# ───────────── Frozen / PyInstaller bundling (arxiv_scraper_cli-7k9) ─────────────
+
+def test_is_frozen_false_under_normal_python():
+    assert dt.is_frozen() is False
+
+
+def test_resource_path_uses_meipass_when_frozen(monkeypatch, tmp_path):
+    monkeypatch.setattr(sys, "_MEIPASS", str(tmp_path), raising=False)
+    assert dt.resource_path("arxiv_gui.py") == tmp_path / "arxiv_gui.py"
+
+
+def test_resource_path_falls_back_to_source_dir(monkeypatch):
+    monkeypatch.delattr(sys, "_MEIPASS", raising=False)
+    p = dt.resource_path("arxiv_gui.py")
+    assert p.name == "arxiv_gui.py"
+    assert p.parent == Path(dt.__file__).resolve().parent
+
+
+def test_pyinstaller_spec_exists_and_handles_streamlit_gotchas():
+    spec = Path(__file__).resolve().parent.parent / "packaging" / "arxiv_digest_desktop.spec"
+    assert spec.exists(), "PyInstaller spec missing"
+    text = spec.read_text()
+    # The two Streamlit freezing gotchas must be addressed.
+    assert 'copy_metadata("streamlit")' in text
+    assert "collect_all" in text
+    assert "arxiv_gui.py" in text
