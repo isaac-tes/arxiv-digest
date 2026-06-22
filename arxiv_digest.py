@@ -225,6 +225,10 @@ class Config:
     top_n: int = 20
     timeframe: str = "pastweek"  # 'today' or 'pastweek'
     include_replacements: bool = False  # keep arXiv 'Replacement submissions' (today feed)
+    # Per-feed score bonus: feed name -> points, added when the feed name appears
+    # in a paper's subjects. Lets user-added feeds contribute to ranking beyond
+    # the three builtin subject bonuses.
+    feed_weights: Dict[str, int] = field(default_factory=dict)
     weights: ScoringWeights = field(default_factory=ScoringWeights)
 
     @classmethod
@@ -261,6 +265,10 @@ class Config:
             top_n=int(data.get("top_n") or 20),
             timeframe=str(data.get("timeframe") or "pastweek"),
             include_replacements=bool(data.get("include_replacements", False)),
+            feed_weights={
+                str(k): int(v)
+                for k, v in (data.get("feed_weights") or {}).items()
+            },
             weights=weights,
         )
         return cfg
@@ -617,6 +625,12 @@ def explain_score(paper: dict, cfg: Config) -> dict:
         subject_hits["cond-mat.mes-hall"] = weights.mes_hall_subject
     if "quant-ph" in subjects:
         subject_hits["quant-ph"] = weights.quant_ph_subject
+
+    # Per-feed bonuses for any (user-added) feed whose name appears in subjects.
+    # Skip names already counted by a builtin subject bonus to avoid double count.
+    for name, w in (cfg.feed_weights or {}).items():
+        if w and name.lower() in subjects and name not in subject_hits:
+            subject_hits[name] = w
 
     penalty = weights.low_priority_penalty if matched_low else 0
     abstract_bonus = (
