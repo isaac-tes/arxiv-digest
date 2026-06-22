@@ -75,7 +75,7 @@ The first time you launch, the app loads `arxiv_config.json` if present in the p
 - **Authors** — same pattern for `named_authors`. Default +6 per match. Match is case-insensitive substring on author string.
 - **Low priority** — penalty list. If *any* term matches, the paper takes the *Low-priority penalty* (default −5) — once, not per hit.
 - **Feeds** — `name → URL` editor. Add custom arXiv lists (e.g. `hep-th=https://arxiv.org/list/hep-th/new`). The `/new` / `/pastweek` suffix is rewritten by the timeframe selector at fetch time, so you can paste any base URL.
-- **Scoring** — number inputs for each weight: per-keyword bonus, per-author bonus, the three subject bonuses (`cond-mat.quant-gas`, `cond-mat.mes-hall`, `quant-ph`), low-priority penalty, long-abstract bonus, and the abstract-length threshold. *Apply weights* makes the change live; *Reset to defaults* puts it back.
+- **Scoring** — number inputs for each weight: per-keyword bonus, per-author bonus, low-priority penalty, long-abstract bonus, the abstract-length threshold, and a **per-feed subject bonus** for every configured feed (defaults `cond-mat.quant-gas` +4, `cond-mat.mes-hall` +4, `quant-ph` +2). *Apply weights* makes the change live; *Reset to defaults* puts it back.
 - **Profiles** — save the current full config under a name (e.g. `topology-mode`, `quantum-gas-mode`). Files live in `~/.arxiv_scraper/profiles/<name>.json`. Buttons: **Load**, **Export** (download JSON), **Delete**, **Import** (upload JSON). Below: **Write project config** dumps the current config to `arxiv_config.json` next to `arxiv_digest.py`, which is what the **CLI** picks up on the next run — use this to push your GUI tweaks back into your daily CLI digest.
 
 ### Tips
@@ -146,30 +146,31 @@ The `--add-* / --remove-* / --rename-*` flags only stick if combined with `--sav
   "low_priority_kw": ["film", "growth", ...],
   "top_n": 20,
   "timeframe": "pastweek",
+  "include_replacements": false,
+  "feed_weights": {
+    "cond-mat.quant-gas": 4, "cond-mat.mes-hall": 4, "quant-ph": 2
+  },
   "weights": {
     "core_keyword": 6, "named_author": 6,
-    "quant_gas_subject": 4, "mes_hall_subject": 4, "quant_ph_subject": 2,
     "low_priority_penalty": -5,
     "long_abstract_bonus": 1, "long_abstract_threshold": 200
   }
 }
 ```
 
-The CLI never exposes flags for `weights` — to tune scoring weights, use the GUI's Scoring tab and click *Write project config*, or hand-edit the JSON.
+The CLI never exposes flags for `weights` — to tune scoring weights, use the GUI's Scoring tab and click *Write project config*, or hand-edit the JSON. Subject scoring is driven by `feed_weights` (a bonus per feed); configs written before this change auto-migrate on load.
 
 ### Scoring (defaults)
 
 | Rule | Default weight |
 |------|---------------|
 | Per matched core keyword | **+6** |
-| Per matched named author | **+6** |
-| Subject contains `cond-mat.quant-gas` | **+4** |
-| Subject contains `cond-mat.mes-hall` | **+4** |
-| Subject contains `quant-ph` | **+2** |
+| Per matched named author | **+6** (author list only) |
+| Per-feed subject bonus | **per feed** — `cond-mat.quant-gas` +4, `cond-mat.mes-hall` +4, `quant-ph` +2 |
 | Any low-priority term matches (applied once) | **−5** |
 | Abstract longer than 200 chars | **+1** |
 
-All values are configurable via `weights` in `arxiv_config.json` or the GUI Scoring tab.
+Scalar weights live in `weights`; subject scoring in `feed_weights` — both configurable in `arxiv_config.json` or the GUI Scoring tab.
 
 ### Output formats
 
