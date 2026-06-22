@@ -40,6 +40,40 @@ def test_named_author_still_matches_in_author_field(make_paper):
     assert score_paper(p, cfg) == cfg.weights.named_author
 
 
+def test_feed_weight_adds_bonus_when_subject_matches(make_paper):
+    """Per-feed weight (arxiv_scraper_cli-9i8): bonus when feed name is in subjects."""
+    cfg = Config(core_keywords=[], named_authors=[], low_priority_kw=[])
+    cfg.feed_weights = {"hep-th": 7}
+    p = make_paper(subjects="hep-th (primary)")
+    assert score_paper(p, cfg) == 7
+    assert explain_score(p, cfg)["subjects"]["hep-th"] == 7
+
+
+def test_feed_weight_no_effect_when_unmatched_or_zero(make_paper):
+    cfg = Config(core_keywords=[], named_authors=[], low_priority_kw=[])
+    cfg.feed_weights = {"hep-th": 7, "math.AG": 0}
+    p = make_paper(subjects="quant-ph")  # only builtin quant-ph applies
+    assert score_paper(p, cfg) == cfg.weights.quant_ph_subject
+
+
+def test_feed_weight_does_not_double_count_builtin_subject(make_paper):
+    """If a feed name equals a builtin subject key, don't add twice."""
+    cfg = Config(core_keywords=[], named_authors=[], low_priority_kw=[])
+    cfg.feed_weights = {"quant-ph": 5}
+    p = make_paper(subjects="quant-ph")
+    assert score_paper(p, cfg) == cfg.weights.quant_ph_subject  # builtin only
+
+
+def test_feed_weight_roundtrips_through_json(make_paper):
+    from arxiv_digest import Config
+    cfg = Config()
+    cfg.feed_weights = {"hep-th": 3}
+    import json as _json
+    from dataclasses import asdict
+    restored = Config.from_json(_json.loads(_json.dumps(asdict(cfg))))
+    assert restored.feed_weights == {"hep-th": 3}
+
+
 def test_quant_gas_subject_bonus(empty_cfg, make_paper):
     p = make_paper(subjects="cond-mat.quant-gas (primary)")
     assert score_paper(p, empty_cfg) == empty_cfg.weights.quant_gas_subject

@@ -8,6 +8,7 @@ one place. The CLI flow (`python arxiv_digest.py ...`) is unaffected.
 """
 from __future__ import annotations
 
+import html
 import json
 from dataclasses import asdict, fields
 from datetime import datetime
@@ -181,6 +182,36 @@ def render_sidebar():
 
 # ────────────────────────── Tab: Papers ──────────────────────────
 
+_PAPER_CSS = """
+<style>
+.paper-title { font-size: 1.35rem; font-weight: 700; line-height: 1.3; margin: 0 0 .15rem 0; }
+.paper-authors { font-size: 1.02rem; color: #e6edf3; margin: 0 0 .25rem 0; }
+.paper-authors .hl-author {
+  color: #3fb950; font-weight: 700; border-bottom: 1px dotted #3fb950;
+  cursor: help; padding: 0 1px; border-radius: 3px; transition: background .12s;
+}
+.paper-authors .hl-author:hover { background: rgba(63,185,80,.22); }
+</style>
+"""
+
+
+def _authors_html(authors: str, named: list[str], bonus: int) -> str:
+    """Render the author line, highlighting authors present in `named`."""
+    named_low = [n.strip().lower() for n in named if n.strip()]
+    parts = [a.strip() for a in authors.split(",") if a.strip()]
+    out = []
+    for a in parts:
+        esc = html.escape(a)
+        if any(n in a.lower() for n in named_low):
+            out.append(
+                f'<span class="hl-author" title="Highlighted author '
+                f'(+{bonus} to score)">{esc}</span>'
+            )
+        else:
+            out.append(esc)
+    return ", ".join(out) or "(No authors listed)"
+
+
 def _render_breakdown(breakdown: dict):
     if breakdown["keywords"]:
         st.markdown("**Keywords matched:**")
@@ -197,7 +228,13 @@ def _render_breakdown(breakdown: dict):
             f"(penalty: {breakdown['low_priority_penalty']})"
         )
     if breakdown["abstract_bonus"]:
-        st.markdown(f"**Abstract bonus:** +{breakdown['abstract_bonus']}")
+        thr = cfg().weights.long_abstract_threshold
+        st.markdown(
+            f'<abbr title="Awarded because the abstract is longer than '
+            f'{thr} characters — a rough signal of a substantial paper.">'
+            f'<b>Abstract bonus:</b> +{breakdown["abstract_bonus"]}</abbr>',
+            unsafe_allow_html=True,
+        )
 
 
 def render_papers_tab():
@@ -280,13 +317,22 @@ def render_papers_tab():
     if hidden:
         caption += f" {hidden} hidden by replacement/day filters."
     st.caption(caption)
+    st.markdown(_PAPER_CSS, unsafe_allow_html=True)
 
     for e in filtered:
         with st.container(border=True):
             head, score_col = st.columns([5, 1])
             with head:
-                st.markdown(f"**{e['rank']}. {e['title']}**")
-                st.caption(e["authors"])
+                st.markdown(
+                    f'<div class="paper-title">{e["rank"]}. {html.escape(e["title"])}</div>',
+                    unsafe_allow_html=True,
+                )
+                st.markdown(
+                    f'<div class="paper-authors">'
+                    f'{_authors_html(e["authors"], cfg().named_authors, cfg().weights.named_author)}'
+                    f'</div>',
+                    unsafe_allow_html=True,
+                )
                 if e["section"]:
                     st.caption(f"Section: {e['section']}")
                 st.write(e["summary"])
@@ -398,17 +444,42 @@ def render_scoring_tab():
             key=f"weight_{f.name}",
         )
 
+    # Per-feed bonuses — one field per available feed (Feeds tab), except the
+    # three already covered by the named subject bonuses above.
+    builtin = {"cond-mat.quant-gas", "cond-mat.mes-hall", "quant-ph"}
+    extra_feeds = [name for name in cfg().feeds if name not in builtin]
+    new_feed_weights: dict[str, int] = {}
+    if extra_feeds:
+        st.divider()
+        st.markdown("**Per-feed bonuses**")
+        st.caption(
+            "Add or lower a score bonus for each extra feed you configured. "
+            "Applied when the feed name appears in a paper's subjects. "
+            "Add/remove feeds in the **Feeds** tab; fields here follow."
+        )
+        for name in extra_feeds:
+            new_feed_weights[name] = st.number_input(
+                name,
+                value=int(cfg().feed_weights.get(name, 0)),
+                step=1,
+                key=f"fw_{name}",
+            )
+
+    feed_keys = [f"fw_{name}" for name in extra_feeds]
+
     col_apply, col_reset = st.columns(2)
     with col_apply:
         if st.button("Apply weights", type="primary"):
             cfg().weights = ad.ScoringWeights(**new_values)
-            _reset_widget_state(*_WEIGHT_KEYS)
+            cfg().feed_weights = {n: int(v) for n, v in new_feed_weights.items() if v}
+            _reset_widget_state(*_WEIGHT_KEYS, *feed_keys)
             st.success("Weights applied.")
             st.rerun()
     with col_reset:
         if st.button("Reset to defaults"):
             cfg().weights = ad.ScoringWeights()
-            _reset_widget_state(*_WEIGHT_KEYS)
+            cfg().feed_weights = {}
+            _reset_widget_state(*_WEIGHT_KEYS, *feed_keys)
             st.rerun()
 
 

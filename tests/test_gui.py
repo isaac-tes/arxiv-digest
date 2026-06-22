@@ -33,6 +33,35 @@ def test_gui_sidebar_has_fetch_button():
     assert "Fetch papers" in labels
 
 
+def test_authors_html_highlights_named_authors():
+    import arxiv_gui
+
+    out = arxiv_gui._authors_html("Immanuel Bloch, Alice Smith", ["bloch"], 6)
+    assert "hl-author" in out
+    assert "Immanuel Bloch" in out
+    assert "Alice Smith" in out
+    # only the named one is wrapped
+    assert out.count("hl-author") == 1
+    assert "+6 to score" in out
+
+
+def test_authors_html_escapes_and_handles_empty():
+    import arxiv_gui
+
+    assert arxiv_gui._authors_html("", [], 6) == "(No authors listed)"
+    out = arxiv_gui._authors_html("A <b>x</b>, B", [], 6)
+    assert "&lt;b&gt;" in out  # escaped
+
+
+def test_scoring_tab_has_per_feed_weight_field():
+    from streamlit.testing.v1 import AppTest
+
+    at = AppTest.from_file("arxiv_gui.py").run(timeout=15)
+    keys = {ni.key for ni in at.number_input if ni.key}
+    # 'cond-mat' is a default feed and not a builtin subject -> gets a fw_ field
+    assert "fw_cond-mat" in keys
+
+
 def test_gui_sidebar_has_replacement_toggle():
     from streamlit.testing.v1 import AppTest
 
