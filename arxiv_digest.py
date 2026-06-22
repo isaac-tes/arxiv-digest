@@ -224,6 +224,7 @@ class Config:
     low_priority_kw: List[str] = field(default_factory=_default_low_priority_kw)
     top_n: int = 20
     timeframe: str = "pastweek"  # 'today' or 'pastweek'
+    include_replacements: bool = False  # keep arXiv 'Replacement submissions' (today feed)
     weights: ScoringWeights = field(default_factory=ScoringWeights)
 
     @classmethod
@@ -259,6 +260,7 @@ class Config:
             low_priority_kw=list(data.get("low_priority_kw") or _default_low_priority_kw()),
             top_n=int(data.get("top_n") or 20),
             timeframe=str(data.get("timeframe") or "pastweek"),
+            include_replacements=bool(data.get("include_replacements", False)),
             weights=weights,
         )
         return cfg
@@ -506,6 +508,75 @@ def fetch_feeds(urls: List[str], sections: List[str] | None = None, verbose: boo
     return all_papers
 
 
+# ── Submission-type / day filtering ──────────────────────────────────────────
+#
+# arXiv /new pages group entries under h3 headers: "New submissions (...)",
+# "Cross submissions (...)", "Replacement submissions (...)". /pastweek groups
+# by day: "Fri, 19 Jun 2026 (showing 88 of 88 entries )". fetch_feed stores that
+# header in paper["section"], so we can filter without re-fetching.
+
+_DAY_LABEL_RE = re.compile(r"^[A-Z][a-z]{2}, \d{1,2} [A-Z][a-z]{2} \d{4}")
+
+
+def section_category(section: str) -> str:
+    """Classify an arXiv list section header → new | cross | replacement | other.
+
+    Date sections (pastweek) and anything unrecognised return 'other'.
+    """
+    s = (section or "").lower()
+    if "replacement" in s:
+        return "replacement"
+    if "cross" in s:
+        return "cross"
+    if "new submission" in s:
+        return "new"
+    return "other"
+
+
+def section_day_label(section: str) -> str | None:
+    """Extract the date label from a pastweek day section, else None.
+
+    'Fri, 19 Jun 2026 (showing 88 of 88 entries )' -> 'Fri, 19 Jun 2026'
+    """
+    m = _DAY_LABEL_RE.match(section or "")
+    return m.group(0) if m else None
+
+
+def available_day_labels(papers: List[dict]) -> List[str]:
+    """Distinct day labels present in papers, sorted chronologically."""
+    labels = {lbl for p in papers if (lbl := section_day_label(p.get("section", "")))}
+
+    def _key(lbl: str):
+        try:
+            return datetime.strptime(lbl, "%a, %d %b %Y")
+        except ValueError:
+            return datetime.max
+
+    return sorted(labels, key=_key)
+
+
+def filter_papers(
+    papers: List[dict],
+    *,
+    include_replacements: bool = False,
+    days: Sequence[str] | None = None,
+) -> List[dict]:
+    """Drop replacement submissions (unless asked to keep) and restrict to days.
+
+    `days` is a list of day labels (see section_day_label); None = all days.
+    Cross submissions and new submissions are always kept.
+    """
+    out: List[dict] = []
+    for p in papers:
+        section = p.get("section", "")
+        if not include_replacements and section_category(section) == "replacement":
+            continue
+        if days is not None and section_day_label(section) not in set(days):
+            continue
+        out.append(p)
+    return out
+
+
 def explain_score(paper: dict, cfg: Config) -> dict:
     """Return a per-rule breakdown of how `score_paper` arrived at its total.
 
@@ -530,9 +601,13 @@ def explain_score(paper: dict, cfg: Config) -> dict:
         ]
     ).lower()
     subjects = paper.get("subjects", "").lower()
+    # Named authors must match the actual author list only — not the title or
+    # abstract. Otherwise "Bloch theorem" in an abstract awards author points
+    # though no author is named Bloch (arxiv_scraper_cli-8tz).
+    authors_txt = paper.get("authors", "").lower()
 
     matched_keywords = [kw for kw in cfg.core_keywords if kw.lower() in txt]
-    matched_authors = [a for a in cfg.named_authors if a.lower() in txt]
+    matched_authors = [a for a in cfg.named_authors if a.lower() in authors_txt]
     matched_low = [k for k in cfg.low_priority_kw if k.lower() in txt]
 
     subject_hits: Dict[str, int] = {}
@@ -725,6 +800,11 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
         choices=["today", "pastweek"],
         help="Select timeframe: 'today' for /new feeds (today's papers only), 'pastweek' for /pastweek feeds (last ~5 days)",
     )
+    parser.add_argument(
+        "--include-replacements",
+        action="store_true",
+        help="Keep arXiv 'Replacement submissions' (hidden by default; only present in the 'today' feed)",
+    )
 
     parser.add_argument("--add-core", action="append", default=[], help="Add a core keyword")
     parser.add_argument("--remove-core", action="append", default=[], help="Remove a core keyword")
@@ -800,11 +880,22 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.verbose:
         print(f"\nTotal papers collected: {len(papers)}")
 
+    if args.include_replacements:
+        cfg.include_replacements = True
+    fetched_count = len(papers)
+    papers = filter_papers(papers, include_replacements=cfg.include_replacements)
+    hidden_replacements = fetched_count - len(papers)
+
     generated_at = datetime.now(UTC)
     top_limit = args.top if args.top is not None else cfg.top_n
     entries = build_ranked_entries(papers, cfg, top_n=top_limit)
     digest = format_digest(entries, len(papers), top_limit)
     print(digest)
+    if hidden_replacements:
+        print(
+            f"\nNote: hid {hidden_replacements} replacement submission(s). "
+            f"Pass --include-replacements to keep them."
+        )
 
     json_path = resolve_report_path(args.output_json, "json", generated_at)
     markdown_path = resolve_report_path(args.output_markdown, "md", generated_at)

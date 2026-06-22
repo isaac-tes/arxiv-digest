@@ -20,6 +20,25 @@ Default URL: `http://localhost:8501`. The bundled `.streamlit/config.toml` opts 
 3. **Tweak preferences** in the **Keywords**, **Authors**, **Low priority**, **Scoring** tabs. The Papers tab re-ranks live on the cached fetch — no re-fetch needed.
 4. **Download** the current ranked list as Markdown or JSON. Output is byte-identical to `--output-markdown` / `--output-json`, so existing pipelines keep working.
 
+## Filtering: replacements & single past days
+
+- **Include replacement submissions** (sidebar checkbox) — arXiv's `today` feed
+  splits entries into *New submissions*, *Cross submissions*, and *Replacement
+  submissions* (papers re-uploaded with a new version). Replacements are
+  **hidden by default** so you don't keep seeing the same paper; tick the box to
+  keep them. Cross-lists are always kept. The `pastweek` feed contains no
+  replacements.
+- **Day picker** (Papers tab) — when a fetch returns several days (i.e.
+  `pastweek`), a **Day** selector lets you view just one past day's ranking —
+  useful if you skipped yesterday and want its dedicated list today.
+  - **Limitation:** only the days arXiv's `pastweek` feed still lists (roughly
+    the last 5 days) are reachable. arXiv exposes **no URL for an arbitrary
+    older day**, so days beyond that window cannot be retrieved this way. The
+    picker only ever offers days actually present in the current fetch.
+
+Both filters are applied at display time, so toggling them re-ranks instantly
+with **no re-fetch**.
+
 ## Tabs
 
 - **Papers** — ranked list, search box (filters by title / authors / abstract), MD + JSON download buttons. Per paper: rank, title, authors, section, summary, arXiv link, score badge, expandable score breakdown, expandable full abstract.
