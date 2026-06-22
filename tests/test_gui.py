@@ -92,6 +92,22 @@ def test_gui_papers_tab_filters_replacements_and_offers_day_picker():
     assert "Fri, 19 Jun 2026" in day_pickers[0].options
 
 
+def test_abstract_bonus_uses_css_tooltip_not_title_attr():
+    """Streamlit strips `title`, so the hover must be a CSS .tip/.tip-text span."""
+    from streamlit.testing.v1 import AppTest
+
+    at = AppTest.from_file("arxiv_gui.py")
+    at.session_state["papers"] = [
+        {"id": "1", "title": "T", "authors": "A", "subjects": "quant-ph",
+         "abstract": "long " * 100, "link": "", "section": "New submissions (showing 1 of 1 entries)"},
+    ]
+    at.run(timeout=15)
+    blob = " ".join(m.value for m in at.markdown)
+    assert "Abstract bonus" in blob
+    assert "tip-text" in blob  # CSS tooltip present
+    assert "<abbr" not in blob  # old broken approach gone
+
+
 def test_gui_renders_after_loading_synthetic_papers(monkeypatch):
     """Pre-populate session state with synthetic papers and confirm Papers tab still renders."""
     from streamlit.testing.v1 import AppTest
@@ -180,7 +196,7 @@ def test_reset_weights_clears_all_keyed_widgets():
     from streamlit.testing.v1 import AppTest
 
     at = AppTest.from_file("arxiv_gui.py").run(timeout=TIMEOUT)
-    edited = {"named_author": 99, "quant_ph_subject": 77}
+    edited = {"named_author": 99, "low_priority_penalty": 77}
     defaults = {name: _weight_input(at, name).value for name in edited}
 
     for name, val in edited.items():

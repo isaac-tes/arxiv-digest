@@ -51,17 +51,17 @@ def test_feed_weight_adds_bonus_when_subject_matches(make_paper):
 
 def test_feed_weight_no_effect_when_unmatched_or_zero(make_paper):
     cfg = Config(core_keywords=[], named_authors=[], low_priority_kw=[])
-    cfg.feed_weights = {"hep-th": 7, "math.AG": 0}
-    p = make_paper(subjects="quant-ph")  # only builtin quant-ph applies
-    assert score_paper(p, cfg) == cfg.weights.quant_ph_subject
+    cfg.feed_weights = {"hep-th": 7, "math.AG": 0}  # overrides defaults
+    p = make_paper(subjects="quant-ph")  # neither hep-th nor math.AG present
+    assert score_paper(p, cfg) == 0
 
 
-def test_feed_weight_does_not_double_count_builtin_subject(make_paper):
-    """If a feed name equals a builtin subject key, don't add twice."""
+def test_feed_weight_is_sole_source_of_subject_scoring(make_paper):
+    """Subject scoring is fully driven by feed_weights (no hidden builtins)."""
     cfg = Config(core_keywords=[], named_authors=[], low_priority_kw=[])
     cfg.feed_weights = {"quant-ph": 5}
     p = make_paper(subjects="quant-ph")
-    assert score_paper(p, cfg) == cfg.weights.quant_ph_subject  # builtin only
+    assert score_paper(p, cfg) == 5
 
 
 def test_feed_weight_roundtrips_through_json(make_paper):
@@ -76,17 +76,17 @@ def test_feed_weight_roundtrips_through_json(make_paper):
 
 def test_quant_gas_subject_bonus(empty_cfg, make_paper):
     p = make_paper(subjects="cond-mat.quant-gas (primary)")
-    assert score_paper(p, empty_cfg) == empty_cfg.weights.quant_gas_subject
+    assert score_paper(p, empty_cfg) == empty_cfg.feed_weights["cond-mat.quant-gas"]
 
 
 def test_mes_hall_subject_bonus(empty_cfg, make_paper):
     p = make_paper(subjects="cond-mat.mes-hall")
-    assert score_paper(p, empty_cfg) == empty_cfg.weights.mes_hall_subject
+    assert score_paper(p, empty_cfg) == empty_cfg.feed_weights["cond-mat.mes-hall"]
 
 
 def test_quant_ph_subject_bonus(empty_cfg, make_paper):
     p = make_paper(subjects="quant-ph")
-    assert score_paper(p, empty_cfg) == empty_cfg.weights.quant_ph_subject
+    assert score_paper(p, empty_cfg) == empty_cfg.feed_weights["quant-ph"]
 
 
 def test_low_priority_penalty_applied_once_not_per_hit(make_paper):
@@ -121,8 +121,8 @@ def test_combined_score_sums_all_rules(make_paper):
     expected = (
         w.core_keyword
         + w.named_author
-        + w.quant_gas_subject
-        + w.quant_ph_subject
+        + cfg.feed_weights["cond-mat.quant-gas"]
+        + cfg.feed_weights["quant-ph"]
         + w.low_priority_penalty
         + w.long_abstract_bonus
     )
