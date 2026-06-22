@@ -45,6 +45,39 @@ def test_authors_html_highlights_named_authors():
     assert "+6 to score" in out
 
 
+def test_highlight_terms_wraps_keyword_and_low_priority():
+    import arxiv_gui
+
+    out = arxiv_gui._highlight_terms(
+        "A topological film study", ["topological"], ["film"], 6, -5
+    )
+    assert "hl-kw" in out and "core keyword (+6)" in out
+    assert "hl-lp" in out and "low-priority term (-5)" in out
+    assert "topological" in out and "film" in out
+
+
+def test_highlight_terms_no_match_is_plain_escaped():
+    import arxiv_gui
+
+    assert arxiv_gui._highlight_terms("plain <x> text", ["zzz"], [], 6, -5) == "plain &lt;x&gt; text"
+
+
+def test_highlight_terms_case_insensitive_and_escapes():
+    import arxiv_gui
+
+    out = arxiv_gui._highlight_terms("Bloch & TOPOLOGY", ["topology"], [], 6, -5)
+    assert "hl-kw" in out
+    assert "&amp;" in out  # escaped ampersand
+
+
+def test_highlight_terms_overlap_no_nested_spans():
+    import arxiv_gui
+
+    # "spin" and "spin chain" overlap; longest-first should win, single span.
+    out = arxiv_gui._highlight_terms("a spin chain", ["spin chain", "spin"], [], 6, -5)
+    assert out.count('<span class="hl-term') == 1
+
+
 def test_authors_html_escapes_and_handles_empty():
     import arxiv_gui
 
@@ -68,6 +101,15 @@ def test_gui_sidebar_has_replacement_toggle():
     at = AppTest.from_file("arxiv_gui.py").run(timeout=15)
     labels = [c.label for c in at.sidebar.checkbox]
     assert "Include replacement submissions" in labels
+
+
+def test_gui_sidebar_has_three_highlight_toggles():
+    from streamlit.testing.v1 import AppTest
+
+    at = AppTest.from_file("arxiv_gui.py").run(timeout=15)
+    labels = {c.label for c in at.sidebar.checkbox}
+    assert {"Highlight authors", "Highlight keywords in titles",
+            "Highlight keywords in abstracts"} <= labels
 
 
 def test_gui_papers_tab_filters_replacements_and_offers_day_picker():

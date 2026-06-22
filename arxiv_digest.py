@@ -251,6 +251,10 @@ class Config:
     # in a paper's subjects. Single source of truth for subject scoring (the old
     # hardcoded quant-gas/mes-hall/quant-ph bonuses are just default entries).
     feed_weights: Dict[str, int] = field(default_factory=_default_feed_weights)
+    # GUI display prefs: hover-highlight matched terms.
+    highlight_authors: bool = True
+    highlight_terms_title: bool = True
+    highlight_terms_abstract: bool = True
     weights: ScoringWeights = field(default_factory=ScoringWeights)
 
     @classmethod
@@ -288,6 +292,9 @@ class Config:
             timeframe=str(data.get("timeframe") or "pastweek"),
             include_replacements=bool(data.get("include_replacements", False)),
             feed_weights=_hydrate_feed_weights(data),
+            highlight_authors=bool(data.get("highlight_authors", True)),
+            highlight_terms_title=bool(data.get("highlight_terms_title", True)),
+            highlight_terms_abstract=bool(data.get("highlight_terms_abstract", True)),
             weights=weights,
         )
         return cfg

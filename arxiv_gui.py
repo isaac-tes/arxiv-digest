@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import html
 import json
+import re
 from dataclasses import asdict, fields
 from datetime import datetime
 from pathlib import Path
@@ -179,6 +180,22 @@ def render_sidebar():
             st.session_state.last_fetch = None
             st.rerun()
 
+        st.divider()
+        st.subheader("Display")
+        st.caption("Hover-highlight matched terms in the Papers tab.")
+        cfg().highlight_authors = st.checkbox(
+            "Highlight authors", value=cfg().highlight_authors,
+            help="Highlight authors that appear in your Authors list.",
+        )
+        cfg().highlight_terms_title = st.checkbox(
+            "Highlight keywords in titles", value=cfg().highlight_terms_title,
+            help="Light highlight of matched keywords / low-priority terms in titles.",
+        )
+        cfg().highlight_terms_abstract = st.checkbox(
+            "Highlight keywords in abstracts", value=cfg().highlight_terms_abstract,
+            help="Light highlight of matched keywords / low-priority terms in full abstracts.",
+        )
+
 
 # ────────────────────────── Tab: Papers ──────────────────────────
 
@@ -202,8 +219,73 @@ _PAPER_CSS = """
   white-space: normal;
 }
 .tip:hover .tip-text { visibility: visible; opacity: 1; }
+/* Light hover-highlight for matched keywords / low-priority terms (subtler than authors). */
+.hl-term { position: relative; cursor: help; border-radius: 3px; padding: 0 1px;
+  border-bottom: 1px dotted transparent; transition: background .12s; }
+.hl-term .hl-tip {
+  visibility: hidden; opacity: 0; transition: opacity .12s;
+  position: absolute; z-index: 1000; bottom: 145%; left: 0;
+  background: #1f2630; color: #e6edf3; padding: 4px 7px; border-radius: 6px;
+  width: max-content; max-width: 260px; font-size: .75rem; font-weight: 400;
+  line-height: 1.3; border: 1px solid #30363d; box-shadow: 0 4px 12px rgba(0,0,0,.45);
+  white-space: normal;
+}
+.hl-term:hover .hl-tip { visibility: visible; opacity: 1; }
+.hl-kw { background: rgba(56,139,253,.10); border-bottom-color: rgba(88,166,255,.5); }
+.hl-kw:hover { background: rgba(56,139,253,.24); }
+.hl-lp { background: rgba(248,81,73,.10); border-bottom-color: rgba(248,81,73,.5); }
+.hl-lp:hover { background: rgba(248,81,73,.24); }
 </style>
 """
+
+
+def _highlight_terms(
+    text: str,
+    keywords: list[str],
+    lp_terms: list[str],
+    kw_bonus: int,
+    lp_penalty: int,
+) -> str:
+    """HTML-escape `text` and wrap matched keyword / low-priority spans.
+
+    Keywords get the teal `.hl-kw` style, low-priority the red `.hl-lp` style,
+    each with a hover tooltip showing its weight. Overlapping matches are
+    resolved earliest-start, longest-first.
+    """
+    spans: list[tuple[int, int, str]] = []
+    for terms, kind in ((keywords, "kw"), (lp_terms, "lp")):
+        for t in terms:
+            t = t.strip()
+            if not t:
+                continue
+            for m in re.finditer(re.escape(t), text, re.IGNORECASE):
+                spans.append((m.start(), m.end(), kind))
+    if not spans:
+        return html.escape(text)
+
+    spans.sort(key=lambda s: (s[0], -(s[1] - s[0])))
+    chosen: list[tuple[int, int, str]] = []
+    last_end = -1
+    for s in spans:
+        if s[0] >= last_end:
+            chosen.append(s)
+            last_end = s[1]
+
+    out: list[str] = []
+    i = 0
+    for start, end, kind in chosen:
+        out.append(html.escape(text[i:start]))
+        frag = html.escape(text[start:end])
+        if kind == "kw":
+            tip = f"core keyword (+{kw_bonus})"
+            cls = "hl-term hl-kw"
+        else:
+            tip = f"low-priority term ({lp_penalty})"
+            cls = "hl-term hl-lp"
+        out.append(f'<span class="{cls}">{frag}<span class="hl-tip">{tip}</span></span>')
+        i = end
+    out.append(html.escape(text[i:]))
+    return "".join(out)
 
 
 def _authors_html(authors: str, named: list[str], bonus: int) -> str:
@@ -334,14 +416,26 @@ def render_papers_tab():
         with st.container(border=True):
             head, score_col = st.columns([5, 1])
             with head:
+                kw_bonus = cfg().weights.core_keyword
+                lp_pen = cfg().weights.low_priority_penalty
+                if cfg().highlight_terms_title:
+                    title_html = _highlight_terms(
+                        e["title"], cfg().core_keywords, cfg().low_priority_kw, kw_bonus, lp_pen
+                    )
+                else:
+                    title_html = html.escape(e["title"])
                 st.markdown(
-                    f'<div class="paper-title">{e["rank"]}. {html.escape(e["title"])}</div>',
+                    f'<div class="paper-title">{e["rank"]}. {title_html}</div>',
                     unsafe_allow_html=True,
                 )
+                if cfg().highlight_authors:
+                    authors_html = _authors_html(
+                        e["authors"], cfg().named_authors, cfg().weights.named_author
+                    )
+                else:
+                    authors_html = html.escape(e["authors"]) or "(No authors listed)"
                 st.markdown(
-                    f'<div class="paper-authors">'
-                    f'{_authors_html(e["authors"], cfg().named_authors, cfg().weights.named_author)}'
-                    f'</div>',
+                    f'<div class="paper-authors">{authors_html}</div>',
                     unsafe_allow_html=True,
                 )
                 if e["section"]:
@@ -357,7 +451,16 @@ def render_papers_tab():
                 breakdown = ad.explain_score(full_paper, cfg())
                 _render_breakdown(breakdown)
             with st.expander("Full abstract"):
-                st.write(paper_by_id.get(e["id"], {}).get("abstract", "(unavailable)"))
+                abstract = paper_by_id.get(e["id"], {}).get("abstract", "") or "(unavailable)"
+                if cfg().highlight_terms_abstract and abstract != "(unavailable)":
+                    st.markdown(
+                        f'<div class="paper-abstract">'
+                        f'{_highlight_terms(abstract, cfg().core_keywords, cfg().low_priority_kw, cfg().weights.core_keyword, cfg().weights.low_priority_penalty)}'
+                        f'</div>',
+                        unsafe_allow_html=True,
+                    )
+                else:
+                    st.write(abstract)
 
 
 # ────────────────────────── Tab: list editors ──────────────────────────

@@ -49,6 +49,20 @@ with **no re-fetch**.
 - **Scoring** — number inputs for each weight: per-keyword bonus, per-author bonus, the three subject bonuses, low-priority penalty, long-abstract bonus, abstract-length threshold. **Per-feed bonuses**: every extra feed you add in the Feeds tab gets its own bonus field here (raise or lower how much a paper from that feed scores). Set to 0 to disable.
 - **Profiles** — save / load / export / import named configs. Files live in `~/.arxiv_scraper/profiles/<name>.json` and persist across project clones. **Write project config** dumps the current config to `arxiv_config.json` in the project root, which is what the CLI picks up on the next run — use this to push GUI tweaks into your daily CLI digest.
 
+## Highlighting
+
+Matched terms are hover-highlighted in the Papers tab so you can see *why* a
+paper ranked at a glance:
+
+- **Authors** in your Authors list — green, bold.
+- **Core keywords** — light teal; **low-priority terms** — light red. Shown in
+  the title and the full abstract. Hover any highlight for a tooltip with its
+  score weight (e.g. `core keyword (+6)`, `low-priority term (−5)`).
+
+Three checkboxes in the sidebar **Display** section toggle each surface
+independently — author highlight, keywords in titles, keywords in abstracts.
+They are part of the config, so profiles and the project config remember them.
+
 ## Profiles vs project config
 
 Both save the **complete** configuration — every feed, the keyword / author /
