@@ -49,6 +49,32 @@ with **no re-fetch**.
 - **Scoring** — number inputs for each weight: per-keyword bonus, per-author bonus, the three subject bonuses, low-priority penalty, long-abstract bonus, abstract-length threshold. **Per-feed bonuses**: every extra feed you add in the Feeds tab gets its own bonus field here (raise or lower how much a paper from that feed scores). Set to 0 to disable.
 - **Profiles** — save / load / export / import named configs. Files live in `~/.arxiv_scraper/profiles/<name>.json` and persist across project clones. **Write project config** dumps the current config to `arxiv_config.json` in the project root, which is what the CLI picks up on the next run — use this to push GUI tweaks into your daily CLI digest.
 
+## Profiles vs project config
+
+Both save the **complete** configuration — every feed, the keyword / author /
+low-priority lists, `top_n`, timeframe, the replacement filter, scoring weights,
+and per-feed bonuses. They differ only in *where* the file lives and *who reads
+it*:
+
+| | **Profile** | **Project config** |
+|---|---|---|
+| File | `~/.arxiv_scraper/profiles/<name>.json` | `arxiv_config.json` next to `arxiv_digest.py` |
+| How many | Many, named — switch between them | Exactly one |
+| Saved via | Profiles tab → **Save** (or sidebar **Load profile**) | Profiles tab → **Write project config** |
+| Who reads it | The GUI only | The **CLI** on every run (and the GUI on startup) |
+| Use it for | Experimenting, separate "modes" (e.g. `topology-mode`, `cold-atoms`) | Your day-to-day default that the CLI digest uses |
+
+In short: **profiles are personal presets you swap inside the GUI; the project
+config is the single file your CLI command picks up.** Push a profile into your
+CLI workflow by loading it, then clicking **Write project config**.
+
+!!! warning "Save/Apply before saving"
+    Edits in the **Keywords / Authors / Low priority** tabs only enter the live
+    config when you click that tab's **Save** button; **Feeds** edits need
+    **Save feeds**; scoring/per-feed changes need **Apply weights**. A profile or
+    project-config save captures the *current* live config — so apply your tab
+    edits first, otherwise they won't be included.
+
 ## Tips
 
 - The score breakdown is the fastest way to figure out why a low-priority hit overshadowed a keyword match — open it before re-tweaking weights blindly.
