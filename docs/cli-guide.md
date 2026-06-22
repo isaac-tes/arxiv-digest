@@ -31,6 +31,7 @@ uv run python arxiv_digest.py --list-config --no-config
 | `--feed NAME` | Select feed (repeatable). Either a name from `feeds` config or a full URL. |
 | `--top N` | Override number of entries to print (default: 20). |
 | `--timeframe {today,pastweek}` | Override which arXiv listing window to scrape. |
+| `--include-replacements` | Keep arXiv *Replacement submissions* (hidden by default; only present in the `today` feed). |
 | `--sections NAME ...` | Limit to specific date-section titles (e.g. `"Thu, 4 Dec 2025"`). |
 | `--output-json [PATH]` | Write JSON. Bare flag → `reports/digest-YYYY-MM-DD.json`. |
 | `--output-markdown [PATH]` | Write Markdown. Bare flag → `reports/digest-YYYY-MM-DD.md`. |
