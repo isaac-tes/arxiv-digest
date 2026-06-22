@@ -33,6 +33,36 @@ def test_gui_sidebar_has_fetch_button():
     assert "Fetch papers" in labels
 
 
+def test_gui_sidebar_has_replacement_toggle():
+    from streamlit.testing.v1 import AppTest
+
+    at = AppTest.from_file("arxiv_gui.py").run(timeout=15)
+    labels = [c.label for c in at.sidebar.checkbox]
+    assert "Include replacement submissions" in labels
+
+
+def test_gui_papers_tab_filters_replacements_and_offers_day_picker():
+    """With pastweek + replacement papers loaded, the day picker appears and the
+    replacement is hidden by default (arxiv_scraper_cli-dl4 / -amq)."""
+    from streamlit.testing.v1 import AppTest
+
+    at = AppTest.from_file("arxiv_gui.py")
+    at.session_state["papers"] = [
+        {"id": "n1", "title": "New paper", "authors": "A", "subjects": "quant-ph",
+         "abstract": "x" * 50, "link": "", "section": "Fri, 19 Jun 2026 (showing 2 of 2 entries )"},
+        {"id": "n2", "title": "Older paper", "authors": "B", "subjects": "quant-ph",
+         "abstract": "y" * 50, "link": "", "section": "Thu, 18 Jun 2026 (showing 1 of 1 entries )"},
+        {"id": "r1", "title": "Replaced paper", "authors": "C", "subjects": "quant-ph",
+         "abstract": "z" * 50, "link": "", "section": "Replacement submissions (showing 1 of 1 entries)"},
+    ]
+    at.run(timeout=15)
+    assert not list(at.exception)
+    # Day picker present with both days
+    day_pickers = [s for s in at.selectbox if s.label == "Day"]
+    assert day_pickers, "expected a Day selectbox"
+    assert "Fri, 19 Jun 2026" in day_pickers[0].options
+
+
 def test_gui_renders_after_loading_synthetic_papers(monkeypatch):
     """Pre-populate session state with synthetic papers and confirm Papers tab still renders."""
     from streamlit.testing.v1 import AppTest

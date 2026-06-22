@@ -147,6 +147,16 @@ def render_sidebar():
         )
         cfg().default_feeds = selected_feeds
 
+        cfg().include_replacements = st.checkbox(
+            "Include replacement submissions",
+            value=cfg().include_replacements,
+            help=(
+                "arXiv's 'today' feed lists re-submitted papers under "
+                "'Replacement submissions'. Hidden by default to avoid repeats; "
+                "tick to keep them. (The 'pastweek' feed has none.)"
+            ),
+        )
+
         if st.button(
             "Fetch papers",
             type="primary",
@@ -191,9 +201,35 @@ def _render_breakdown(breakdown: dict):
 
 
 def render_papers_tab():
-    papers = st.session_state.papers
-    if not papers:
+    fetched = st.session_state.papers
+    if not fetched:
         st.info("Click **Fetch papers** in the sidebar to load papers.")
+        return
+
+    # Back-in-time day picker (only days arXiv's pastweek feed still lists).
+    day_labels = ad.available_day_labels(fetched)
+    selected_days = None
+    if day_labels:
+        choice = st.selectbox(
+            "Day",
+            options=["All days"] + day_labels,
+            help=(
+                "Pick a single past day to see just its ranking. Only the days "
+                "arXiv's pastweek feed still returns (~last 5 days) are available "
+                "— arXiv provides no URL for arbitrary older days."
+            ),
+        )
+        if choice != "All days":
+            selected_days = [choice]
+
+    papers = ad.filter_papers(
+        fetched,
+        include_replacements=cfg().include_replacements,
+        days=selected_days,
+    )
+    hidden = len(fetched) - len(papers)
+    if not papers:
+        st.warning("No papers left after filtering. Adjust the day or replacement filter.")
         return
 
     entries = ad.build_ranked_entries(papers, cfg(), top_n=cfg().top_n)
@@ -237,7 +273,13 @@ def render_papers_tab():
     else:
         filtered = entries
 
-    st.caption(f"Showing {len(filtered)} of {len(entries)} ranked (out of {len(papers)} fetched).")
+    caption = (
+        f"Showing {len(filtered)} of {len(entries)} ranked "
+        f"(out of {len(papers)} shown / {len(fetched)} fetched)."
+    )
+    if hidden:
+        caption += f" {hidden} hidden by replacement/day filters."
+    st.caption(caption)
 
     for e in filtered:
         with st.container(border=True):
