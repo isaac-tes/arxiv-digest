@@ -46,7 +46,7 @@ with **no re-fetch**.
 - **Authors** — same pattern for `named_authors`. Default +6 per match. Case-insensitive substring match.
 - **Low priority** — penalty list. If *any* term matches, the paper takes the *Low-priority penalty* (default −5) — once, not per hit.
 - **Feeds** — `name → URL` editor. Add custom arXiv lists (e.g. `hep-th=https://arxiv.org/list/hep-th/new`). The `/new` / `/pastweek` suffix is rewritten by the timeframe selector.
-- **Scoring** — number inputs for each weight: per-keyword bonus, per-author bonus, the three subject bonuses, low-priority penalty, long-abstract bonus, abstract-length threshold.
+- **Scoring** — number inputs for each weight: per-keyword bonus, per-author bonus, the three subject bonuses, low-priority penalty, long-abstract bonus, abstract-length threshold. **Per-feed bonuses**: every extra feed you add in the Feeds tab gets its own bonus field here (raise or lower how much a paper from that feed scores). Set to 0 to disable.
 - **Profiles** — save / load / export / import named configs. Files live in `~/.arxiv_scraper/profiles/<name>.json` and persist across project clones. **Write project config** dumps the current config to `arxiv_config.json` in the project root, which is what the CLI picks up on the next run — use this to push GUI tweaks into your daily CLI digest.
 
 ## Tips

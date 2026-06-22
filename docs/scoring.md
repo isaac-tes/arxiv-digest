@@ -11,6 +11,7 @@ Every paper is reduced to a single integer score. The CLI and GUI both rank by t
 | Subject contains `cond-mat.quant-gas` | **+4** |
 | Subject contains `cond-mat.mes-hall` | **+4** |
 | Subject contains `quant-ph` | **+2** |
+| Per-feed bonus (any extra feed) | **configurable** — set per feed in the Scoring tab |
 | Any low-priority term matches (applied once) | **−5** |
 | Abstract longer than 200 chars | **+1** |
 
