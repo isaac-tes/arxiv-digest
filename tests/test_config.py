@@ -28,6 +28,9 @@ def _fully_customised_config() -> Config:
         timeframe="today",
         include_replacements=True,
         feed_weights={"foo": 9, "bar": -3},
+        highlight_authors=False,
+        highlight_terms_title=False,
+        highlight_terms_abstract=False,
         weights=ScoringWeights(
             core_keyword=11,
             named_author=12,
