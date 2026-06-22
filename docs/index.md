@@ -1,10 +1,10 @@
-# arXiv digest (cond-mat + quant-ph)
+# arXiv digest
 
 [![CI](https://github.com/isaac-tes/arxiv-digest/actions/workflows/ci.yml/badge.svg)](https://github.com/isaac-tes/arxiv-digest/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/isaac-tes/arxiv-digest/blob/main/LICENSE)
 [![Python: 3.12+](https://img.shields.io/badge/Python-3.12+-blue.svg)](https://www.python.org/downloads/)
 
-Fetches arXiv listing pages, scores papers by your keyword / author / subject preferences, and presents the ranked digest either as a CLI report (terminal, Markdown, JSON) or a Streamlit GUI for interactive tuning.
+Fetches arXiv listing pages for **any** category, scores papers by your keyword / author / subject preferences, and presents the ranked digest either as a CLI report (terminal, Markdown, JSON) or a Streamlit GUI for interactive tuning. Works with any arXiv feed (`hep-th`, `cs.LG`, `math.AG`, …); the defaults just ship a condensed-matter / quantum-physics set you can replace.
 
 Two front-ends, one core:
 
@@ -17,7 +17,7 @@ Both share the same `Config` and `arxiv_config.json` — tweak in one, the other
 
 ## Defaults
 
-- **Feeds**: `cond-mat`, `cond-mat.mes-hall`, `cond-mat.quant-gas`, `quant-ph`
+- **Feeds**: any arXiv listing works; ships defaulting to `cond-mat`, `cond-mat.mes-hall`, `cond-mat.quant-gas`, `quant-ph` (edit in the Feeds tab or `arxiv_config.json`)
 - **Timeframe**: `pastweek` (last ~5 days)
 - **Top N**: 20
 - **Output**: stdout
@@ -75,7 +75,7 @@ The first time you launch, the app loads `arxiv_config.json` if present in the p
 - **Authors** — same pattern for `named_authors`. Default +6 per match. Match is case-insensitive substring on author string.
 - **Low priority** — penalty list. If *any* term matches, the paper takes the *Low-priority penalty* (default −5) — once, not per hit.
 - **Feeds** — `name → URL` editor. Add custom arXiv lists (e.g. `hep-th=https://arxiv.org/list/hep-th/new`). The `/new` / `/pastweek` suffix is rewritten by the timeframe selector at fetch time, so you can paste any base URL.
-- **Scoring** — number inputs for each weight: per-keyword bonus, per-author bonus, low-priority penalty, long-abstract bonus, the abstract-length threshold, and a **per-feed subject bonus** for every configured feed (defaults `cond-mat.quant-gas` +4, `cond-mat.mes-hall` +4, `quant-ph` +2). *Apply weights* makes the change live; *Reset to defaults* puts it back.
+- **Scoring** — number inputs for each weight: per-keyword bonus, per-author bonus, low-priority penalty, long-abstract bonus, the abstract-length threshold, and a **per-feed subject bonus** for every configured feed (subject scoring is driven by `feed_weights`; defaults `cond-mat.quant-gas` +4, `cond-mat.mes-hall` +4, `quant-ph` +2). *Apply weights* makes the change live; *Reset to defaults* puts it back.
 - **Profiles** — save the current full config under a name (e.g. `topology-mode`, `quantum-gas-mode`). Files live in `~/.arxiv_scraper/profiles/<name>.json`. Buttons: **Load**, **Export** (download JSON), **Delete**, **Import** (upload JSON). Below: **Write project config** dumps the current config to `arxiv_config.json` next to `arxiv_digest.py`, which is what the **CLI** picks up on the next run — use this to push your GUI tweaks back into your daily CLI digest.
 
 ### Tips
@@ -158,7 +158,7 @@ The `--add-* / --remove-* / --rename-*` flags only stick if combined with `--sav
 }
 ```
 
-The CLI never exposes flags for `weights` — to tune scoring weights, use the GUI's Scoring tab and click *Write project config*, or hand-edit the JSON. Subject scoring is driven by `feed_weights` (a bonus per feed); configs written before this change auto-migrate on load.
+The CLI never exposes flags for `weights` — to tune scoring weights, use the GUI's Scoring tab and click *Write project config*, or hand-edit the JSON. Subject scoring is driven by `feed_weights` (a bonus per feed name found in a paper's subjects); configs written before v0.3.0 auto-migrate on load.
 
 ### Scoring (defaults)
 
@@ -166,11 +166,11 @@ The CLI never exposes flags for `weights` — to tune scoring weights, use the G
 |------|---------------|
 | Per matched core keyword | **+6** |
 | Per matched named author | **+6** (author list only) |
-| Per-feed subject bonus | **per feed** — `cond-mat.quant-gas` +4, `cond-mat.mes-hall` +4, `quant-ph` +2 |
+| Per-feed subject bonus | **per feed** — e.g. `cond-mat.quant-gas` +4, `cond-mat.mes-hall` +4, `quant-ph` +2 |
 | Any low-priority term matches (applied once) | **−5** |
 | Abstract longer than 200 chars | **+1** |
 
-Scalar weights live in `weights`; subject scoring in `feed_weights` — both configurable in `arxiv_config.json` or the GUI Scoring tab.
+Scalar weights live in `weights`; subject scoring in `feed_weights` — both configurable in `arxiv_config.json` or the GUI Scoring tab. Any arXiv category works: add a feed, give it a `feed_weights` bonus.
 
 ### Output formats
 
@@ -178,18 +178,6 @@ Scalar weights live in `weights`; subject scoring in `feed_weights` — both con
 - **JSON** (`--output-json`): structured data with `generated_at`, `feed_urls`, `top_n`, `total_papers`, and the ranked `entries`.
 - **Markdown** (`--output-markdown`): formatted for Notion / Obsidian / Slack.
 - **Plain text**: redirect stdout — `... > digest.txt`.
-
-### ChatGPT / Code Interpreter
-
-The CLI is single-file by design — paste `arxiv_digest.py` into ChatGPT and run:
-
-```
-Save this as arxiv_digest.py and run:
-python arxiv_digest.py --feed cond-mat --top 12 --timeframe today --output-json
-Show me the output.
-```
-
-Requires Code Interpreter / Advanced Data Analysis mode for network access.
 
 ---
 

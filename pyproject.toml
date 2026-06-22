@@ -4,8 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "arxiv-digest"
-version = "0.2.0"
-description = "Score and rank fresh arXiv cond-mat / quant-ph papers from a CLI or a Streamlit GUI."
+version = "0.3.0"
+description = "Score and rank fresh arXiv papers from any category, via a CLI or a Streamlit GUI."
 readme = "README.md"
 license = { text = "MIT" }
 authors = [{ name = "isaac-tes", email = "i.tesfaye@tu-berlin.de" }]

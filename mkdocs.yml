@@ -2,7 +2,7 @@ site_name: arXiv Digest
 site_url: https://isaac-tes.github.io/arxiv-digest/
 site_author: isaac-tes
 site_description: >-
-  Score and rank fresh arXiv cond-mat / quant-ph papers from a CLI or a
+  Score and rank fresh arXiv papers from any category, via a CLI or a
   Streamlit GUI.
 
 repo_name: isaac-tes/arxiv-digest
