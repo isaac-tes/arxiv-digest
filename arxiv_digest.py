@@ -180,13 +180,38 @@ def _default_low_priority_kw() -> List[str]:
     ]
 
 
+def _default_feed_weights() -> Dict[str, int]:
+    """Default per-feed score bonuses (formerly the hardcoded subject bonuses)."""
+    return {
+        "cond-mat.quant-gas": 4,
+        "cond-mat.mes-hall": 4,
+        "quant-ph": 2,
+    }
+
+
+def _hydrate_feed_weights(data: Dict[str, object]) -> Dict[str, int]:
+    """Load feed_weights, migrating legacy hardcoded subject bonuses if absent."""
+    raw = data.get("feed_weights")
+    if isinstance(raw, dict):
+        return {str(k): int(v) for k, v in raw.items()}
+    # Pre-unification config: rebuild from the old weights.*_subject fields.
+    w = data.get("weights")
+    w = w if isinstance(w, dict) else {}
+    fw = _default_feed_weights()
+    for old_key, feed in (
+        ("quant_gas_subject", "cond-mat.quant-gas"),
+        ("mes_hall_subject", "cond-mat.mes-hall"),
+        ("quant_ph_subject", "quant-ph"),
+    ):
+        if old_key in w:
+            fw[feed] = int(w[old_key])
+    return fw
+
+
 @dataclass
 class ScoringWeights:
     core_keyword: int = 6
     named_author: int = 6
-    quant_gas_subject: int = 4
-    mes_hall_subject: int = 4
-    quant_ph_subject: int = 2
     low_priority_penalty: int = -5
     long_abstract_bonus: int = 1
     long_abstract_threshold: int = 200
@@ -199,9 +224,6 @@ class ScoringWeights:
         return cls(
             core_keyword=int(raw.get("core_keyword", defaults.core_keyword)),
             named_author=int(raw.get("named_author", defaults.named_author)),
-            quant_gas_subject=int(raw.get("quant_gas_subject", defaults.quant_gas_subject)),
-            mes_hall_subject=int(raw.get("mes_hall_subject", defaults.mes_hall_subject)),
-            quant_ph_subject=int(raw.get("quant_ph_subject", defaults.quant_ph_subject)),
             low_priority_penalty=int(raw.get("low_priority_penalty", defaults.low_priority_penalty)),
             long_abstract_bonus=int(raw.get("long_abstract_bonus", defaults.long_abstract_bonus)),
             long_abstract_threshold=int(raw.get("long_abstract_threshold", defaults.long_abstract_threshold)),
@@ -226,9 +248,9 @@ class Config:
     timeframe: str = "pastweek"  # 'today' or 'pastweek'
     include_replacements: bool = False  # keep arXiv 'Replacement submissions' (today feed)
     # Per-feed score bonus: feed name -> points, added when the feed name appears
-    # in a paper's subjects. Lets user-added feeds contribute to ranking beyond
-    # the three builtin subject bonuses.
-    feed_weights: Dict[str, int] = field(default_factory=dict)
+    # in a paper's subjects. Single source of truth for subject scoring (the old
+    # hardcoded quant-gas/mes-hall/quant-ph bonuses are just default entries).
+    feed_weights: Dict[str, int] = field(default_factory=_default_feed_weights)
     weights: ScoringWeights = field(default_factory=ScoringWeights)
 
     @classmethod
@@ -265,10 +287,7 @@ class Config:
             top_n=int(data.get("top_n") or 20),
             timeframe=str(data.get("timeframe") or "pastweek"),
             include_replacements=bool(data.get("include_replacements", False)),
-            feed_weights={
-                str(k): int(v)
-                for k, v in (data.get("feed_weights") or {}).items()
-            },
+            feed_weights=_hydrate_feed_weights(data),
             weights=weights,
         )
         return cfg
@@ -618,18 +637,11 @@ def explain_score(paper: dict, cfg: Config) -> dict:
     matched_authors = [a for a in cfg.named_authors if a.lower() in authors_txt]
     matched_low = [k for k in cfg.low_priority_kw if k.lower() in txt]
 
+    # Subject scoring is fully driven by per-feed bonuses: each feed whose name
+    # appears in the paper's subjects contributes its configured weight.
     subject_hits: Dict[str, int] = {}
-    if "cond-mat.quant-gas" in subjects:
-        subject_hits["cond-mat.quant-gas"] = weights.quant_gas_subject
-    if "cond-mat.mes-hall" in subjects:
-        subject_hits["cond-mat.mes-hall"] = weights.mes_hall_subject
-    if "quant-ph" in subjects:
-        subject_hits["quant-ph"] = weights.quant_ph_subject
-
-    # Per-feed bonuses for any (user-added) feed whose name appears in subjects.
-    # Skip names already counted by a builtin subject bonus to avoid double count.
     for name, w in (cfg.feed_weights or {}).items():
-        if w and name.lower() in subjects and name not in subject_hits:
+        if w and name.lower() in subjects:
             subject_hits[name] = w
 
     penalty = weights.low_priority_penalty if matched_low else 0

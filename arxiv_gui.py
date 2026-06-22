@@ -191,6 +191,17 @@ _PAPER_CSS = """
   cursor: help; padding: 0 1px; border-radius: 3px; transition: background .12s;
 }
 .paper-authors .hl-author:hover { background: rgba(63,185,80,.22); }
+/* CSS tooltip — Streamlit strips the `title` attribute, so we roll our own. */
+.tip { position: relative; border-bottom: 1px dotted #8b949e; cursor: help; }
+.tip .tip-text {
+  visibility: hidden; opacity: 0; transition: opacity .15s;
+  position: absolute; z-index: 1000; top: 135%; left: 0;
+  background: #1f2630; color: #e6edf3; padding: 6px 9px; border-radius: 6px;
+  width: max-content; max-width: 320px; font-size: .8rem; font-weight: 400;
+  line-height: 1.35; border: 1px solid #30363d; box-shadow: 0 4px 12px rgba(0,0,0,.45);
+  white-space: normal;
+}
+.tip:hover .tip-text { visibility: visible; opacity: 1; }
 </style>
 """
 
@@ -230,9 +241,9 @@ def _render_breakdown(breakdown: dict):
     if breakdown["abstract_bonus"]:
         thr = cfg().weights.long_abstract_threshold
         st.markdown(
-            f'<abbr title="Awarded because the abstract is longer than '
-            f'{thr} characters — a rough signal of a substantial paper.">'
-            f'<b>Abstract bonus:</b> +{breakdown["abstract_bonus"]}</abbr>',
+            f'<span class="tip"><b>Abstract bonus:</b> +{breakdown["abstract_bonus"]}'
+            f'<span class="tip-text">Awarded because the abstract is longer than '
+            f'{thr} characters — a rough signal of a substantial paper.</span></span>',
             unsafe_allow_html=True,
         )
 
@@ -444,28 +455,28 @@ def render_scoring_tab():
             key=f"weight_{f.name}",
         )
 
-    # Per-feed bonuses — one field per available feed (Feeds tab), except the
-    # three already covered by the named subject bonuses above.
-    builtin = {"cond-mat.quant-gas", "cond-mat.mes-hall", "quant-ph"}
-    extra_feeds = [name for name in cfg().feeds if name not in builtin]
+    # Subject scoring — one bonus field per configured feed (single source of
+    # truth; the old quant-gas/mes-hall/quant-ph bonuses are just defaults here).
+    feed_names = list(cfg().feeds)
     new_feed_weights: dict[str, int] = {}
-    if extra_feeds:
-        st.divider()
-        st.markdown("**Per-feed bonuses**")
-        st.caption(
-            "Add or lower a score bonus for each extra feed you configured. "
-            "Applied when the feed name appears in a paper's subjects. "
-            "Add/remove feeds in the **Feeds** tab; fields here follow."
+    st.divider()
+    st.markdown("**Per-feed subject bonuses**")
+    st.caption(
+        "Each configured feed scores this bonus when its name appears in a "
+        "paper's subjects. Raise or lower per feed; 0 disables it. "
+        "Add/remove feeds in the **Feeds** tab — fields here follow."
+    )
+    if not feed_names:
+        st.info("No feeds configured. Add some in the **Feeds** tab.")
+    for name in feed_names:
+        new_feed_weights[name] = st.number_input(
+            name,
+            value=int(cfg().feed_weights.get(name, 0)),
+            step=1,
+            key=f"fw_{name}",
         )
-        for name in extra_feeds:
-            new_feed_weights[name] = st.number_input(
-                name,
-                value=int(cfg().feed_weights.get(name, 0)),
-                step=1,
-                key=f"fw_{name}",
-            )
 
-    feed_keys = [f"fw_{name}" for name in extra_feeds]
+    feed_keys = [f"fw_{name}" for name in feed_names]
 
     col_apply, col_reset = st.columns(2)
     with col_apply:
@@ -478,7 +489,7 @@ def render_scoring_tab():
     with col_reset:
         if st.button("Reset to defaults"):
             cfg().weights = ad.ScoringWeights()
-            cfg().feed_weights = {}
+            cfg().feed_weights = ad._default_feed_weights()
             _reset_widget_state(*_WEIGHT_KEYS, *feed_keys)
             st.rerun()
 
