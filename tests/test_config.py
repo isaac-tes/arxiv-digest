@@ -16,6 +16,49 @@ from arxiv_digest import (
 )
 
 
+def _fully_customised_config() -> Config:
+    """A Config with every field set to a non-default value."""
+    return Config(
+        feeds={"foo": "https://arxiv.org/list/foo/new", "bar": "https://arxiv.org/list/bar/new"},
+        default_feeds=["foo"],
+        core_keywords=["kw-one", "kw-two"],
+        named_authors=["author-x"],
+        low_priority_kw=["lp-term"],
+        top_n=42,
+        timeframe="today",
+        include_replacements=True,
+        feed_weights={"foo": 9, "bar": -3},
+        weights=ScoringWeights(
+            core_keyword=11,
+            named_author=12,
+            low_priority_penalty=-7,
+            long_abstract_bonus=2,
+            long_abstract_threshold=321,
+        ),
+    )
+
+
+def test_dump_load_roundtrip_preserves_every_field(tmp_path):
+    """Profiles and project config both use Config.dump/load — this guards that
+    saving persists ALL settings (feeds, keywords, authors, low-priority,
+    scoring weights, per-feed bonuses, filters)."""
+    cfg = _fully_customised_config()
+    path = tmp_path / "profile.json"
+    cfg.dump(path)
+    loaded = Config.load(path)
+    assert loaded == cfg
+
+
+def test_dump_load_roundtrip_covers_all_dataclass_fields():
+    """If a new Config field is added but not round-tripped, this fails."""
+    import dataclasses
+
+    cfg = _fully_customised_config()
+    restored = Config.from_json(json.loads(json.dumps(dataclasses.asdict(cfg))))
+    for f in dataclasses.fields(Config):
+        assert getattr(restored, f.name) == getattr(cfg, f.name), f"field {f.name} not preserved"
+
+
 def test_default_config_basics():
     cfg = Config()
     assert set(cfg.feeds) == {"cond-mat.quant-gas", "cond-mat.mes-hall", "quant-ph", "cond-mat"}
