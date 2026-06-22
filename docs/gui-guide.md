@@ -20,6 +20,25 @@ Default URL: `http://localhost:8501`. The bundled `.streamlit/config.toml` opts 
 3. **Tweak preferences** in the **Keywords**, **Authors**, **Low priority**, **Scoring** tabs. The Papers tab re-ranks live on the cached fetch — no re-fetch needed.
 4. **Download** the current ranked list as Markdown or JSON. Output is byte-identical to `--output-markdown` / `--output-json`, so existing pipelines keep working.
 
+## Filtering: replacements & single past days
+
+- **Include replacement submissions** (sidebar checkbox) — arXiv's `today` feed
+  splits entries into *New submissions*, *Cross submissions*, and *Replacement
+  submissions* (papers re-uploaded with a new version). Replacements are
+  **hidden by default** so you don't keep seeing the same paper; tick the box to
+  keep them. Cross-lists are always kept. The `pastweek` feed contains no
+  replacements.
+- **Day picker** (Papers tab) — when a fetch returns several days (i.e.
+  `pastweek`), a **Day** selector lets you view just one past day's ranking —
+  useful if you skipped yesterday and want its dedicated list today.
+  - **Limitation:** only the days arXiv's `pastweek` feed still lists (roughly
+    the last 5 days) are reachable. arXiv exposes **no URL for an arbitrary
+    older day**, so days beyond that window cannot be retrieved this way. The
+    picker only ever offers days actually present in the current fetch.
+
+Both filters are applied at display time, so toggling them re-ranks instantly
+with **no re-fetch**.
+
 ## Tabs
 
 - **Papers** — ranked list, search box (filters by title / authors / abstract), MD + JSON download buttons. Per paper: rank, title, authors, section, summary, arXiv link, score badge, expandable score breakdown, expandable full abstract.
@@ -27,8 +46,48 @@ Default URL: `http://localhost:8501`. The bundled `.streamlit/config.toml` opts 
 - **Authors** — same pattern for `named_authors`. Default +6 per match. Case-insensitive substring match.
 - **Low priority** — penalty list. If *any* term matches, the paper takes the *Low-priority penalty* (default −5) — once, not per hit.
 - **Feeds** — `name → URL` editor. Add custom arXiv lists (e.g. `hep-th=https://arxiv.org/list/hep-th/new`). The `/new` / `/pastweek` suffix is rewritten by the timeframe selector.
-- **Scoring** — number inputs for each weight: per-keyword bonus, per-author bonus, the three subject bonuses, low-priority penalty, long-abstract bonus, abstract-length threshold.
+- **Scoring** — number inputs for each weight: per-keyword bonus, per-author bonus, the three subject bonuses, low-priority penalty, long-abstract bonus, abstract-length threshold. **Per-feed bonuses**: every extra feed you add in the Feeds tab gets its own bonus field here (raise or lower how much a paper from that feed scores). Set to 0 to disable.
 - **Profiles** — save / load / export / import named configs. Files live in `~/.arxiv_scraper/profiles/<name>.json` and persist across project clones. **Write project config** dumps the current config to `arxiv_config.json` in the project root, which is what the CLI picks up on the next run — use this to push GUI tweaks into your daily CLI digest.
+
+## Highlighting
+
+Matched terms are hover-highlighted in the Papers tab so you can see *why* a
+paper ranked at a glance:
+
+- **Authors** in your Authors list — green, bold.
+- **Core keywords** — light teal; **low-priority terms** — light red. Shown in
+  the title and the full abstract. Hover any highlight for a tooltip with its
+  score weight (e.g. `core keyword (+6)`, `low-priority term (−5)`).
+
+Three checkboxes in the sidebar **Display** section toggle each surface
+independently — author highlight, keywords in titles, keywords in abstracts.
+They are part of the config, so profiles and the project config remember them.
+
+## Profiles vs project config
+
+Both save the **complete** configuration — every feed, the keyword / author /
+low-priority lists, `top_n`, timeframe, the replacement filter, scoring weights,
+and per-feed bonuses. They differ only in *where* the file lives and *who reads
+it*:
+
+| | **Profile** | **Project config** |
+|---|---|---|
+| File | `~/.arxiv_scraper/profiles/<name>.json` | `arxiv_config.json` next to `arxiv_digest.py` |
+| How many | Many, named — switch between them | Exactly one |
+| Saved via | Profiles tab → **Save** (or sidebar **Load profile**) | Profiles tab → **Write project config** |
+| Who reads it | The GUI only | The **CLI** on every run (and the GUI on startup) |
+| Use it for | Experimenting, separate "modes" (e.g. `topology-mode`, `cold-atoms`) | Your day-to-day default that the CLI digest uses |
+
+In short: **profiles are personal presets you swap inside the GUI; the project
+config is the single file your CLI command picks up.** Push a profile into your
+CLI workflow by loading it, then clicking **Write project config**.
+
+!!! warning "Save/Apply before saving"
+    Edits in the **Keywords / Authors / Low priority** tabs only enter the live
+    config when you click that tab's **Save** button; **Feeds** edits need
+    **Save feeds**; scoring/per-feed changes need **Apply weights**. A profile or
+    project-config save captures the *current* live config — so apply your tab
+    edits first, otherwise they won't be included.
 
 ## Tips
 
