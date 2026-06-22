@@ -7,7 +7,7 @@ Every paper is reduced to a single integer score. The CLI and GUI both rank by t
 | Rule | Default weight |
 |------|---------------|
 | Per matched core keyword | **+6** |
-| Per matched named author | **+6** |
+| Per matched named author | **+6** (matched against the author list only) |
 | Subject contains `cond-mat.quant-gas` | **+4** |
 | Subject contains `cond-mat.mes-hall` | **+4** |
 | Subject contains `quant-ph` | **+2** |

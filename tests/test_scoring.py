@@ -21,6 +21,25 @@ def test_single_author_match_uses_named_author_weight(make_paper):
     assert score_paper(p, cfg) == cfg.weights.named_author
 
 
+def test_named_author_does_not_match_abstract_or_title(make_paper):
+    """Regression (arxiv_scraper_cli-8tz): 'Bloch theorem' in the abstract must
+    not award author points when no author named Bloch is present."""
+    cfg = Config(core_keywords=[], named_authors=["bloch"], low_priority_kw=[])
+    p = make_paper(
+        title="On the Bloch theorem",
+        abstract="We revisit the Bloch theorem for periodic systems.",
+        authors="Alice Smith, Bob Jones",
+    )
+    assert score_paper(p, cfg) == 0
+    assert explain_score(p, cfg)["authors"] == []
+
+
+def test_named_author_still_matches_in_author_field(make_paper):
+    cfg = Config(core_keywords=[], named_authors=["bloch"], low_priority_kw=[])
+    p = make_paper(title="Bloch theorem revisited", authors="Immanuel Bloch")
+    assert score_paper(p, cfg) == cfg.weights.named_author
+
+
 def test_quant_gas_subject_bonus(empty_cfg, make_paper):
     p = make_paper(subjects="cond-mat.quant-gas (primary)")
     assert score_paper(p, empty_cfg) == empty_cfg.weights.quant_gas_subject
