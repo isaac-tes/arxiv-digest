@@ -42,11 +42,28 @@ uv tool install '.[gui]'           # from inside a clone
 arxiv-digest --top 10              # CLI command, anywhere
 arxiv-gui                          # launches the Streamlit GUI
 
-uv tool install '.[gui]' --reinstall   # upgrade after a git pull
 uv tool uninstall arxiv-digest         # remove
 ```
 
 Prerequisite: install [uv](https://docs.astral.sh/uv/) first — `curl -LsSf https://astral.sh/uv/install.sh | sh`. Python 3.12 or newer; `uv` will install it for you if missing.
+
+### Updating to the latest version
+
+One command, from inside your clone:
+
+```bash
+./scripts/update.sh
+```
+
+It pulls the newest code and rebuilds the installed tools. Equivalent manual steps:
+
+```bash
+cd arxiv-digest
+git pull                               # newest code (or: git fetch && git checkout v0.3.0 for a tag)
+uv tool install '.[gui]' --reinstall   # rebuild the arxiv-digest / arxiv-gui tools
+```
+
+> **Why `--reinstall`?** `uv tool` installs into an isolated environment that does **not** auto-track your clone, so `git pull` alone won't update the `arxiv-digest` / `arxiv-gui` commands — the reinstall rebuilds them. (If you `uv run` from the clone instead of installing as a tool, just `git pull` is enough.)
 
 ---
 
