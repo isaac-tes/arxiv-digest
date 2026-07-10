@@ -26,3 +26,6 @@ arxiv_config.json
 # Tooling caches
 .mypy_cache/
 .ruff_cache/
+
+# Beads / Dolt files (added by bd init)
+.beads/proxieddb/
