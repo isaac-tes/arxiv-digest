@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - **`word_boundary_matching` config flag** (default `true`): set `false` for the legacy substring behavior. Exposed as a **Whole-word matching** checkbox in the GUI Scoring tab and persisted in profiles / `arxiv_config.json`.
+- **Starter presets** (`arxiv_scraper_cli-7f2`): three read-only built-in topic bundles — `open-quantum-systems`, `quantum-many-body`, `floquet-topological` (keywords + authors + feeds/feed_weights, seeded from the TU Berlin AG Eckardt profile). GUI **Profiles → Starter presets** with **Load** (replace) / **Add** (union) buttons; CLI `--preset NAME`, `--add-preset NAME` (repeatable), `--list-presets`. Non-destructive: presets change only the in-memory config and never write to saved profiles or `arxiv_config.json`. New API: `PRESETS`, `preset_names`, `preset_config`, `merge_preset`.
 
 ### Changed
 - The GUI keyword/author highlighters now share the scorer's matcher, so highlights and scores stay in sync (a term that no longer scores no longer highlights).
