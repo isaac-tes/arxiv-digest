@@ -23,6 +23,11 @@ arxiv_config.json
 # mkdocs build output
 /site/
 
+# Packaging / build artifacts
+/build/
+/dist/
+*.app
+
 # Tooling caches
 .mypy_cache/
 .ruff_cache/
