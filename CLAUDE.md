@@ -69,7 +69,7 @@ uv run python arxiv_digest.py --timeframe pastweek --feed cond-mat --feed quant-
 uv run python arxiv_digest.py --list-config --no-config              # inspect built-in defaults
 uv run python arxiv_digest.py --timeframe today --include-replacements      # keep 'Replacement submissions'
 uv run streamlit run arxiv_gui.py                                    # Streamlit GUI
-uv run pytest                                                        # 118-test suite, ~1s, no network
+uv run pytest                                                        # 135-test suite, ~1s, no network
 ```
 
 CLI uses `--timeframe {today,pastweek}`. There are no `--today` / `--pastweek` / `--days` flags despite older docs — confirm with `--help`. `--include-replacements` keeps arXiv "Replacement submissions" (hidden by default; only present in the `today`/`/new` feed).
@@ -87,8 +87,10 @@ CLI uses `--timeframe {today,pastweek}`. There are no `--today` / `--pastweek` /
 
 Feed URLs encode the timeframe: `/new` = today, `/pastweek` = last ~5 days. `determine_feed` rewrites the suffix based on `--timeframe` (or `cfg.timeframe`). arXiv has no arbitrary-day URL, so the GUI day-picker is limited to the days `/pastweek` returns.
 
+**Starter presets** (`PRESETS` dict + `preset_names` / `preset_config` / `merge_preset`): three read-only built-in topic bundles (open-quantum-systems / quantum-many-body / floquet-topological), each keywords+authors+feeds+feed_weights. `preset_config(name)` builds a full `Config` (preset content, defaults elsewhere) — GUI **Load** / CLI `--preset` (replace). `merge_preset(cfg, name)` unions content onto `cfg` — GUI **Add** / CLI `--add-preset` (repeatable). `--list-presets` prints them. Presets never write to disk (local profile / `arxiv_config.json` intact) — in-memory only until Save/`--save-config`.
+
 `arxiv_config.json` is gitignored; defaults live in `_default_*` helpers (incl. `_default_feed_weights`) and `ScoringWeights()` near the top. Legacy configs (old `weights.*_subject` keys) auto-migrate into `feed_weights` via `_hydrate_feed_weights`. GUI profiles live in `~/.arxiv_scraper/profiles/<name>.json`; both profiles and the project config persist the full `Config`.
 
 GUI display: `arxiv_gui.py` hover-highlights authors (in the author list), and matched keywords/low-priority terms in the title + abstract via `_highlight_terms`; toggled by the three `highlight_*` config flags. The highlighters reuse the scorer's `ad.term_pattern` (honoring `word_boundary_matching`), so highlights and scores never diverge. Streamlit strips the `title` attribute, so tooltips use CSS (`.tip`/`.hl-tip`), not `title=`.
 
-Tests live in `tests/`; run with `uv run pytest` (118 tests). `requests.get` is monkey-patched, so no network calls hit arXiv during the suite. GUI tests use `streamlit.testing.v1.AppTest` (headless).
+Tests live in `tests/`; run with `uv run pytest` (135 tests). `requests.get` is monkey-patched, so no network calls hit arXiv during the suite. GUI tests use `streamlit.testing.v1.AppTest` (headless).
