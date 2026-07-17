@@ -251,3 +251,32 @@ def test_reset_weights_clears_all_keyed_widgets():
 
     for name, default in defaults.items():
         assert _weight_input(at, name).value == default, f"{name} widget stale after reset"
+
+
+# --- word-boundary matching mirrors the scorer (arxiv_scraper_cli-28n) -------
+
+def test_highlight_terms_word_boundary_no_substring_bleed():
+    import arxiv_gui
+
+    out = arxiv_gui._highlight_terms("temporal composition", ["mpo"], [], 6, -5)
+    assert "hl-term" not in out  # 'mpo' must NOT highlight inside 'teMPOral'
+    hit = arxiv_gui._highlight_terms("an mpo ansatz", ["mpo"], [], 6, -5)
+    assert "hl-kw" in hit
+
+
+def test_highlight_terms_substring_mode_when_boundary_off():
+    import arxiv_gui
+
+    out = arxiv_gui._highlight_terms(
+        "temporal", ["mpo"], [], 6, -5, word_boundary=False
+    )
+    assert "hl-kw" in out
+
+
+def test_authors_html_word_boundary_no_substring_bleed():
+    import arxiv_gui
+
+    out = arxiv_gui._authors_html("Yun Mao, Anna Blochwitz", ["ma", "bloch"], 6)
+    assert "hl-author" not in out
+    hit = arxiv_gui._authors_html("Immanuel Bloch", ["bloch"], 6)
+    assert "hl-author" in hit
