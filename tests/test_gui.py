@@ -280,3 +280,41 @@ def test_authors_html_word_boundary_no_substring_bleed():
     assert "hl-author" not in out
     hit = arxiv_gui._authors_html("Immanuel Bloch", ["bloch"], 6)
     assert "hl-author" in hit
+
+
+# --- starter presets in the Profiles tab (arxiv_scraper_cli-7f2) -------------
+
+def test_gui_starter_preset_selectbox_present():
+    from streamlit.testing.v1 import AppTest
+    import arxiv_digest as ad
+
+    at = AppTest.from_file("arxiv_gui.py").run(timeout=15)
+    assert not list(at.exception)
+    values = {sb.value for sb in at.selectbox}
+    # the starter-preset selectbox defaults to the first preset name
+    assert ad.preset_names()[0] in values
+
+
+def test_gui_load_preset_replaces_cfg():
+    from streamlit.testing.v1 import AppTest
+    import arxiv_digest as ad
+
+    at = AppTest.from_file("arxiv_gui.py").run(timeout=15)
+    at.selectbox(key="starter_preset").set_value("floquet-topological").run()
+    at.button(key="preset_load").click().run()
+    assert not list(at.exception)
+    kws = [k.lower() for k in at.session_state["cfg"].core_keywords]
+    assert "floquet" in kws
+
+
+def test_gui_add_preset_merges_cfg():
+    from streamlit.testing.v1 import AppTest
+
+    at = AppTest.from_file("arxiv_gui.py").run(timeout=15)
+    before = len(at.session_state["cfg"].named_authors)
+    at.selectbox(key="starter_preset").set_value("open-quantum-systems").run()
+    at.button(key="preset_add").click().run()
+    assert not list(at.exception)
+    authors = [a.lower() for a in at.session_state["cfg"].named_authors]
+    assert "eckardt" in authors
+    assert len(authors) >= before  # union never shrinks

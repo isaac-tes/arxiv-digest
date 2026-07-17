@@ -620,6 +620,36 @@ def render_profiles_tab():
     st.subheader("Profiles")
     st.caption(f"Profiles are saved as JSON under `{PROFILES_DIR}` and reusable across sessions.")
 
+    # ── Starter presets: built-in read-only topic bundles ────────────────
+    st.markdown("**Starter presets**")
+    st.caption(
+        "Built-in topic bundles (keywords + authors + feeds) to start from. "
+        "**Load** replaces your working config; **Add** merges the preset in. "
+        "Your saved profiles and `arxiv_config.json` are never touched — Load/Add "
+        "change only the in-memory config until you Save or Write project config."
+    )
+    preset_choice = st.selectbox(
+        "Starter preset",
+        options=ad.preset_names(),
+        format_func=lambda n: n.replace("-", " ").title(),
+        key="starter_preset",
+        label_visibility="collapsed",
+    )
+    st.caption(ad.preset_description(preset_choice))
+    pc_load, pc_add = st.columns(2)
+    if pc_load.button("Load preset", key="preset_load", width="stretch"):
+        st.session_state.cfg = ad.preset_config(preset_choice)
+        _reset_widget_state()
+        st.success(f"Loaded preset '{preset_choice}' (replaced working config).")
+        st.rerun()
+    if pc_add.button("Add preset", key="preset_add", width="stretch"):
+        st.session_state.cfg = ad.merge_preset(cfg(), preset_choice)
+        _reset_widget_state()
+        st.success(f"Merged preset '{preset_choice}' into the current config.")
+        st.rerun()
+
+    st.divider()
+
     name = st.text_input("Save current config as", placeholder="e.g. topology-mode")
     if st.button("Save", disabled=not name.strip()):
         save_profile(cfg(), name.strip())
