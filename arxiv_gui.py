@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import html
 import json
-import re
 from dataclasses import asdict, fields
 from datetime import datetime
 from pathlib import Path
@@ -245,20 +244,22 @@ def _highlight_terms(
     lp_terms: list[str],
     kw_bonus: int,
     lp_penalty: int,
+    word_boundary: bool = True,
 ) -> str:
     """HTML-escape `text` and wrap matched keyword / low-priority spans.
 
     Keywords get the teal `.hl-kw` style, low-priority the red `.hl-lp` style,
     each with a hover tooltip showing its weight. Overlapping matches are
-    resolved earliest-start, longest-first.
+    resolved earliest-start, longest-first. Matching mirrors the scorer
+    (`ad.term_pattern`), so highlights and score stay in sync.
     """
     spans: list[tuple[int, int, str]] = []
     for terms, kind in ((keywords, "kw"), (lp_terms, "lp")):
         for t in terms:
-            t = t.strip()
-            if not t:
+            pat = ad.term_pattern(t, word_boundary=word_boundary)
+            if pat is None:
                 continue
-            for m in re.finditer(re.escape(t), text, re.IGNORECASE):
+            for m in pat.finditer(text):
                 spans.append((m.start(), m.end(), kind))
     if not spans:
         return html.escape(text)
@@ -288,14 +289,17 @@ def _highlight_terms(
     return "".join(out)
 
 
-def _authors_html(authors: str, named: list[str], bonus: int) -> str:
-    """Render the author line, highlighting authors present in `named`."""
-    named_low = [n.strip().lower() for n in named if n.strip()]
+def _authors_html(authors: str, named: list[str], bonus: int, word_boundary: bool = True) -> str:
+    """Render the author line, highlighting authors present in `named`.
+
+    Matching mirrors the scorer so a named author 'ma' no longer lights up
+    'Mao' and 'bloch' no longer lights up 'Blochwitz'.
+    """
     parts = [a.strip() for a in authors.split(",") if a.strip()]
     out = []
     for a in parts:
         esc = html.escape(a)
-        if any(n in a.lower() for n in named_low):
+        if any(ad.term_matches(n, a, word_boundary=word_boundary) for n in named):
             out.append(
                 f'<span class="hl-author" title="Highlighted author '
                 f'(+{bonus} to score)">{esc}</span>'
@@ -420,7 +424,8 @@ def render_papers_tab():
                 lp_pen = cfg().weights.low_priority_penalty
                 if cfg().highlight_terms_title:
                     title_html = _highlight_terms(
-                        e["title"], cfg().core_keywords, cfg().low_priority_kw, kw_bonus, lp_pen
+                        e["title"], cfg().core_keywords, cfg().low_priority_kw, kw_bonus, lp_pen,
+                        word_boundary=cfg().word_boundary_matching,
                     )
                 else:
                     title_html = html.escape(e["title"])
@@ -430,7 +435,8 @@ def render_papers_tab():
                 )
                 if cfg().highlight_authors:
                     authors_html = _authors_html(
-                        e["authors"], cfg().named_authors, cfg().weights.named_author
+                        e["authors"], cfg().named_authors, cfg().weights.named_author,
+                        word_boundary=cfg().word_boundary_matching,
                     )
                 else:
                     authors_html = html.escape(e["authors"]) or "(No authors listed)"
@@ -455,7 +461,7 @@ def render_papers_tab():
                 if cfg().highlight_terms_abstract and abstract != "(unavailable)":
                     st.markdown(
                         f'<div class="paper-abstract">'
-                        f'{_highlight_terms(abstract, cfg().core_keywords, cfg().low_priority_kw, cfg().weights.core_keyword, cfg().weights.low_priority_penalty)}'
+                        f'{_highlight_terms(abstract, cfg().core_keywords, cfg().low_priority_kw, cfg().weights.core_keyword, cfg().weights.low_priority_penalty, word_boundary=cfg().word_boundary_matching)}'
                         f'</div>',
                         unsafe_allow_html=True,
                     )
@@ -547,6 +553,17 @@ def render_scoring_tab():
         "Tweak how strongly each rule contributes to a paper's score. "
         "Rankings update live in the **Papers** tab — no re-fetch needed."
     )
+
+    cfg().word_boundary_matching = st.checkbox(
+        "Whole-word matching",
+        value=cfg().word_boundary_matching,
+        help=(
+            "Match keywords / authors / low-priority terms as whole words, so "
+            "'mpo' won't score 'temporal' and author 'ma' won't score 'Mao'. "
+            "Uncheck for legacy substring matching. Subjects are unaffected."
+        ),
+    )
+    st.divider()
 
     w = cfg().weights
     new_values: dict[str, int] = {}

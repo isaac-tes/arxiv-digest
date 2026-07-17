@@ -251,6 +251,12 @@ class Config:
     # in a paper's subjects. Single source of truth for subject scoring (the old
     # hardcoded quant-gas/mes-hall/quant-ph bonuses are just default entries).
     feed_weights: Dict[str, int] = field(default_factory=_default_feed_weights)
+    # Match keywords/authors/low-priority as whole tokens rather than raw
+    # substrings, so 'mpo' no longer scores 'temporal' and author 'bloch' no
+    # longer scores 'Blochwitz' (arxiv_scraper_cli-28n). Subjects/feed_weights
+    # stay substring so a parent feed 'cond-mat' still matches 'cond-mat.quant-gas'.
+    # Set False for the legacy substring behavior.
+    word_boundary_matching: bool = True
     # GUI display prefs: hover-highlight matched terms.
     highlight_authors: bool = True
     highlight_terms_title: bool = True
@@ -291,6 +297,7 @@ class Config:
             top_n=int(data.get("top_n") or 20),
             timeframe=str(data.get("timeframe") or "pastweek"),
             include_replacements=bool(data.get("include_replacements", False)),
+            word_boundary_matching=bool(data.get("word_boundary_matching", True)),
             feed_weights=_hydrate_feed_weights(data),
             highlight_authors=bool(data.get("highlight_authors", True)),
             highlight_terms_title=bool(data.get("highlight_terms_title", True)),
@@ -611,6 +618,33 @@ def filter_papers(
     return out
 
 
+def term_pattern(term: str, *, word_boundary: bool = True) -> "re.Pattern[str] | None":
+    """Compile a case-insensitive matcher for a keyword/author/low-priority term.
+
+    With `word_boundary` (default) the term must be a whole token: the
+    lookarounds `(?<!\\w)`/`(?!\\w)` reject matches flanked by another word
+    character, so 'mpo' matches 'MPO' / 'MPO-based' / 'the mpo,' but not
+    'temporal' or 'fqhe'. Punctuation, spaces, and string edges all count as
+    boundaries. `re.escape` keeps user terms literal (no regex injection).
+
+    Without `word_boundary` it degrades to a plain substring search — the
+    legacy behavior. Returns None for blank terms.
+    """
+    term = term.strip()
+    if not term:
+        return None
+    body = re.escape(term)
+    if word_boundary:
+        body = r"(?<!\w)" + body + r"(?!\w)"
+    return re.compile(body, re.IGNORECASE)
+
+
+def term_matches(term: str, text: str, *, word_boundary: bool = True) -> bool:
+    """True if `term` occurs in `text` (whole-token unless word_boundary=False)."""
+    pat = term_pattern(term, word_boundary=word_boundary)
+    return bool(pat and pat.search(text))
+
+
 def explain_score(paper: dict, cfg: Config) -> dict:
     """Return a per-rule breakdown of how `score_paper` arrived at its total.
 
@@ -640,9 +674,10 @@ def explain_score(paper: dict, cfg: Config) -> dict:
     # though no author is named Bloch (arxiv_scraper_cli-8tz).
     authors_txt = paper.get("authors", "").lower()
 
-    matched_keywords = [kw for kw in cfg.core_keywords if kw.lower() in txt]
-    matched_authors = [a for a in cfg.named_authors if a.lower() in authors_txt]
-    matched_low = [k for k in cfg.low_priority_kw if k.lower() in txt]
+    wb = cfg.word_boundary_matching
+    matched_keywords = [kw for kw in cfg.core_keywords if term_matches(kw, txt, word_boundary=wb)]
+    matched_authors = [a for a in cfg.named_authors if term_matches(a, authors_txt, word_boundary=wb)]
+    matched_low = [k for k in cfg.low_priority_kw if term_matches(k, txt, word_boundary=wb)]
 
     # Subject scoring is fully driven by per-feed bonuses: each feed whose name
     # appears in the paper's subjects contributes its configured weight.
