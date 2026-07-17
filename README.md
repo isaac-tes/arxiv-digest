@@ -1,6 +1,7 @@
 # arXiv digest
 
 [![CI](https://github.com/isaac-tes/arxiv-digest/actions/workflows/ci.yml/badge.svg)](https://github.com/isaac-tes/arxiv-digest/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/isaac-tes/arxiv-digest?sort=semver)](https://github.com/isaac-tes/arxiv-digest/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python: 3.12+](https://img.shields.io/badge/Python-3.12+-blue.svg)](https://www.python.org/downloads/)
 
@@ -21,6 +22,18 @@ Both share the same `Config` and `arxiv_config.json` — tweak in one, the other
 - **Timeframe**: `pastweek` (last ~5 days)
 - **Top N**: 20
 - **Output**: stdout
+
+### Starter presets
+
+Three built-in, read-only topic bundles (keywords + authors + feeds) give you a starting point instead of the generic default:
+
+| Preset | Focus |
+|--------|-------|
+| `open-quantum-systems` | Lindbladian dynamics, dissipation, driven-dissipative & non-Markovian systems |
+| `quantum-many-body` | Thermalization, many-body localization, tensor networks, strongly correlated systems |
+| `floquet-topological` | Floquet engineering, periodically driven systems & topological matter |
+
+Pick one in the GUI **Profiles → Starter presets** (**Load** replaces your working config, **Add** merges it in) or on the CLI with `--preset NAME` / `--add-preset NAME` (see `--list-presets`). Presets never overwrite your saved profiles or `arxiv_config.json` — they only change the in-memory config until you explicitly save. Topic sets are editable starting points; edit freely.
 
 ---
 
@@ -93,7 +106,7 @@ The first time you launch, the app loads `arxiv_config.json` if present in the p
 - **Low priority** — penalty list. If *any* term matches, the paper takes the *Low-priority penalty* (default −5) — once, not per hit.
 - **Feeds** — `name → URL` editor. Add custom arXiv lists (e.g. `hep-th=https://arxiv.org/list/hep-th/new`). The `/new` / `/pastweek` suffix is rewritten by the timeframe selector at fetch time, so you can paste any base URL.
 - **Scoring** — a **Whole-word matching** toggle (default on; untick for legacy substring matching), then number inputs for each weight: per-keyword bonus, per-author bonus, low-priority penalty, long-abstract bonus, the abstract-length threshold, and a **per-feed subject bonus** for every configured feed (subject scoring is driven by `feed_weights`; defaults `cond-mat.quant-gas` +4, `cond-mat.mes-hall` +4, `quant-ph` +2). *Apply weights* makes the change live; *Reset to defaults* puts it back.
-- **Profiles** — save the current full config under a name (e.g. `topology-mode`, `quantum-gas-mode`). Files live in `~/.arxiv_scraper/profiles/<name>.json`. Buttons: **Load**, **Export** (download JSON), **Delete**, **Import** (upload JSON). Below: **Write project config** dumps the current config to `arxiv_config.json` next to `arxiv_digest.py`, which is what the **CLI** picks up on the next run — use this to push your GUI tweaks back into your daily CLI digest.
+- **Profiles** — **Starter presets** at the top: pick a built-in bundle and **Load** (replace working config) or **Add** (merge it in) — never touches your saved profiles or `arxiv_config.json`. Below, save the current full config under a name (e.g. `topology-mode`, `quantum-gas-mode`). Files live in `~/.arxiv_scraper/profiles/<name>.json`. Buttons: **Load**, **Export** (download JSON), **Delete**, **Import** (upload JSON). Below: **Write project config** dumps the current config to `arxiv_config.json` next to `arxiv_digest.py`, which is what the **CLI** picks up on the next run — use this to push your GUI tweaks back into your daily CLI digest.
 
 ### Tips
 
@@ -139,6 +152,9 @@ uv run python arxiv_digest.py --list-config --no-config
 | `--output-markdown [PATH]` | Write Markdown. Bare flag → `reports/digest-YYYY-MM-DD.md`. |
 | `--config PATH` | Use a non-default config JSON path. |
 | `--no-config` | Ignore the config file even if present (use built-in defaults). |
+| `--preset NAME` | Start from a built-in [starter preset](#starter-presets) (replaces the config's content). |
+| `--add-preset NAME` | Union a starter preset's keywords/authors/feeds onto the current config (repeatable). |
+| `--list-presets` | List the built-in starter presets and exit. |
 | `--save-config` | Persist current (modified) config back to `--config` path. |
 | `--list-config` | Print the resolved config as JSON and exit. |
 | `--verbose` | Log fetch progress to stderr. |

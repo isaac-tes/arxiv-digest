@@ -12,7 +12,7 @@ import json
 import re
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Dict, List, Sequence
@@ -315,6 +315,145 @@ class Config:
 
     def dump(self, path: Path) -> None:
         path.write_text(json.dumps(asdict(self), indent=2, ensure_ascii=False), encoding="utf-8")
+
+
+# ─────────────────────────── Starter presets ───────────────────────────
+#
+# Read-only, built-in research-topic bundles a new user can pick as a starting
+# point instead of the generic cond-mat default.
+# a quantum physics research profile. Presets are
+# NEVER written to disk on their own — Load/Add only mutate the in-memory
+# Config; the user's arxiv_config.json and ~/.arxiv_scraper profiles are
+# untouched unless they explicitly Save / --save-config.
+#
+# Each preset defines keywords + authors + feeds/feed_weights; scalar prefs
+# (weights, top_n, timeframe, flags) stay at Config defaults. Authors always
+# include famous *distinctive* surnames per field
+# (short/common ones like 'wu'/'link'/'ma' are omitted — they over-match even
+# with whole-word matching), capped at 10.
+
+
+def _feeds_map(*categories: str) -> Dict[str, str]:
+    """arXiv listing URL per category (the /new suffix is timeframe-rewritten)."""
+    return {c: f"https://arxiv.org/list/{c}/new" for c in categories}
+
+
+PRESETS: Dict[str, Dict[str, object]] = {
+    "open-quantum-systems": {
+        "description": "Lindbladian dynamics, dissipation, driven-dissipative & non-Markovian systems.",
+        "core_keywords": [
+            "lindblad", "lindbladian", "open quantum system", "master equation",
+            "dissipative", "dissipation", "driven-dissipative", "non-markovian",
+            "decoherence", "quantum trajectory", "steady state", "bath engineering",
+            "quantum reservoir", "dephasing",
+        ],
+        "named_authors": [
+            "schnell", "zoller", "cirac",
+            "plenio", "breuer", "diehl",
+        ],
+        "feeds": _feeds_map("quant-ph", "cond-mat.stat-mech", "cond-mat.quant-gas"),
+        "default_feeds": ["quant-ph", "cond-mat.stat-mech", "cond-mat.quant-gas"],
+        "feed_weights": {"quant-ph": 3, "cond-mat.stat-mech": 3, "cond-mat.quant-gas": 2},
+    },
+    "quantum-many-body": {
+        "description": "Thermalization, many-body localization, tensor networks & strongly correlated systems.",
+        "core_keywords": [
+            "many-body localization", "thermalization", "prethermal",
+            "eigenstate thermalization", "entanglement entropy", "tensor network",
+            "matrix product state", "dmrg", "quench dynamics", "hubbard model",
+            "spin chain", "strongly correlated", "quantum quench", "ergodicity",
+        ],
+        "named_authors": [
+            "eisert", "cirac", "abanin",
+            "huse", "altman", "bloch",
+        ],
+        "feeds": _feeds_map(
+            "cond-mat.str-el", "cond-mat.quant-gas", "cond-mat.stat-mech", "quant-ph"
+        ),
+        "default_feeds": ["cond-mat.str-el", "cond-mat.quant-gas", "cond-mat.stat-mech", "quant-ph"],
+        "feed_weights": {
+            "cond-mat.str-el": 4, "cond-mat.quant-gas": 3,
+            "cond-mat.stat-mech": 2, "quant-ph": 2,
+        },
+    },
+    "floquet-topological": {
+        "description": "Floquet engineering, periodically driven systems & topological matter (group signature).",
+        "core_keywords": [
+            "floquet", "periodically driven", "topological insulator", "chern number",
+            "fractional chern", "anomalous floquet", "berry curvature", "optical lattice",
+            "ultracold atoms", "shortcuts to adiabaticity", "anyons", "lattice gauge",
+            "bose-einstein condensate", "topological invariant",
+        ],
+        "named_authors": [
+            "cooper", "goldman", "aidelsburger",
+            "bloch", "refael", "lindner", "rudner",
+        ],
+        "feeds": _feeds_map("cond-mat.quant-gas", "cond-mat.mes-hall", "quant-ph"),
+        "default_feeds": ["cond-mat.quant-gas", "cond-mat.mes-hall", "quant-ph"],
+        "feed_weights": {"cond-mat.quant-gas": 4, "cond-mat.mes-hall": 4, "quant-ph": 2},
+    },
+}
+
+
+def preset_names() -> List[str]:
+    """Names of the built-in starter presets."""
+    return list(PRESETS)
+
+
+def preset_description(name: str) -> str:
+    return str(PRESETS[name].get("description", ""))
+
+
+def preset_config(name: str) -> Config:
+    """Full Config for a preset: its content fields, Config defaults elsewhere.
+
+    'Load' in the GUI (and `--preset` on the CLI) replaces the working config
+    with this. Raises KeyError for an unknown name.
+    """
+    if name not in PRESETS:
+        raise KeyError(f"Unknown preset '{name}'. Available: {', '.join(preset_names())}")
+    spec = PRESETS[name]
+    return Config(
+        feeds=dict(spec["feeds"]),  # type: ignore[arg-type]
+        default_feeds=list(spec["default_feeds"]),  # type: ignore[arg-type]
+        core_keywords=list(spec["core_keywords"]),  # type: ignore[arg-type]
+        named_authors=list(spec["named_authors"]),  # type: ignore[arg-type]
+        feed_weights=dict(spec["feed_weights"]),  # type: ignore[arg-type]
+    )
+
+
+def _union_preserve(base: List[str], extra: List[str]) -> List[str]:
+    """base + items of extra not already present (case-insensitive), order kept."""
+    seen = {x.lower() for x in base}
+    out = list(base)
+    for item in extra:
+        if item.lower() not in seen:
+            out.append(item)
+            seen.add(item.lower())
+    return out
+
+
+def merge_preset(cfg: Config, name: str) -> Config:
+    """Return a copy of `cfg` with preset `name`'s content unioned in.
+
+    'Add' in the GUI (and `--add-preset` on the CLI): keywords/authors/feeds/
+    default_feeds/feed_weights are merged; scalar prefs (weights, top_n,
+    timeframe, flags) are kept from `cfg`. `cfg` is not mutated.
+    """
+    spec = PRESETS[name] if name in PRESETS else None
+    if spec is None:
+        raise KeyError(f"Unknown preset '{name}'. Available: {', '.join(preset_names())}")
+    merged_feeds = {**cfg.feeds, **spec["feeds"]}  # type: ignore[dict-item]
+    merged_feed_weights = {**cfg.feed_weights, **spec["feed_weights"]}  # type: ignore[dict-item]
+    return replace(
+        cfg,
+        core_keywords=_union_preserve(cfg.core_keywords, list(spec["core_keywords"])),  # type: ignore[arg-type]
+        named_authors=_union_preserve(cfg.named_authors, list(spec["named_authors"])),  # type: ignore[arg-type]
+        low_priority_kw=list(cfg.low_priority_kw),
+        feeds=merged_feeds,
+        default_feeds=_union_preserve(cfg.default_feeds, list(spec["default_feeds"])),  # type: ignore[arg-type]
+        feed_weights=merged_feed_weights,
+    )
 
 
 def resolve_report_path(candidate: Path | None, suffix: str, generated_at: datetime) -> Path | None:
@@ -847,6 +986,24 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
     parser.add_argument("--no-config", action="store_true", help="Ignore config file even if present")
     parser.add_argument("--save-config", action="store_true", help="Persist modified config back to --config path")
     parser.add_argument("--list-config", action="store_true", help="Print current config and exit")
+    parser.add_argument(
+        "--preset",
+        choices=list(PRESETS),
+        help="Start from a built-in starter preset (replaces the config's content). See --list-presets.",
+    )
+    parser.add_argument(
+        "--add-preset",
+        action="append",
+        default=[],
+        choices=list(PRESETS),
+        metavar="NAME",
+        help="Union a starter preset's keywords/authors/feeds onto the current config (repeatable).",
+    )
+    parser.add_argument(
+        "--list-presets",
+        action="store_true",
+        help="List the built-in starter presets and exit.",
+    )
     parser.add_argument("--sections", nargs="*", help="Limit scraping to specific section titles")
     parser.add_argument(
         "--output-json",
@@ -926,8 +1083,19 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv or sys.argv[1:])
+
+    if args.list_presets:
+        for name in preset_names():
+            print(f"{name}\n    {preset_description(name)}")
+        return 0
+
     cfg_path = args.config if not args.no_config else None
-    cfg = Config.load(cfg_path)
+    # --preset picks a built-in starting point instead of the config file;
+    # --add-preset unions presets onto whatever base we have. Neither writes to
+    # disk unless the user also passes --save-config.
+    cfg = preset_config(args.preset) if args.preset else Config.load(cfg_path)
+    for name in args.add_preset:
+        cfg = merge_preset(cfg, name)
     apply_cli_modifications(cfg, args)
 
     if args.list_config:
