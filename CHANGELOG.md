@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.1] — 2026-07-27
+
+### Fixed
+- **All `pastweek` papers showed "(No abstract available.)"** (`arxiv_scraper_cli-an7`): `paper["id"]` was taken from the listing link's *text*, which arXiv renders as `arXiv:2512.00001`. The abstract back-fill then requested `https://arxiv.org/abs/arXiv:2512.00001`, which arXiv rejects with **HTTP 406**, and the failure was swallowed unless `--verbose`. `/new` pages inline their abstracts so `today` was unaffected; `/pastweek` pages omit them entirely and depended wholly on that broken fetch. Ids are now parsed from the `/abs/` href and normalized via the new `normalize_arxiv_id` helper.
+  - **Scores shift for `pastweek`**: abstract keyword hits and the `+1` long-abstract bonus never fired before, so rankings will differ (correctly) from previous runs.
+  - **`paper["id"]` format changed** from `arXiv:2512.00001` to the bare `2512.00001`. It is an internal join key, but it also appears in JSON report output.
+
+### Changed
+- `fetch_abstract` is hardened: it re-normalizes its own argument (a prefixed id still resolves), retries transient failures twice with backoff, accepts both `blockquote.abstract` and `div.abstract`, and strips the leading `Abstract:` label with an anchored regex instead of a global `.replace()` that could corrupt body text.
+- Back-fill failures are no longer silent: when at least half of them come back empty, a warning is printed to stderr regardless of `--verbose`.
+- The inline-abstract fallback no longer risks selecting the title — it skips text already captured as title/authors/subjects.
+
 ## [0.4.0] — 2026-07-17
 
 ### Fixed

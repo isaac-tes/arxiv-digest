@@ -11,6 +11,7 @@ import argparse
 import json
 import re
 import sys
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import asdict, dataclass, field, replace
 from datetime import UTC, datetime
@@ -543,19 +544,52 @@ def apply_cli_modifications(cfg: Config, args: argparse.Namespace) -> None:
         cfg.top_n = args.top
 
 
-def fetch_abstract(arxiv_id: str, verbose: bool = False) -> str:
-    """Fetch abstract from individual paper page."""
-    abs_url = f"https://arxiv.org/abs/{arxiv_id}"
-    try:
-        resp = requests.get(abs_url, timeout=30)
-        resp.raise_for_status()
-        soup = BeautifulSoup(resp.text, "html.parser")
-        abstract_block = soup.find("blockquote", class_="abstract")
-        if abstract_block:
-            return abstract_block.get_text(" ", strip=True).replace("Abstract:", "").strip()
-    except Exception as e:
-        if verbose:
-            print(f"  Warning: Failed to fetch abstract for {arxiv_id}: {e}")
+_ARXIV_ID_PREFIX = re.compile(r"^\s*arxiv\s*:\s*", re.IGNORECASE)
+_ABSTRACT_LABEL = re.compile(r"^\s*abstract\s*:\s*", re.IGNORECASE)
+
+
+def normalize_arxiv_id(raw: str) -> str:
+    """Strip the display 'arXiv:' prefix from a list-page identifier.
+
+    arXiv renders the abstract link's text as ``arXiv:2607.21663`` while the
+    canonical /abs/ URL wants the bare ``2607.21663``. Requesting the prefixed
+    form returns HTTP 406, so every id must go through here before it is used
+    to build a URL.
+    """
+    return _ARXIV_ID_PREFIX.sub("", raw or "").strip()
+
+
+def fetch_abstract(arxiv_id: str, verbose: bool = False, retries: int = 2) -> str:
+    """Fetch the abstract from an individual paper page.
+
+    Defensive on three axes: the id is re-normalized here (so a caller passing
+    a raw ``arXiv:...`` string still works), transient network/5xx failures are
+    retried, and two DOM shapes are accepted.
+    """
+    clean_id = normalize_arxiv_id(arxiv_id)
+    if not clean_id:
+        return ""
+    abs_url = f"https://arxiv.org/abs/{clean_id}"
+    last_err: Exception | None = None
+    for attempt in range(retries + 1):
+        try:
+            resp = requests.get(abs_url, timeout=30)
+            resp.raise_for_status()
+            soup = BeautifulSoup(resp.text, "html.parser")
+            block = soup.find("blockquote", class_="abstract")
+            if block is None:
+                # Fallback for the newer /abs/ layout.
+                block = soup.find("div", class_="abstract")
+            if block:
+                text = block.get_text(" ", strip=True)
+                return _ABSTRACT_LABEL.sub("", text).strip()
+            return ""
+        except Exception as e:  # noqa: BLE001 - network layer, keep going
+            last_err = e
+            if attempt < retries:
+                time.sleep(0.5 * (attempt + 1))
+    if verbose and last_err is not None:
+        print(f"  Warning: Failed to fetch abstract for {clean_id}: {last_err}")
     return ""
 
 
@@ -591,8 +625,13 @@ def fetch_feed(url: str, sections: List[str] | None = None, verbose: bool = Fals
             a_abs = dt.find("a", title="Abstract")
             if not a_abs:
                 continue
-            link = f"https://arxiv.org{a_abs['href']}"
-            arx_id = a_abs.get_text(strip=True)
+            href = a_abs.get("href", "") or ""
+            link = f"https://arxiv.org{href}"
+            # Prefer the href ("/abs/2607.21663"); the link *text* is the
+            # display form "arXiv:2607.21663", which /abs/ rejects with a 406.
+            arx_id = normalize_arxiv_id(
+                href.rsplit("/abs/", 1)[-1] if "/abs/" in href else a_abs.get_text(strip=True)
+            )
             title_div = dd.find("div", class_="list-title")
             title = (
                 title_div.get_text(" ", strip=True).replace("Title:", "").strip()
@@ -612,23 +651,23 @@ def fetch_feed(url: str, sections: List[str] | None = None, verbose: bool = Fals
                 else ""
             )
             
-            # Try multiple ways to find the abstract
+            # Abstract extraction. /new pages inline it as <p class="mathjax">;
+            # /pastweek pages omit it entirely and rely on the fetch below.
             abstract = ""
-            # First try: look for p with class mathjax
             abstract_p = dd.find("p", class_="mathjax")
             if abstract_p:
                 abstract = abstract_p.get_text(" ", strip=True)
             else:
-                # Second try: look for any p tag after the subjects
-                all_p = dd.find_all("p")
-                for p in all_p:
+                # Fallback: first substantial <p> that is not the title/authors/
+                # subjects text we already captured.
+                known = {title, authors, subjects}
+                for p in dd.find_all("p"):
                     text = p.get_text(" ", strip=True)
-                    # Skip empty paragraphs and very short ones
-                    if text and len(text) > 20:
+                    if len(text) > 20 and text not in known:
                         abstract = text
                         break
-            
-            abstract = abstract.replace("Abstract:", "").strip()
+
+            abstract = _ABSTRACT_LABEL.sub("", abstract).strip()
             
             papers.append(
                 {
@@ -656,11 +695,21 @@ def fetch_feed(url: str, sections: List[str] | None = None, verbose: bool = Fals
             for future in as_completed(future_to_paper):
                 paper = future_to_paper[future]
                 try:
-                    abstract = future.result()
-                    paper["abstract"] = abstract
+                    paper["abstract"] = future.result()
                 except Exception as e:
                     if verbose:
                         print(f"  Warning: Failed to fetch abstract for {paper['id']}: {e}")
+
+        # A systemic failure (bad ids, arXiv blocking us, network down) shows up
+        # as *every* fetch coming back empty. That used to be silent, which is
+        # how the "arXiv:" id-prefix bug hid for so long — warn unconditionally.
+        still_missing = sum(1 for p in papers_missing_abstract if not p["abstract"])
+        if still_missing and still_missing >= len(papers_missing_abstract) // 2:
+            print(
+                f"  Warning: {still_missing}/{len(papers_missing_abstract)} abstracts "
+                f"could not be retrieved from arxiv.org.",
+                file=sys.stderr,
+            )
     
     if verbose:
         print(f"  Found {len(papers)} papers")
