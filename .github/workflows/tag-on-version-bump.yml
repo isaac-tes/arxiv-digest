@@ -1,0 +1,81 @@
+name: Tag on version bump
+
+# Bumping the version in pyproject.toml is the release trigger: when a push to
+# main changes it, this tags that commit v<version>, which in turn fires
+# release.yml. Nothing happens on pushes that leave the version alone, so
+# ordinary commits never cut a release.
+
+on:
+  push:
+    branches: [main]
+    paths: ["pyproject.toml"]
+
+permissions:
+  contents: write
+
+jobs:
+  tag:
+    name: Tag if version changed
+    runs-on: ubuntu-latest
+
+    outputs:
+      tagged: ${{ steps.push.outputs.tagged }}
+      tag: ${{ steps.push.outputs.tag }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Need the parent commit to diff the version against.
+          fetch-depth: 2
+
+      - name: Read version before and after
+        id: v
+        run: |
+          read_version() {
+            python3 -c "import tomllib,sys;print(tomllib.loads(sys.stdin.read())['project']['version'])"
+          }
+          new="$(read_version < pyproject.toml)"
+          # An added pyproject.toml (first commit) has no previous version.
+          if git cat-file -e "HEAD^:pyproject.toml" 2>/dev/null; then
+            old="$(git show "HEAD^:pyproject.toml" | read_version)"
+          else
+            old=""
+          fi
+          echo "old=$old" >> "$GITHUB_OUTPUT"
+          echo "new=$new" >> "$GITHUB_OUTPUT"
+          echo "Version: '${old:-none}' -> '$new'"
+
+      - name: Tag the new version
+        id: push
+        if: steps.v.outputs.old != steps.v.outputs.new
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NEW: ${{ steps.v.outputs.new }}
+        run: |
+          tag="v$NEW"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          if git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null 2>&1; then
+            echo "::notice::$tag already exists on origin — nothing to do."
+            echo "tagged=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          gh api "repos/${GITHUB_REPOSITORY}/git/refs" \
+            -f ref="refs/tags/$tag" \
+            -f sha="$GITHUB_SHA" >/dev/null
+          echo "tagged=true" >> "$GITHUB_OUTPUT"
+          echo "::notice::Tagged $GITHUB_SHA as $tag"
+
+      - name: Report no-op
+        if: steps.v.outputs.old == steps.v.outputs.new
+        run: echo "::notice::pyproject.toml changed but version is still ${{ steps.v.outputs.new }} — no tag."
+
+  # A tag pushed with GITHUB_TOKEN does not fire release.yml's `push: tags`
+  # trigger, so call it explicitly rather than depending on that.
+  release:
+    needs: tag
+    if: needs.tag.outputs.tagged == 'true'
+    uses: ./.github/workflows/release.yml
+    with:
+      tag: ${{ needs.tag.outputs.tag }}
+    permissions:
+      contents: write

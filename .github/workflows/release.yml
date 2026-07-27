@@ -3,6 +3,24 @@ name: Release
 on:
   push:
     tags: ["v*"]
+  # Manual re-run for an existing tag: re-derives the notes from CHANGELOG.md
+  # and updates the release in place. Useful for fixing notes after a typo,
+  # and for exercising this workflow without cutting a throwaway tag.
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to (re)publish, e.g. v0.4.1"
+        required: true
+        type: string
+  # Called by tag-on-version-bump.yml. A tag pushed with GITHUB_TOKEN does not
+  # trigger workflows, so that job invokes this one directly instead of
+  # relying on its own tag push to fire the `push: tags` trigger above.
+  workflow_call:
+    inputs:
+      tag:
+        description: "Tag to publish"
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -12,8 +30,16 @@ jobs:
     name: Publish GitHub Release
     runs-on: ubuntu-latest
 
+    env:
+      TAG: ${{ inputs.tag || github.ref_name }}
+
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Check out the tagged commit, not the default branch, so the tests
+          # and version check run against what the release actually contains.
+          # On a tag push this is the tag; on manual dispatch, the input.
+          ref: ${{ inputs.tag || github.ref_name }}
 
       - name: Install uv
         uses: astral-sh/setup-uv@v5
@@ -36,19 +62,19 @@ jobs:
       # advertise a version the package does not report.
       - name: Check tag matches pyproject version
         run: |
-          tag="${GITHUB_REF_NAME#v}"
+          tag="${TAG#v}"
           proj="$(uv run python -c 'import tomllib,pathlib;print(tomllib.loads(pathlib.Path("pyproject.toml").read_text())["project"]["version"])')"
           if [ "$tag" != "$proj" ]; then
-            echo "::error::tag $GITHUB_REF_NAME implies version $tag but pyproject.toml declares $proj"
+            echo "::error::tag $TAG implies version $tag but pyproject.toml declares $proj"
             exit 1
           fi
-          echo "version $proj matches tag $GITHUB_REF_NAME"
+          echo "version $proj matches tag $TAG"
 
       # Notes come verbatim from CHANGELOG.md so the release page and the
       # changelog cannot drift apart.
       - name: Extract release notes from CHANGELOG
         run: |
-          version="${GITHUB_REF_NAME#v}"
+          version="${TAG#v}"
           awk -v want="$version" '
             /^## \[/ {
               if (found) exit
@@ -74,12 +100,12 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
-            echo "Release $GITHUB_REF_NAME exists — updating notes."
-            gh release edit "$GITHUB_REF_NAME" --notes-file release-notes.md
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG exists — updating notes."
+            gh release edit "$TAG" --notes-file release-notes.md
           else
-            gh release create "$GITHUB_REF_NAME" \
-              --title "$GITHUB_REF_NAME" \
+            gh release create "$TAG" \
+              --title "$TAG" \
               --notes-file release-notes.md \
               --latest
           fi
