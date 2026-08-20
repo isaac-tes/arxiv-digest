@@ -105,6 +105,30 @@ def zotero_available(timeout: float = 1.0) -> bool:
         return False
 
 
+def list_collections(timeout: float = 10.0) -> list[Dict]:
+    """Return the user's Zotero collections as ``[{key, name}]`` (read-only).
+
+    Returns an empty list if the local API is unreachable or returns no data.
+    """
+    try:
+        resp = requests.get(
+            f"{ZOTERO_LOCAL_BASE}/users/0/collections",
+            headers={"Zotero-API-Version": ZOTERO_API_VERSION},
+            timeout=timeout,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+    except (requests.RequestException, ValueError):
+        return []
+    out = []
+    for c in data or []:
+        key = c.get("key")
+        name = (c.get("data") or {}).get("name", "")
+        if key:
+            out.append({"key": key, "name": name})
+    return out
+
+
 def _zotero_server_id(timeout: float = 2.0) -> Optional[str]:
     """Return the Zotero-Server-ID header, or None if absent.
 
@@ -258,9 +282,10 @@ def build_preprint_item(entry: ET.Element, version: Optional[str] = None) -> Dic
     return item
 
 
-def save_to_zotero(arxiv_id: str) -> Dict:
+def save_to_zotero(arxiv_id: str, collection_key: Optional[str] = None) -> Dict:
     """Fetch an arXiv paper and save it to the local Zotero library.
 
+    If ``collection_key`` is given, the item is added to that collection.
     Returns a dict with ``ok`` (bool) and either ``item_key`` or ``error``.
     Raises on network/API failures so the caller can surface a message.
     """
@@ -278,6 +303,8 @@ def save_to_zotero(arxiv_id: str) -> Dict:
         version = vm.group(1)
 
     item = build_preprint_item(entry, version=version)
+    if collection_key:
+        item["collections"] = [collection_key]
 
     # Zotero < 10 exposes a read-only local API — writes are unsupported.
     server_id = _zotero_server_id()
