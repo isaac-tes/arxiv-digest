@@ -8,6 +8,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Zotero bridge** (`zotero_bridge.py`): save papers straight into your local
+  Zotero library via Zotero's local HTTP API — the same mechanism the official
+  Zotero Connector uses, with no API-key setup. A **Save to Zotero** button sits
+  next to each paper's score (and in the Score-a-paper tab). It fetches the paper
+  from the arXiv export API and writes a `preprint` item replicating the
+  connector's fields, category tags, and PDF/Snapshot attachments, plus an
+  `arxiv-digest` source tag. The sidebar shows a **Zotero: connected / not
+  running** status pill; the first write triggers Zotero's native authorization
+  dialog. See `docs/adr/0001-zotero-local-api-bridge.md`.
+- **Score a paper tab**: paste an arXiv link or ID to see how it would score
+  under your current config, a full per-aspect breakdown, and *why* it did (or
+  didn't) appear in the digest — distinguishing "fetched but below top-N" from
+  "never fetched (outside feeds/timeframe)".
+- **Per-aspect highlight colors**: keywords, low-priority, authors, and subjects
+  each get a configurable color via sidebar color pickers (defaults preserve the
+  original palette). Subjects are now highlighted on a new **Subjects** line on
+  each paper card. Colors persist in profiles and the project config
+  (`color_keyword` / `color_low_priority` / `color_author` / `color_subject`).
+- **Per-aspect font-color toggles**: each aspect also has a **"Font: …"** toggle
+  to tint the matched text's font with the aspect color (default off for
+  keywords/low-priority/subjects, on for authors — preserving prior behavior).
+  Persisted as `color_font_keyword` / `color_font_low_priority` /
+  `color_font_author` / `color_font_subject`.
+
+### Changed
+- **Zotero bridge now detects read-only Zotero**: Zotero versions before 10
+  expose a read-only local API (writes return `400 Endpoint does not support
+  method`). The bridge detects this via the missing `Zotero-Server-ID` header and
+  explains that Zotero 10+ is required, instead of surfacing the cryptic 400. On
+  Zotero 10+ it runs the local write-authorization flow (`POST /api/local/
+  authorize`) to obtain a key.
+- **Subjects line moved**: the highlighted **Subjects** line now sits on the same
+  meta row as the **arXiv ↗** link (below the summary), not above the abstract
+  summary.
+- **Deterministic absence reason**: the Score-a-paper tab now fetches the paper's
+  actual submission date and categories and compares them against the days
+  present in the fetched feed and the subscribed feeds, giving a precise reason
+  (e.g. "submitted on 2026-08-17, but the fetched feed only covers 2026-08-18…")
+  instead of a vague "likely outside the timeframe".
 - **Release automation** (`.github/workflows/release.yml`): pushing a `v*` tag runs the test suite, checks the tag matches `pyproject.toml`'s version, extracts this file's matching section as the release notes, and publishes the GitHub Release. The job fails rather than releasing if the tests fail, the versions disagree, or no changelog section exists for the tag.
 
 ### Changed

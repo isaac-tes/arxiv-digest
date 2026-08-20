@@ -18,11 +18,11 @@ def test_gui_initial_render_has_no_exceptions():
     assert not list(at.exception), f"Unexpected exception(s): {list(at.exception)}"
 
 
-def test_gui_has_seven_tabs():
+def test_gui_has_eight_tabs():
     from streamlit.testing.v1 import AppTest
 
     at = AppTest.from_file("arxiv_gui.py").run(timeout=15)
-    assert len(at.tabs) == 7
+    assert len(at.tabs) == 8
 
 
 def test_gui_sidebar_has_fetch_button():
@@ -51,9 +51,12 @@ def test_highlight_terms_wraps_keyword_and_low_priority():
     out = arxiv_gui._highlight_terms(
         "A topological film study", ["topological"], ["film"], 6, -5
     )
-    assert "hl-kw" in out and "core keyword (+6)" in out
-    assert "hl-lp" in out and "low-priority term (-5)" in out
+    assert "hl-term" in out and "core keyword (+6)" in out
+    assert "hl-term" in out and "low-priority term (-5)" in out
     assert "topological" in out and "film" in out
+    # keyword and low-priority use their per-aspect colors inline
+    assert "#388bfd" in out  # keyword color
+    assert "#f85149" in out  # low-priority color
 
 
 def test_highlight_terms_no_match_is_plain_escaped():
@@ -66,7 +69,7 @@ def test_highlight_terms_case_insensitive_and_escapes():
     import arxiv_gui
 
     out = arxiv_gui._highlight_terms("Bloch & TOPOLOGY", ["topology"], [], 6, -5)
-    assert "hl-kw" in out
+    assert "hl-term" in out
     assert "&amp;" in out  # escaped ampersand
 
 
@@ -84,6 +87,131 @@ def test_authors_html_escapes_and_handles_empty():
     assert arxiv_gui._authors_html("", [], 6) == "(No authors listed)"
     out = arxiv_gui._authors_html("A <b>x</b>, B", [], 6)
     assert "&lt;b&gt;" in out  # escaped
+
+
+def test_highlight_subjects_wraps_matched_feed_names():
+    import arxiv_gui
+
+    out = arxiv_gui._highlight_subjects(
+        "cond-mat.quant-gas (Quantum Gases); quant-ph (Quantum Physics)",
+        {"cond-mat.quant-gas": 4, "quant-ph": 2},
+    )
+    assert "hl-subject" in out
+    assert "subject bonus (+4)" in out
+    assert "subject bonus (+2)" in out
+    assert "Quantum Gases" in out
+
+
+def test_highlight_subjects_no_match_is_plain():
+    import arxiv_gui
+
+    out = arxiv_gui._highlight_subjects("Mathematics", {"quant-ph": 2})
+    assert "hl-subject" not in out
+    assert out == "Mathematics"
+
+
+def test_highlight_subjects_empty():
+    import arxiv_gui
+
+    assert arxiv_gui._highlight_subjects("", {"quant-ph": 2}) == ""
+
+
+def test_highlight_terms_uses_custom_colors():
+    import arxiv_gui
+
+    out = arxiv_gui._highlight_terms(
+        "topological film", ["topological"], ["film"], 6, -5,
+        color_kw="#111111", color_lp="#222222",
+    )
+    assert "#111111" in out
+    assert "#222222" in out
+
+
+def test_authors_html_uses_custom_color():
+    import arxiv_gui
+
+    out = arxiv_gui._authors_html("Immanuel Bloch", ["bloch"], 6, color="#abcdef")
+    assert "#abcdef" in out
+
+
+def test_highlight_terms_font_color_when_enabled():
+    import arxiv_gui
+
+    out = arxiv_gui._highlight_terms(
+        "topological", ["topological"], [], 6, -5, color_kw="#111111", font_kw=True
+    )
+    assert ";color:#111111" in out
+
+
+def test_highlight_terms_no_font_color_by_default():
+    import arxiv_gui
+
+    out = arxiv_gui._highlight_terms(
+        "topological", ["topological"], [], 6, -5, color_kw="#111111"
+    )
+    assert ";color:#111111" not in out
+
+
+def test_authors_html_font_off_removes_color():
+    import arxiv_gui
+
+    out = arxiv_gui._authors_html("Immanuel Bloch", ["bloch"], 6, color="#abcdef", font=False)
+    assert ";color:#abcdef" not in out
+
+
+def test_highlight_subjects_font_color_when_enabled():
+    import arxiv_gui
+
+    out = arxiv_gui._highlight_subjects(
+        "quant-ph (Quantum Physics)", {"quant-ph": 2}, color="#a371f7", font=True
+    )
+    assert ";color:#a371f7" in out
+
+
+def test_absence_reason_deterministic_date_and_category(monkeypatch):
+    import xml.etree.ElementTree as ET
+
+    import arxiv_digest as ad
+    import arxiv_gui
+    import zotero_bridge as zb
+
+    atom = """<?xml version="1.0"?>
+    <feed xmlns="http://www.w3.org/2005/Atom">
+      <entry>
+        <id>http://arxiv.org/abs/2608.16520</id>
+        <published>2026-08-17T13:03:36Z</published>
+        <title>Test</title>
+        <summary>Abstract</summary>
+        <category term="cond-mat.str-el"/>
+        <category term="quant-ph"/>
+      </entry>
+    </feed>"""
+    entry = ET.fromstring(atom).find("{http://www.w3.org/2005/Atom}entry")
+    monkeypatch.setattr(zb, "fetch_arxiv_atom", lambda _id: entry)
+
+    fetched = [
+        {"id": "x1", "section": "Mon, 18 Aug 2026 (showing 88 of 88 entries )"},
+        {"id": "x2", "section": "Tue, 19 Aug 2026 (showing 88 of 88 entries )"},
+    ]
+    cfg = ad.Config.load(None)
+    cfg.feeds = {"cond-mat.quant-gas": "x", "quant-ph": "x"}
+
+    out = arxiv_gui._absence_reason("2608.16520", fetched, cfg)
+    assert "2026-08-17" in out
+    assert "2026-08-18" in out
+    assert "overlap your subscribed feeds" in out
+
+
+def test_absence_reason_fetched_but_below_topn():
+    import arxiv_digest as ad
+    import arxiv_gui
+
+    fetched = [{"id": "2608.16520", "section": "Mon, 18 Aug 2026"}]
+    cfg = ad.Config.load(None)
+    cfg.top_n = 5
+    out = arxiv_gui._absence_reason("2608.16520", fetched, cfg)
+    assert "**was** fetched" in out
+    assert "top-5" in out
 
 
 def test_scoring_tab_has_per_feed_weight_field():
@@ -261,7 +389,7 @@ def test_highlight_terms_word_boundary_no_substring_bleed():
     out = arxiv_gui._highlight_terms("temporal composition", ["mpo"], [], 6, -5)
     assert "hl-term" not in out  # 'mpo' must NOT highlight inside 'teMPOral'
     hit = arxiv_gui._highlight_terms("an mpo ansatz", ["mpo"], [], 6, -5)
-    assert "hl-kw" in hit
+    assert "hl-term" in hit
 
 
 def test_highlight_terms_substring_mode_when_boundary_off():
@@ -270,7 +398,7 @@ def test_highlight_terms_substring_mode_when_boundary_off():
     out = arxiv_gui._highlight_terms(
         "temporal", ["mpo"], [], 6, -5, word_boundary=False
     )
-    assert "hl-kw" in out
+    assert "hl-term" in out
 
 
 def test_authors_html_word_boundary_no_substring_bleed():
