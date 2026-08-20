@@ -142,6 +142,55 @@ def test_zotero_write_supported_false_without_server_id(monkeypatch):
     assert zb.zotero_write_supported() is False
 
 
+def test_list_collections_parses_keys_and_names(monkeypatch):
+    def _get(url, *args, **kwargs):
+        return _MockResponse(
+            text="",
+            status_code=200,
+            json_data=[
+                {"key": "AAAA1111", "data": {"name": "To Read"}},
+                {"key": "BBBB2222", "data": {"name": "Anyon Papers"}},
+            ],
+        )
+
+    monkeypatch.setattr(zb.requests, "get", _get)
+    cols = zb.list_collections()
+    assert cols == [
+        {"key": "AAAA1111", "name": "To Read"},
+        {"key": "BBBB2222", "name": "Anyon Papers"},
+    ]
+
+
+def test_list_collections_empty_on_error(monkeypatch):
+    def _get(url, *args, **kwargs):
+        raise zb.requests.ConnectionError("refused")
+
+    monkeypatch.setattr(zb.requests, "get", _get)
+    assert zb.list_collections() == []
+
+
+def test_save_to_zotero_with_collection_key(monkeypatch):
+    calls = {}
+
+    def _get(url, *args, **kwargs):
+        if "export.arxiv.org" in url:
+            return _MockResponse(content=SAMPLE_ATOM.encode("utf-8"))
+        return _MockResponse(text="", status_code=200, headers={"Zotero-Server-ID": "srv123"})
+
+    def _post(url, *args, **kwargs):
+        calls["data"] = kwargs.get("data")
+        if url.endswith("/local/authorize"):
+            return _MockResponse(text="", status_code=200, json_data={"key": "localkey123"})
+        return _MockResponse(text="[]", status_code=201, json_data=[{"key": "ABCD1234"}])
+
+    monkeypatch.setattr(zb.requests, "get", _get)
+    monkeypatch.setattr(zb.requests, "post", _post)
+
+    result = zb.save_to_zotero("1810.04805", collection_key="AAAA1111")
+    assert result["ok"] is True
+    assert '"collections": ["AAAA1111"]' in calls["data"]
+
+
 def test_save_to_zotero_success(monkeypatch):
     calls = {}
 

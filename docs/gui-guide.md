@@ -90,19 +90,34 @@ write the project config.
 The GUI can save papers straight into your **local Zotero library** — the same
 mechanism the official Zotero Connector uses. No API key setup is needed.
 
-- **Save to Zotero** button next to each paper's score, and in the **Score a
+- **Save to Zotero** popover next to each paper's score, and in the **Score a
   paper** tab. It fetches the paper from the arXiv export API and writes a
   `preprint` item with the same fields, category tags, and PDF/Snapshot
   attachments the Zotero Connector would produce, plus an `arxiv-digest` source
   tag.
-- **Requirements**: the Zotero desktop app must be running, with the local API
-  enabled (Zotero → Settings → Advanced → *Allow other applications on this
-  computer to communicate with Zotero*). The sidebar shows a **Zotero:
-  connected / not running** status pill.
-- **Zotero 10+ required for saving**: Zotero versions before 10 expose a
-  read-only local API, so saving is unavailable and the button explains this.
-  On Zotero 10+, the first write pops an *Allow this application to modify your
-  library?* dialog — click **Allow** once, then save again.
+- **Choose a collection**: the popover lists your Zotero collections (plus
+  **My Library**); pick one and the paper is saved there.
+- **Confirmation**: a toast shows *"Saved to Zotero: …"* and auto-dismisses
+  after 10 seconds. Each paper saves at most once per session (the button shows
+  **Saved ✓** afterwards) to avoid accidental duplicates.
+
+### Enabling saving to Zotero
+
+Saving uses Zotero's **local HTTP API**, which must be switched on:
+
+1. **Install/run Zotero 10 or newer** — older versions expose a read-only local
+   API and cannot save (the button explains this).
+2. Open Zotero → **Settings** (macOS: *Preferences*) → **Advanced** tab.
+3. Tick **"Allow other applications on this computer to communicate with
+   Zotero"**.
+4. Restart Zotero if prompted. The GUI sidebar should now show **Zotero:
+   connected**.
+5. On the **first save**, Zotero pops an *"Allow this application to modify your
+   library?"* dialog — click **Allow** (or **Always Allow**) once, then save
+   again.
+
+The sidebar shows a **Zotero: connected / not running** status pill so you can
+tell at a glance whether saving is available.
 
 ## Score a paper
 
