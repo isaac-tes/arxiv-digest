@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import html
 import json
+import re
 from dataclasses import asdict, fields
 from datetime import datetime
 from pathlib import Path
@@ -19,6 +20,7 @@ import pandas as pd
 import streamlit as st
 
 import arxiv_digest as ad
+import zotero_bridge as zb
 
 PROFILES_DIR = Path.home() / ".arxiv_scraper" / "profiles"
 PROJECT_CONFIG = ad.DEFAULT_CONFIG_PATH
@@ -44,6 +46,44 @@ def load_profile(name: str) -> ad.Config:
 
 def delete_profile(name: str) -> None:
     (PROFILES_DIR / f"{name}.json").unlink(missing_ok=True)
+
+
+# ────────────────────────── Zotero bridge ──────────────────────────
+
+@st.cache_data(ttl=10, show_spinner=False)
+def _zotero_available_cached() -> bool:
+    """Cached reachability check for the Zotero local API (short TTL)."""
+    return zb.zotero_available()
+
+
+def render_zotero_status_pill() -> None:
+    """Sidebar status indicator: connected vs not running."""
+    ok = _zotero_available_cached()
+    if ok:
+        st.sidebar.markdown(
+            '<span style="color:#3fb950;">● Zotero: connected</span>',
+            unsafe_allow_html=True,
+        )
+    else:
+        st.sidebar.markdown(
+            '<span style="color:#f85149;">● Zotero: not running</span>',
+            unsafe_allow_html=True,
+        )
+
+
+def _render_zotero_save_button(arxiv_id: str, title: str) -> None:
+    """A 'Save to Zotero' button next to a paper, like the Zotero Connector."""
+    key = f"zotero_save_{arxiv_id}"
+    if st.button("Save to Zotero", key=key, width="stretch"):
+        try:
+            result = zb.save_to_zotero(arxiv_id)
+        except Exception as exc:  # noqa: BLE001 - surface any bridge failure
+            st.error(f"Zotero save failed: {exc}")
+            return
+        if result.get("ok"):
+            st.success(f"Saved to Zotero: {title}")
+        else:
+            st.error(result.get("error", "Zotero save failed."))
 
 
 # ────────────────────────── Fetching with cache ──────────────────────────
@@ -195,6 +235,45 @@ def render_sidebar():
             help="Light highlight of matched keywords / low-priority terms in full abstracts.",
         )
 
+        st.caption("Highlight colors (per aspect)")
+        cfg().color_keyword = st.color_picker(
+            "Keywords", value=cfg().color_keyword, key="color_keyword"
+        )
+        cfg().color_low_priority = st.color_picker(
+            "Low priority", value=cfg().color_low_priority, key="color_low_priority"
+        )
+        cfg().color_author = st.color_picker(
+            "Authors", value=cfg().color_author, key="color_author"
+        )
+        cfg().color_subject = st.color_picker(
+            "Subjects", value=cfg().color_subject, key="color_subject"
+        )
+        st.caption("Also tint the font with the aspect color:")
+        cfg().color_font_keyword = st.checkbox(
+            "Font: keywords", value=cfg().color_font_keyword, key="color_font_keyword"
+        )
+        cfg().color_font_low_priority = st.checkbox(
+            "Font: low priority", value=cfg().color_font_low_priority, key="color_font_low_priority"
+        )
+        cfg().color_font_author = st.checkbox(
+            "Font: authors", value=cfg().color_font_author, key="color_font_author"
+        )
+        cfg().color_font_subject = st.checkbox(
+            "Font: subjects", value=cfg().color_font_subject, key="color_font_subject"
+        )
+        st.caption(
+            "Colors apply live in this session and persist when you save a "
+            "profile or write the project config."
+        )
+
+        st.divider()
+        st.subheader("Zotero")
+        render_zotero_status_pill()
+        st.caption(
+            "Save papers to your Zotero library via the local API. Requires the "
+            "Zotero desktop app to be running."
+        )
+
 
 # ────────────────────────── Tab: Papers ──────────────────────────
 
@@ -202,11 +281,14 @@ _PAPER_CSS = """
 <style>
 .paper-title { font-size: 1.35rem; font-weight: 700; line-height: 1.3; margin: 0 0 .15rem 0; }
 .paper-authors { font-size: 1.02rem; color: #e6edf3; margin: 0 0 .25rem 0; }
+.paper-meta { font-size: .9rem; color: #8b949e; margin: .25rem 0 0 0; }
+.paper-meta a { color: #58a6ff; text-decoration: none; }
+.paper-meta a:hover { text-decoration: underline; }
 .paper-authors .hl-author {
-  color: #3fb950; font-weight: 700; border-bottom: 1px dotted #3fb950;
-  cursor: help; padding: 0 1px; border-radius: 3px; transition: background .12s;
+  font-weight: 700; border-bottom: 1px dotted; cursor: help; padding: 0 1px;
+  border-radius: 3px; transition: background .12s;
 }
-.paper-authors .hl-author:hover { background: rgba(63,185,80,.22); }
+.paper-authors .hl-author:hover { background: rgba(127,127,127,.18); }
 /* CSS tooltip — Streamlit strips the `title` attribute, so we roll our own. */
 .tip { position: relative; border-bottom: 1px dotted #8b949e; cursor: help; }
 .tip .tip-text {
@@ -218,9 +300,11 @@ _PAPER_CSS = """
   white-space: normal;
 }
 .tip:hover .tip-text { visibility: visible; opacity: 1; }
-/* Light hover-highlight for matched keywords / low-priority terms (subtler than authors). */
+/* Light hover-highlight for matched keywords / low-priority terms (subtler than authors).
+   Colors are applied inline per-aspect from the config; only structure lives here. */
 .hl-term { position: relative; cursor: help; border-radius: 3px; padding: 0 1px;
   border-bottom: 1px dotted transparent; transition: background .12s; }
+.hl-term:hover { background: rgba(127,127,127,.18); }
 .hl-term .hl-tip {
   visibility: hidden; opacity: 0; transition: opacity .12s;
   position: absolute; z-index: 1000; bottom: 145%; left: 0;
@@ -230,10 +314,19 @@ _PAPER_CSS = """
   white-space: normal;
 }
 .hl-term:hover .hl-tip { visibility: visible; opacity: 1; }
-.hl-kw { background: rgba(56,139,253,.10); border-bottom-color: rgba(88,166,255,.5); }
-.hl-kw:hover { background: rgba(56,139,253,.24); }
-.hl-lp { background: rgba(248,81,73,.10); border-bottom-color: rgba(248,81,73,.5); }
-.hl-lp:hover { background: rgba(248,81,73,.24); }
+/* Subject highlight (feed-name matches) — color applied inline. */
+.hl-subject { position: relative; cursor: help; border-radius: 3px; padding: 0 1px;
+  border-bottom: 1px dotted transparent; transition: background .12s; }
+.hl-subject:hover { background: rgba(127,127,127,.18); }
+.hl-subject .hl-tip {
+  visibility: hidden; opacity: 0; transition: opacity .12s;
+  position: absolute; z-index: 1000; bottom: 145%; left: 0;
+  background: #1f2630; color: #e6edf3; padding: 4px 7px; border-radius: 6px;
+  width: max-content; max-width: 260px; font-size: .75rem; font-weight: 400;
+  line-height: 1.3; border: 1px solid #30363d; box-shadow: 0 4px 12px rgba(0,0,0,.45);
+  white-space: normal;
+}
+.hl-subject:hover .hl-tip { visibility: visible; opacity: 1; }
 </style>
 """
 
@@ -245,12 +338,17 @@ def _highlight_terms(
     kw_bonus: int,
     lp_penalty: int,
     word_boundary: bool = True,
+    color_kw: str = "#388bfd",
+    color_lp: str = "#f85149",
+    font_kw: bool = False,
+    font_lp: bool = False,
 ) -> str:
     """HTML-escape `text` and wrap matched keyword / low-priority spans.
 
-    Keywords get the teal `.hl-kw` style, low-priority the red `.hl-lp` style,
-    each with a hover tooltip showing its weight. Overlapping matches are
-    resolved earliest-start, longest-first. Matching mirrors the scorer
+    Keywords use `color_kw`, low-priority `color_lp`, each with a hover tooltip
+    showing its weight. When `font_kw` / `font_lp` is True, the matched text's
+    font is also tinted with the aspect color. Overlapping matches are resolved
+    earliest-start, longest-first. Matching mirrors the scorer
     (`ad.term_pattern`), so highlights and score stay in sync.
     """
     spans: list[tuple[int, int, str]] = []
@@ -279,34 +377,115 @@ def _highlight_terms(
         frag = html.escape(text[start:end])
         if kind == "kw":
             tip = f"core keyword (+{kw_bonus})"
-            cls = "hl-term hl-kw"
+            color = color_kw
+            font = font_kw
         else:
             tip = f"low-priority term ({lp_penalty})"
-            cls = "hl-term hl-lp"
-        out.append(f'<span class="{cls}">{frag}<span class="hl-tip">{tip}</span></span>')
+            color = color_lp
+            font = font_lp
+        style = f"background:{_rgba(color, .10)};border-bottom-color:{color};"
+        if font:
+            style += f"color:{color};"
+        out.append(
+            f'<span class="hl-term" style="{style}">{frag}'
+            f'<span class="hl-tip">{tip}</span></span>'
+        )
         i = end
     out.append(html.escape(text[i:]))
     return "".join(out)
 
 
-def _authors_html(authors: str, named: list[str], bonus: int, word_boundary: bool = True) -> str:
+def _rgba(hex_color: str, alpha: float) -> str:
+    """Convert a `#rrggbb` hex color to an `rgba(r,g,b,a)` string."""
+    h = hex_color.lstrip("#")
+    if len(h) != 6:
+        return hex_color
+    r, g, b = (int(h[i : i + 2], 16) for i in (0, 2, 4))
+    return f"rgba({r},{g},{b},{alpha})"
+
+
+def _authors_html(
+    authors: str,
+    named: list[str],
+    bonus: int,
+    word_boundary: bool = True,
+    color: str = "#3fb950",
+    font: bool = True,
+) -> str:
     """Render the author line, highlighting authors present in `named`.
 
     Matching mirrors the scorer so a named author 'ma' no longer lights up
-    'Mao' and 'bloch' no longer lights up 'Blochwitz'.
+    'Mao' and 'bloch' no longer lights up 'Blochwitz'. The author font is
+    tinted with `color` when `font` is True (the default, matching the original
+    behavior).
     """
     parts = [a.strip() for a in authors.split(",") if a.strip()]
     out = []
     for a in parts:
         esc = html.escape(a)
         if any(ad.term_matches(n, a, word_boundary=word_boundary) for n in named):
+            style = f"border-bottom-color:{color};"
+            if font:
+                style += f"color:{color};"
             out.append(
-                f'<span class="hl-author" title="Highlighted author '
+                f'<span class="hl-author" style="{style}" title="Highlighted author '
                 f'(+{bonus} to score)">{esc}</span>'
             )
         else:
             out.append(esc)
     return ", ".join(out) or "(No authors listed)"
+
+
+def _highlight_subjects(
+    subjects: str, feed_weights: dict, color: str = "#a371f7", font: bool = False
+) -> str:
+    """Render the subjects line, highlighting feed names that carry a bonus.
+
+    Matching mirrors the scorer: each feed name whose (lowercased) name appears
+    in the subjects string is highlighted with the subject aspect color and a
+    tooltip showing its bonus. When `font` is True, the matched text's font is
+    also tinted with the aspect color.
+    """
+    if not subjects:
+        return html.escape(subjects)
+    spans: list[tuple[int, int, str]] = []
+    for name, w in (feed_weights or {}).items():
+        if not w:
+            continue
+        low = name.lower()
+        start = 0
+        while True:
+            idx = subjects.lower().find(low, start)
+            if idx == -1:
+                break
+            spans.append((idx, idx + len(name), name, w))
+            start = idx + len(name)
+    if not spans:
+        return html.escape(subjects)
+
+    spans.sort(key=lambda s: (s[0], -(s[1] - s[0])))
+    chosen: list[tuple[int, int, str, int]] = []
+    last_end = -1
+    for s in spans:
+        if s[0] >= last_end:
+            chosen.append(s)
+            last_end = s[1]
+
+    out: list[str] = []
+    i = 0
+    for start, end, name, w in chosen:
+        out.append(html.escape(subjects[i:start]))
+        frag = html.escape(subjects[start:end])
+        style = f"background:{_rgba(color, .10)};border-bottom-color:{color};"
+        if font:
+            style += f"color:{color};"
+        out.append(
+            f'<span class="hl-subject" style="{style}">{frag}'
+            f'<span class="hl-tip">subject bonus (+{w})</span></span>'
+        )
+        i = end
+    out.append(html.escape(subjects[i:]))
+    return "".join(out)
 
 
 def _render_breakdown(breakdown: dict):
@@ -426,6 +605,8 @@ def render_papers_tab():
                     title_html = _highlight_terms(
                         e["title"], cfg().core_keywords, cfg().low_priority_kw, kw_bonus, lp_pen,
                         word_boundary=cfg().word_boundary_matching,
+                        color_kw=cfg().color_keyword, color_lp=cfg().color_low_priority,
+                        font_kw=cfg().color_font_keyword, font_lp=cfg().color_font_low_priority,
                     )
                 else:
                     title_html = html.escape(e["title"])
@@ -437,6 +618,7 @@ def render_papers_tab():
                     authors_html = _authors_html(
                         e["authors"], cfg().named_authors, cfg().weights.named_author,
                         word_boundary=cfg().word_boundary_matching,
+                        color=cfg().color_author, font=cfg().color_font_author,
                     )
                 else:
                     authors_html = html.escape(e["authors"]) or "(No authors listed)"
@@ -447,10 +629,23 @@ def render_papers_tab():
                 if e["section"]:
                     st.caption(f"Section: {e['section']}")
                 st.write(e["summary"])
-                if e["link"]:
-                    st.markdown(f"[arXiv ↗]({e['link']})")
+                if e["subjects"] or e["link"]:
+                    meta_parts = []
+                    if e["subjects"]:
+                        subjects_html = _highlight_subjects(
+                            e["subjects"], cfg().feed_weights, color=cfg().color_subject,
+                            font=cfg().color_font_subject,
+                        )
+                        meta_parts.append(f'<span class="paper-subjects">Subjects: {subjects_html}</span>')
+                    if e["link"]:
+                        meta_parts.append(f'<a href="{e["link"]}" target="_blank">arXiv ↗</a>')
+                    st.markdown(
+                        '<div class="paper-meta">' + " &nbsp;·&nbsp; ".join(meta_parts) + "</div>",
+                        unsafe_allow_html=True,
+                    )
             with score_col:
                 st.metric("Score", e["score"])
+                _render_zotero_save_button(e["id"], e["title"])
 
             with st.expander("Why this score?"):
                 full_paper = paper_by_id.get(e["id"], {})
@@ -461,7 +656,7 @@ def render_papers_tab():
                 if cfg().highlight_terms_abstract and abstract != "(unavailable)":
                     st.markdown(
                         f'<div class="paper-abstract">'
-                        f'{_highlight_terms(abstract, cfg().core_keywords, cfg().low_priority_kw, cfg().weights.core_keyword, cfg().weights.low_priority_penalty, word_boundary=cfg().word_boundary_matching)}'
+                        f'{_highlight_terms(abstract, cfg().core_keywords, cfg().low_priority_kw, cfg().weights.core_keyword, cfg().weights.low_priority_penalty, word_boundary=cfg().word_boundary_matching, color_kw=cfg().color_keyword, color_lp=cfg().color_low_priority, font_kw=cfg().color_font_keyword, font_lp=cfg().color_font_low_priority)}'
                         f'</div>',
                         unsafe_allow_html=True,
                     )
@@ -697,6 +892,175 @@ def render_profiles_tab():
             st.error(f"Failed to parse JSON: {exc}")
 
 
+# ────────────────────────── Tab: Score a paper ──────────────────────────
+
+def _paper_from_atom(entry) -> dict:
+    """Build a paper dict (compatible with `explain_score`) from an arXiv Atom entry."""
+    _ATOM = "{http://www.w3.org/2005/Atom}"
+
+    def text(tag: str) -> str:
+        node = entry.find(f"{_ATOM}{tag}")
+        return (node.text or "").strip() if node is not None and node.text else ""
+
+    authors = ", ".join(
+        (a.find(f"{_ATOM}name").text or "").strip()
+        for a in entry.findall(f"{_ATOM}author")
+        if a.find(f"{_ATOM}name") is not None and a.find(f"{_ATOM}name").text
+    )
+    subjects = ", ".join(
+        c.get("term") for c in entry.findall(f"{_ATOM}category") if c.get("term")
+    )
+    versioned_url = text("id")
+    arxiv_url = re.sub(r"v\d+$", "", versioned_url)
+    article_id = arxiv_url.rsplit("/abs/", 1)[-1] if "/abs/" in arxiv_url else ""
+    return {
+        "id": article_id,
+        "title": text("title"),
+        "authors": authors,
+        "abstract": text("summary"),
+        "subjects": subjects,
+        "link": arxiv_url,
+        "section": "",
+    }
+
+
+def _absence_reason(paper_id: str, fetched: list[dict], cfg: ad.Config) -> str:
+    """Explain deterministically why a paper is not in the current digest.
+
+    Distinguishes 'fetched but below top-N' from 'never fetched', and for the
+    latter checks the paper's actual submission date against the days present
+    in the fetched feed and its categories against the subscribed feeds.
+    """
+    fetched_ids = {p.get("id") for p in fetched}
+    if paper_id in fetched_ids:
+        # It was fetched; it must have ranked below top_n (or been filtered).
+        return (
+            f"This paper **was** fetched in the current digest but ranked below "
+            f"your top-{cfg.top_n} cutoff (or was filtered out by the "
+            f"replacement/day filters)."
+        )
+
+    # Not in the fetched set — fetch its metadata to reason deterministically.
+    entry = zb.fetch_arxiv_atom(paper_id)
+    if entry is None:
+        return "Could not fetch this paper's metadata from arXiv to compare feeds."
+    _ATOM = "{http://www.w3.org/2005/Atom}"
+    cats = [c.get("term") for c in entry.findall(f"{_ATOM}category") if c.get("term")]
+
+    # Paper's submission date (YYYY-MM-DD from the Atom <published>).
+    pub_node = entry.find(f"{_ATOM}published")
+    pub_date = None
+    if pub_node is not None and pub_node.text:
+        pub_date = pub_node.text.strip()[:10]
+
+    # Days actually present in the fetched feed.
+    day_labels = ad.available_day_labels(fetched)
+    day_dates = set()
+    for lbl in day_labels:
+        try:
+            day_dates.add(datetime.strptime(lbl, "%a, %d %b %Y").date().isoformat())
+        except ValueError:
+            pass
+
+    feed_names = [f.lower() for f in cfg.feeds]
+    matched = [c for c in cats if any(c.lower().startswith(f) for f in feed_names)]
+
+    reasons = []
+    if pub_date and day_dates:
+        if pub_date not in day_dates:
+            reasons.append(
+                f"it was submitted on **{pub_date}**, but the fetched feed only "
+                f"covers **{', '.join(sorted(day_dates))}**"
+            )
+        else:
+            reasons.append(
+                f"it was submitted on **{pub_date}**, which IS within the fetched "
+                f"days — so it was likely not yet listed in the feed pages when "
+                f"you fetched"
+            )
+    elif pub_date:
+        reasons.append(f"it was submitted on **{pub_date}**")
+
+    if matched:
+        reasons.append(
+            f"its categories (**{', '.join(matched)}**) overlap your subscribed feeds"
+        )
+    else:
+        reasons.append(
+            f"its categories (**{', '.join(cats) or 'unknown'}**) are **not among "
+            f"your subscribed feeds** ({', '.join(cfg.feeds) or 'none'})"
+        )
+
+    return (
+        "This paper was **not in the fetched set**. Deterministic check: "
+        + "; ".join(reasons)
+        + "."
+    )
+
+
+def render_score_tab():
+    st.subheader("Score a paper")
+    st.caption(
+        "Paste an arXiv link or ID to see how it would score under your current "
+        "config, and why it did (or didn't) appear in the digest."
+    )
+    raw = st.text_input(
+        "arXiv link or ID",
+        placeholder="https://arxiv.org/abs/2607.21663  or  2607.21663",
+    )
+    if not raw.strip():
+        return
+
+    paper_id = zb.arxiv_id_from_input(raw)
+    if not paper_id:
+        st.error("Could not parse an arXiv id from that input.")
+        return
+
+    if st.button("Score this paper", type="primary"):
+        try:
+            entry = zb.fetch_arxiv_atom(paper_id)
+        except Exception as exc:  # noqa: BLE001 - surface network failures
+            st.error(f"Failed to fetch paper: {exc}")
+            return
+        if entry is None:
+            st.error(f"No arXiv paper found for id '{paper_id}'.")
+            return
+
+        paper = _paper_from_atom(entry)
+        breakdown = ad.explain_score(paper, cfg())
+        st.markdown(f"### {paper['title']}")
+        st.write(paper["authors"])
+        if paper["subjects"]:
+            st.caption(f"Subjects: {paper['subjects']}")
+        st.metric("Score", breakdown["total"])
+        _render_breakdown(breakdown)
+
+        # Absence / presence explanation relative to the current digest.
+        fetched = st.session_state.papers
+        if fetched:
+            st.divider()
+            st.markdown("**Why it did / didn't appear in the digest**")
+            if paper_id in {p.get("id") for p in fetched}:
+                entries = ad.build_ranked_entries(fetched, cfg(), top_n=cfg().top_n)
+                rank = next(
+                    (e["rank"] for e in entries if e["id"] == paper_id), None
+                )
+                if rank is not None:
+                    st.success(
+                        f"This paper **is** in the current digest at rank **#{rank}** "
+                        f"with score **{breakdown['total']}**."
+                    )
+                else:
+                    st.info(_absence_reason(paper_id, fetched, cfg()))
+            else:
+                st.info(_absence_reason(paper_id, fetched, cfg()))
+        else:
+            st.caption("Fetch papers first to compare against the current digest.")
+
+        st.divider()
+        _render_zotero_save_button(paper_id, paper["title"])
+
+
 # ────────────────────────── Main ──────────────────────────
 
 def main():
@@ -704,11 +1068,13 @@ def main():
     init_state()
     render_sidebar()
 
-    tab_papers, tab_kw, tab_authors, tab_lp, tab_feeds, tab_scoring, tab_profiles = st.tabs(
-        ["Papers", "Keywords", "Authors", "Low priority", "Feeds", "Scoring", "Profiles"]
+    tab_papers, tab_score, tab_kw, tab_authors, tab_lp, tab_feeds, tab_scoring, tab_profiles = st.tabs(
+        ["Papers", "Score a paper", "Keywords", "Authors", "Low priority", "Feeds", "Scoring", "Profiles"]
     )
     with tab_papers:
         render_papers_tab()
+    with tab_score:
+        render_score_tab()
     with tab_kw:
         render_keywords_tab()
     with tab_authors:
