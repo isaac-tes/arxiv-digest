@@ -41,7 +41,8 @@ with **no re-fetch**.
 
 ## Tabs
 
-- **Papers** — ranked list, search box (filters by title / authors / abstract), MD + JSON download buttons. Per paper: rank, title, authors, section, summary, arXiv link, score badge, expandable score breakdown, expandable full abstract.
+- **Papers** — ranked list, search box (filters by title / authors / abstract), MD + JSON download buttons. Per paper: rank, title, authors, subjects, section, summary, arXiv link, score badge, a **Save to Zotero** button, expandable score breakdown, expandable full abstract.
+- **Score a paper** — paste an arXiv link or ID to see how it would score under your current config, why it did (or didn't) appear in the digest, and save it to Zotero.
 - **Keywords** — spreadsheet-style editor for `core_keywords`. Each match adds the *Per-keyword bonus* (default +6).
 - **Authors** — same pattern for `named_authors`. Default +6 per match. Case-insensitive substring match.
 - **Low priority** — penalty list. If *any* term matches, the paper takes the *Low-priority penalty* (default −5) — once, not per hit.
@@ -54,14 +55,71 @@ with **no re-fetch**.
 Matched terms are hover-highlighted in the Papers tab so you can see *why* a
 paper ranked at a glance:
 
-- **Authors** in your Authors list — green, bold.
-- **Core keywords** — light teal; **low-priority terms** — light red. Shown in
-  the title and the full abstract. Hover any highlight for a tooltip with its
-  score weight (e.g. `core keyword (+6)`, `low-priority term (−5)`).
+- **Authors** in your Authors list — bold, colored.
+- **Core keywords** — light highlight; **low-priority terms** — light highlight.
+  Shown in the title and the full abstract.
+- **Subjects** — feed names that carry a subject bonus are highlighted on the
+  paper's **Subjects** line.
+
+Hover any highlight for a tooltip with its score weight (e.g. `core keyword
+(+6)`, `low-priority term (−5)`, `subject bonus (+4)`).
 
 Three checkboxes in the sidebar **Display** section toggle each surface
 independently — author highlight, keywords in titles, keywords in abstracts.
 They are part of the config, so profiles and the project config remember them.
+
+### Highlight colors
+
+Each aspect has its own color, chosen with a **color picker** in the sidebar
+**Display** section:
+
+- **Keywords** (default blue `#388bfd`)
+- **Low priority** (default red `#f85149`)
+- **Authors** (default green `#3fb950`)
+- **Subjects** (default purple `#a371f7`)
+
+By default the highlight is a light background tint. For each aspect you can
+also tick **"Font: …"** to tint the matched text's font with the aspect color
+too (authors are font-tinted by default, matching the original behavior).
+
+Colors apply live in the current session and persist when you save a profile or
+write the project config.
+
+## Zotero bridge
+
+The GUI can save papers straight into your **local Zotero library** — the same
+mechanism the official Zotero Connector uses. No API key setup is needed.
+
+- **Save to Zotero** button next to each paper's score, and in the **Score a
+  paper** tab. It fetches the paper from the arXiv export API and writes a
+  `preprint` item with the same fields, category tags, and PDF/Snapshot
+  attachments the Zotero Connector would produce, plus an `arxiv-digest` source
+  tag.
+- **Requirements**: the Zotero desktop app must be running, with the local API
+  enabled (Zotero → Settings → Advanced → *Allow other applications on this
+  computer to communicate with Zotero*). The sidebar shows a **Zotero:
+  connected / not running** status pill.
+- **Zotero 10+ required for saving**: Zotero versions before 10 expose a
+  read-only local API, so saving is unavailable and the button explains this.
+  On Zotero 10+, the first write pops an *Allow this application to modify your
+  library?* dialog — click **Allow** once, then save again.
+
+## Score a paper
+
+Paste an arXiv link or ID (full URL, bare ID, or `arXiv:xxxx`) into the
+**Score a paper** tab and click **Score this paper**. It shows:
+
+- The paper's title, authors, subjects, and **total score** under your current
+  config.
+- A full **breakdown** of which keywords / authors / subjects / penalties
+  contributed.
+- **Why it did (or didn't) appear in the digest**: if the paper is in the
+  current fetch it shows its rank; otherwise it runs a **deterministic check** —
+  it fetches the paper's actual submission date and categories, compares them
+  against the days present in the fetched feed and your subscribed feeds, and
+  tells you precisely whether it was fetched but ranked below `top_n`, submitted
+  on a day the fetch didn't cover, or in a category you don't subscribe to.
+- A **Save to Zotero** button to save it directly.
 
 ## Profiles vs project config
 

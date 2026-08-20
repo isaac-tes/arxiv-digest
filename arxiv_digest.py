@@ -262,6 +262,19 @@ class Config:
     highlight_authors: bool = True
     highlight_terms_title: bool = True
     highlight_terms_abstract: bool = True
+    # Per-aspect highlight colors (hex strings). Each scored-and-highlightable
+    # aspect maps to one color; defaults mirror the original hardcoded palette.
+    color_keyword: str = "#388bfd"
+    color_low_priority: str = "#f85149"
+    color_author: str = "#3fb950"
+    color_subject: str = "#a371f7"
+    # Per-aspect "color the font too" toggles. When True, the matched text's
+    # font is also tinted with the aspect color (default False = background
+    # highlight only, the original behavior).
+    color_font_keyword: bool = False
+    color_font_low_priority: bool = False
+    color_font_author: bool = False
+    color_font_subject: bool = False
     weights: ScoringWeights = field(default_factory=ScoringWeights)
 
     @classmethod
@@ -303,6 +316,14 @@ class Config:
             highlight_authors=bool(data.get("highlight_authors", True)),
             highlight_terms_title=bool(data.get("highlight_terms_title", True)),
             highlight_terms_abstract=bool(data.get("highlight_terms_abstract", True)),
+            color_keyword=str(data.get("color_keyword", "#388bfd")),
+            color_low_priority=str(data.get("color_low_priority", "#f85149")),
+            color_author=str(data.get("color_author", "#3fb950")),
+            color_subject=str(data.get("color_subject", "#a371f7")),
+            color_font_keyword=bool(data.get("color_font_keyword", False)),
+            color_font_low_priority=bool(data.get("color_font_low_priority", False)),
+            color_font_author=bool(data.get("color_font_author", False)),
+            color_font_subject=bool(data.get("color_font_subject", False)),
             weights=weights,
         )
         return cfg
