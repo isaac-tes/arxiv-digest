@@ -31,6 +31,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   keywords/low-priority/subjects, on for authors — preserving prior behavior).
   Persisted as `color_font_keyword` / `color_font_low_priority` /
   `color_font_author` / `color_font_subject`.
+- **Zotero collection picker**: the Save-to-Zotero control is now a **popover**
+  that lists your Zotero collections (plus **My Library**); pick one and the
+  paper is saved there (`save_to_zotero(arxiv_id, collection_key=…)`).
+- **Duplicate-save guard**: each paper saves at most once per session — the
+  button shows **Saved ✓** afterwards, so accidental re-clicks can't create
+  duplicates.
 
 ### Changed
 - **Zotero bridge now detects read-only Zotero**: Zotero versions before 10
@@ -39,9 +45,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   explains that Zotero 10+ is required, instead of surfacing the cryptic 400. On
   Zotero 10+ it runs the local write-authorization flow (`POST /api/local/
   authorize`) to obtain a key.
+- **Save confirmation is a toast**: "Saved to Zotero: …" now shows as a toast
+  that auto-dismisses after 10 seconds (`st.toast(..., duration=10000)`) instead
+  of a persistent success message.
 - **Subjects line moved**: the highlighted **Subjects** line now sits on the same
-  meta row as the **arXiv ↗** link (below the summary), not above the abstract
-  summary.
+  meta row as the **arXiv ↗** link (below the summary), to the **right** of the
+  link, not above the abstract summary.
+- **Absence reason is network-safe**: the Score-a-paper tab's deterministic
+  absence check now handles arXiv network failures gracefully instead of
+  crashing the tab.
 - **Deterministic absence reason**: the Score-a-paper tab now fetches the paper's
   actual submission date and categories and compares them against the days
   present in the fetched feed and the subscribed feeds, giving a precise reason

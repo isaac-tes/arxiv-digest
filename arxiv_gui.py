@@ -71,19 +71,44 @@ def render_zotero_status_pill() -> None:
         )
 
 
+@st.cache_data(ttl=30, show_spinner=False)
+def _zotero_collections_cached() -> list[dict]:
+    """Cached list of Zotero collections (short TTL so new ones appear)."""
+    return zb.list_collections()
+
+
 def _render_zotero_save_button(arxiv_id: str, title: str) -> None:
-    """A 'Save to Zotero' button next to a paper, like the Zotero Connector."""
-    key = f"zotero_save_{arxiv_id}"
-    if st.button("Save to Zotero", key=key, width="stretch"):
-        try:
-            result = zb.save_to_zotero(arxiv_id)
-        except Exception as exc:  # noqa: BLE001 - surface any bridge failure
-            st.error(f"Zotero save failed: {exc}")
-            return
-        if result.get("ok"):
-            st.success(f"Saved to Zotero: {title}")
-        else:
-            st.error(result.get("error", "Zotero save failed."))
+    """A 'Save to Zotero' popover next to a paper, like the Zotero Connector.
+
+    Opens a popover listing the user's Zotero collections (plus 'My Library').
+    Saving is guarded by a session-state set so each paper saves at most once
+    per session, and the confirmation toast auto-dismisses after 10s.
+    """
+    if arxiv_id in st.session_state.saved_papers:
+        st.caption("Saved ✓")
+        return
+
+    with st.popover("Save to Zotero", width="stretch"):
+        st.caption("Choose a collection, then save.")
+        collections = _zotero_collections_cached()
+        options = ["My Library"] + [c["name"] for c in collections]
+        choice = st.selectbox("Collection", options=options, key=f"zotero_col_{arxiv_id}")
+        if st.button("Save", key=f"zotero_do_{arxiv_id}", type="primary"):
+            collection_key = None
+            if choice != "My Library":
+                collection_key = next(
+                    (c["key"] for c in collections if c["name"] == choice), None
+                )
+            try:
+                result = zb.save_to_zotero(arxiv_id, collection_key=collection_key)
+            except Exception as exc:  # noqa: BLE001 - surface any bridge failure
+                st.error(f"Zotero save failed: {exc}")
+                return
+            if result.get("ok"):
+                st.session_state.saved_papers.add(arxiv_id)
+                st.toast(f"Saved to Zotero: {title}", duration=10000)
+            else:
+                st.error(result.get("error", "Zotero save failed."))
 
 
 # ────────────────────────── Fetching with cache ──────────────────────────
@@ -115,6 +140,8 @@ def init_state():
         st.session_state.papers = []
     if "last_fetch" not in st.session_state:
         st.session_state.last_fetch = None
+    if "saved_papers" not in st.session_state:
+        st.session_state.saved_papers = set()
 
 
 def cfg() -> ad.Config:
@@ -631,14 +658,14 @@ def render_papers_tab():
                 st.write(e["summary"])
                 if e["subjects"] or e["link"]:
                     meta_parts = []
+                    if e["link"]:
+                        meta_parts.append(f'<a href="{e["link"]}" target="_blank">arXiv ↗</a>')
                     if e["subjects"]:
                         subjects_html = _highlight_subjects(
                             e["subjects"], cfg().feed_weights, color=cfg().color_subject,
                             font=cfg().color_font_subject,
                         )
                         meta_parts.append(f'<span class="paper-subjects">Subjects: {subjects_html}</span>')
-                    if e["link"]:
-                        meta_parts.append(f'<a href="{e["link"]}" target="_blank">arXiv ↗</a>')
                     st.markdown(
                         '<div class="paper-meta">' + " &nbsp;·&nbsp; ".join(meta_parts) + "</div>",
                         unsafe_allow_html=True,
@@ -941,7 +968,13 @@ def _absence_reason(paper_id: str, fetched: list[dict], cfg: ad.Config) -> str:
         )
 
     # Not in the fetched set — fetch its metadata to reason deterministically.
-    entry = zb.fetch_arxiv_atom(paper_id)
+    try:
+        entry = zb.fetch_arxiv_atom(paper_id)
+    except Exception:  # noqa: BLE001 - network failure shouldn't crash the tab
+        return (
+            "Could not reach arXiv to compare this paper against the digest "
+            "(network error). Try again in a moment."
+        )
     if entry is None:
         return "Could not fetch this paper's metadata from arXiv to compare feeds."
     _ATOM = "{http://www.w3.org/2005/Atom}"
