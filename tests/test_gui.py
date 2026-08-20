@@ -214,6 +214,80 @@ def test_absence_reason_fetched_but_below_topn():
     assert "top-5" in out
 
 
+def _atom_entry(published: str, cats: list[str]) -> "object":
+    import xml.etree.ElementTree as ET
+
+    cats_xml = "".join(f'<category term="{c}"/>' for c in cats)
+    atom = f"""<?xml version="1.0"?>
+    <feed xmlns="http://www.w3.org/2005/Atom">
+      <entry>
+        <id>http://arxiv.org/abs/2608.16520</id>
+        <published>{published}</published>
+        <title>Test</title>
+        <summary>Abstract</summary>
+        {cats_xml}
+      </entry>
+    </feed>"""
+    return ET.fromstring(atom).find("{http://www.w3.org/2005/Atom}entry")
+
+
+def test_absence_reason_date_mismatch_with_preset(monkeypatch):
+    """Paper submitted on a day the fetched feed doesn't cover -> date reason."""
+    import arxiv_digest as ad
+    import arxiv_gui
+    import zotero_bridge as zb
+
+    # floquet-topological preset subscribes to cond-mat.quant-gas/mes-hall/quant-ph
+    cfg = ad.preset_config("floquet-topological")
+    entry = _atom_entry("2026-08-17T13:03:36Z", ["cond-mat.quant-gas", "quant-ph"])
+    monkeypatch.setattr(zb, "fetch_arxiv_atom", lambda _id: entry)
+
+    fetched = [
+        {"id": "x1", "section": "Mon, 18 Aug 2026 (showing 88 of 88 entries )"},
+        {"id": "x2", "section": "Tue, 19 Aug 2026 (showing 88 of 88 entries )"},
+    ]
+    out = arxiv_gui._absence_reason("2608.16520", fetched, cfg)
+    assert "submitted on **2026-08-17**" in out
+    assert "only covers **2026-08-18, 2026-08-19**" in out
+    assert "overlap your subscribed feeds" in out
+
+
+def test_absence_reason_category_mismatch_with_preset(monkeypatch):
+    """Paper in a category the preset doesn't subscribe to -> category reason."""
+    import arxiv_digest as ad
+    import arxiv_gui
+    import zotero_bridge as zb
+
+    cfg = ad.preset_config("floquet-topological")  # quant-gas/mes-hall/quant-ph
+    entry = _atom_entry("2026-08-18T10:00:00Z", ["hep-th", "math-ph"])
+    monkeypatch.setattr(zb, "fetch_arxiv_atom", lambda _id: entry)
+
+    fetched = [
+        {"id": "x1", "section": "Mon, 18 Aug 2026 (showing 88 of 88 entries )"},
+    ]
+    out = arxiv_gui._absence_reason("2608.16520", fetched, cfg)
+    assert "**hep-th, math-ph**" in out
+    assert "not among your subscribed feeds" in out
+
+
+def test_absence_reason_within_days_but_not_listed(monkeypatch):
+    """Paper date IS in fetched days but still absent -> 'within fetched days'."""
+    import arxiv_digest as ad
+    import arxiv_gui
+    import zotero_bridge as zb
+
+    cfg = ad.preset_config("floquet-topological")
+    entry = _atom_entry("2026-08-18T10:00:00Z", ["quant-ph"])
+    monkeypatch.setattr(zb, "fetch_arxiv_atom", lambda _id: entry)
+
+    fetched = [
+        {"id": "x1", "section": "Mon, 18 Aug 2026 (showing 88 of 88 entries )"},
+    ]
+    out = arxiv_gui._absence_reason("2608.16520", fetched, cfg)
+    assert "IS within the fetched days" in out
+    assert "not yet listed in the feed pages" in out
+
+
 def test_scoring_tab_has_per_feed_weight_field():
     from streamlit.testing.v1 import AppTest
 
