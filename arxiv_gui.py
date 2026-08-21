@@ -12,7 +12,7 @@ import html
 import json
 import re
 from dataclasses import asdict, fields
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Tuple
 
@@ -77,12 +77,55 @@ def _zotero_collections_cached() -> list[dict]:
     return zb.list_collections()
 
 
+def _do_zotero_save(arxiv_id: str, title: str) -> None:
+    """Callback for the Save button — runs exactly once per click.
+
+    Performs the save and records the outcome in session state so the render
+    can display it. Guarded so each paper saves at most once per session and a
+    double-click can't trigger a second write.
+    """
+    if arxiv_id in st.session_state.saved_papers:
+        return
+    if arxiv_id in st.session_state.zotero_saving:
+        return  # a save is already in flight for this paper
+    st.session_state.zotero_saving.add(arxiv_id)
+
+    # Resolve the chosen collection name -> key from the cached list.
+    collection_key = None
+    chosen = st.session_state.get(f"zotero_col_{arxiv_id}")
+    if chosen and chosen != "My Library":
+        collection_key = next(
+            (c["key"] for c in _zotero_collections_cached() if c["name"] == chosen), None
+        )
+
+    try:
+        result = zb.save_to_zotero(arxiv_id, collection_key=collection_key)
+    except Exception as exc:  # noqa: BLE001 - surface any bridge failure
+        st.session_state[f"zotero_result_{arxiv_id}"] = ("error", f"Zotero save failed: {exc}")
+        st.session_state.zotero_saving.discard(arxiv_id)
+        return
+
+    if result.get("ok"):
+        st.session_state.saved_papers.add(arxiv_id)
+        st.session_state[f"zotero_result_{arxiv_id}"] = ("ok", title)
+    elif result.get("already_exists"):
+        # Already in the library — treat as saved so we stop trying.
+        st.session_state.saved_papers.add(arxiv_id)
+        st.session_state[f"zotero_result_{arxiv_id}"] = ("ok", title)
+    else:
+        st.session_state[f"zotero_result_{arxiv_id}"] = (
+            "error", result.get("error", "Zotero save failed."),
+        )
+    st.session_state.zotero_saving.discard(arxiv_id)
+
+
 def _render_zotero_save_button(arxiv_id: str, title: str) -> None:
     """A 'Save to Zotero' popover next to a paper, like the Zotero Connector.
 
     Opens a popover listing the user's Zotero collections (plus 'My Library').
-    Saving is guarded by a session-state set so each paper saves at most once
-    per session, and the confirmation toast auto-dismisses after 10s.
+    Saving runs via an on_click callback (exactly once per click) and is guarded
+    so each paper saves at most once per session. The confirmation toast
+    auto-dismisses after 10s.
     """
     if arxiv_id in st.session_state.saved_papers:
         st.caption("Saved ✓")
@@ -91,24 +134,33 @@ def _render_zotero_save_button(arxiv_id: str, title: str) -> None:
     with st.popover("Save to Zotero", width="stretch"):
         st.caption("Choose a collection, then save.")
         collections = _zotero_collections_cached()
+        # Filter-as-you-type search bar at the top of the dropdown.
+        search = st.text_input(
+            "Search collections", placeholder="Filter…", key=f"zotero_search_{arxiv_id}"
+        ).strip().lower()
+        if search:
+            collections = [c for c in collections if search in c["name"].lower()]
         options = ["My Library"] + [c["name"] for c in collections]
-        choice = st.selectbox("Collection", options=options, key=f"zotero_col_{arxiv_id}")
-        if st.button("Save", key=f"zotero_do_{arxiv_id}", type="primary"):
-            collection_key = None
-            if choice != "My Library":
-                collection_key = next(
-                    (c["key"] for c in collections if c["name"] == choice), None
-                )
-            try:
-                result = zb.save_to_zotero(arxiv_id, collection_key=collection_key)
-            except Exception as exc:  # noqa: BLE001 - surface any bridge failure
-                st.error(f"Zotero save failed: {exc}")
-                return
-            if result.get("ok"):
-                st.session_state.saved_papers.add(arxiv_id)
-                st.toast(f"Saved to Zotero: {title}", duration=10000)
+        st.selectbox("Collection", options=options, key=f"zotero_col_{arxiv_id}")
+        st.button(
+            "Save",
+            key=f"zotero_do_{arxiv_id}",
+            type="primary",
+            on_click=_do_zotero_save,
+            args=(arxiv_id, title),
+        )
+
+        # Show the outcome of the last save attempt for this paper, once —
+        # the result is popped so an unrelated rerun with the popover still
+        # open doesn't keep re-firing the "Saved" toast (which looked like
+        # the paper was being saved over and over).
+        result = st.session_state.pop(f"zotero_result_{arxiv_id}", None)
+        if result:
+            kind, msg = result
+            if kind == "ok":
+                st.toast(f"Saved to Zotero: {msg}", duration=10000)
             else:
-                st.error(result.get("error", "Zotero save failed."))
+                st.error(msg)
 
 
 # ────────────────────────── Fetching with cache ──────────────────────────
@@ -118,14 +170,31 @@ def fetch_papers_cached(timeframe: str, feeds_key: Tuple[Tuple[str, str], ...]) 
     """Cached fetch keyed on (timeframe, sorted feed URLs).
 
     feeds_key is a tuple of (name, url) pairs because lists/dicts aren't hashable.
+
+    `today` uses the HTML /new feed (unchanged). `pastweek` uses the arXiv export
+    API with a true 7-day date-range window, because arXiv's /pastweek HTML
+    listing is unreliable (it returns 1–5 days, not a guaranteed week).
     """
-    suffix = "new" if timeframe == "today" else "pastweek"
+    if timeframe == "pastweek":
+        end = datetime.now()
+        start = end - timedelta(days=7)
+        all_papers: list[dict] = []
+        seen: set[str] = set()
+        for name, _ in feeds_key:
+            for p in ad.fetch_feed_api(name, start, end):
+                if p["id"] in seen:
+                    continue
+                seen.add(p["id"])
+                all_papers.append(p)
+        return all_papers
+
+    # today: HTML /new feed
     urls = []
     for _, base_url in feeds_key:
         url = (
-            base_url.replace("/new", f"/{suffix}")
-            .replace("/recent", f"/{suffix}")
-            .replace("/pastweek", f"/{suffix}")
+            base_url.replace("/new", "/new")
+            .replace("/recent", "/new")
+            .replace("/pastweek", "/new")
         )
         urls.append(url)
     return ad.fetch_feeds(urls)
@@ -142,6 +211,8 @@ def init_state():
         st.session_state.last_fetch = None
     if "saved_papers" not in st.session_state:
         st.session_state.saved_papers = set()
+    if "zotero_saving" not in st.session_state:
+        st.session_state.zotero_saving = set()
 
 
 def cfg() -> ad.Config:

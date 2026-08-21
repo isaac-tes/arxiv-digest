@@ -4,6 +4,16 @@ import pytest
 
 import zotero_bridge as zb
 
+
+@pytest.fixture(autouse=True)
+def _reset_zotero_cache():
+    """Reset the module-level Zotero write cache between tests."""
+    zb._CACHE["server_id"] = None
+    zb._CACHE["api_key"] = None
+    yield
+    zb._CACHE["server_id"] = None
+    zb._CACHE["api_key"] = None
+
 SAMPLE_ATOM = """<?xml version="1.0" encoding="UTF-8"?>
 <feed xmlns="http://www.w3.org/2005/Atom"
       xmlns:arxiv="http://arxiv.org/schemas/atom">
@@ -191,6 +201,30 @@ def test_save_to_zotero_with_collection_key(monkeypatch):
     assert '"collections": ["AAAA1111"]' in calls["data"]
 
 
+def test_authorize_write_is_cached(monkeypatch):
+    """The local API key is cached so we don't re-prompt on every save."""
+    authorize_calls = {"n": 0}
+
+    def _get(url, *args, **kwargs):
+        if "export.arxiv.org" in url:
+            return _MockResponse(content=SAMPLE_ATOM.encode("utf-8"))
+        return _MockResponse(text="", status_code=200, headers={"Zotero-Server-ID": "srv123"})
+
+    def _post(url, *args, **kwargs):
+        if url.endswith("/local/authorize"):
+            authorize_calls["n"] += 1
+            return _MockResponse(text="", status_code=200, json_data={"key": "localkey123"})
+        return _MockResponse(text="[]", status_code=201, json_data=[{"key": "ABCD1234"}])
+
+    monkeypatch.setattr(zb.requests, "get", _get)
+    monkeypatch.setattr(zb.requests, "post", _post)
+
+    zb.save_to_zotero("1810.04805")
+    zb.save_to_zotero("1810.04805")
+    # Authorize dialog should only appear once (cached key reused).
+    assert authorize_calls["n"] == 1
+
+
 def test_save_to_zotero_success(monkeypatch):
     calls = {}
 
@@ -219,6 +253,82 @@ def test_save_to_zotero_success(monkeypatch):
     assert calls["headers"].get("Zotero-Server-ID") == "srv123"
     assert calls["headers"].get("Zotero-API-Key") == "localkey123"
     assert '"itemType": "preprint"' in calls["data"]
+
+
+def test_save_to_zotero_skips_when_already_exists(monkeypatch):
+    """If the arXiv id already exists in Zotero, no write happens."""
+    post_calls = {"n": 0}
+
+    def _get(url, *args, **kwargs):
+        if "export.arxiv.org" in url:
+            return _MockResponse(content=SAMPLE_ATOM.encode("utf-8"))
+        # Item search (by our arxiv-digest tag) returns an existing item with
+        # the matching archiveID.
+        return _MockResponse(
+            text="",
+            status_code=200,
+            headers={"Zotero-Server-ID": "srv123"},
+            json_data=[{"data": {"archiveID": "arXiv:1810.04805"}}],
+        )
+
+    def _post(url, *args, **kwargs):
+        post_calls["n"] += 1
+        return _MockResponse(text="[]", status_code=201, json_data=[{"key": "ABCD1234"}])
+
+    monkeypatch.setattr(zb.requests, "get", _get)
+    monkeypatch.setattr(zb.requests, "post", _post)
+
+    result = zb.save_to_zotero("1810.04805")
+    assert result["ok"] is False
+    assert result.get("already_exists") is True
+    assert post_calls["n"] == 0  # no write attempted
+
+
+def test_zotero_item_exists_searches_by_tag_not_free_text(monkeypatch):
+    """Regression: dedup must scope to our tag, not a `q=<url>` text search.
+
+    The Zotero `q` param only indexes title/creator/year (and, in `everything`
+    mode, attachment/note full text) — never the `url`/`archiveID` metadata
+    fields — so a text search for the arXiv URL almost never matches an
+    existing item. Assert the request instead filters by our source tag.
+    """
+    captured = {}
+
+    def _get(url, *args, **kwargs):
+        captured["params"] = kwargs.get("params", {})
+        return _MockResponse(text="", status_code=200, json_data=[])
+
+    monkeypatch.setattr(zb.requests, "get", _get)
+    assert zb._zotero_item_exists("arXiv:1810.04805") is False
+    assert captured["params"].get("tag") == zb.SOURCE_TAG
+    assert "q" not in captured["params"]
+
+
+def test_zotero_item_exists_paginates(monkeypatch):
+    """A match on a later page is still found (bounded pagination)."""
+    calls = {"n": 0}
+    page_one = [{"data": {"archiveID": f"arXiv:{i}"}} for i in range(2)]
+    page_two = [{"data": {"archiveID": "arXiv:1810.04805"}}]
+
+    def _get(url, *args, **kwargs):
+        calls["n"] += 1
+        start = kwargs.get("params", {}).get("start", 0)
+        return _MockResponse(
+            text="", status_code=200,
+            json_data=page_two if start else page_one,
+        )
+
+    monkeypatch.setattr(zb.requests, "get", _get)
+    assert zb._zotero_item_exists("arXiv:1810.04805", page_limit=2) is True
+    assert calls["n"] == 2
+
+
+def test_zotero_item_exists_false_when_absent(monkeypatch):
+    def _get(url, *args, **kwargs):
+        return _MockResponse(text="", status_code=200, json_data=[])
+
+    monkeypatch.setattr(zb.requests, "get", _get)
+    assert zb._zotero_item_exists("arXiv:1810.04805") is False
 
 
 def test_save_to_zotero_returns_error_for_bad_id(monkeypatch):

@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import re
+import secrets
 import xml.etree.ElementTree as ET
 from typing import Dict, Optional
 
@@ -25,6 +26,16 @@ ZOTERO_LOCAL_BASE = "http://localhost:23119/api"
 ZOTERO_API_VERSION = "3"
 ARXIV_EXPORT_API = "https://export.arxiv.org/api/query"
 SOURCE_TAG = "arxiv-digest"
+
+# Module-level cache for the Zotero 10+ write session: the server ID and the
+# authorized local API key. Caching avoids re-GETting the server ID and re-posting
+# the authorize dialog on every save (memory/UX efficient).
+_CACHE: Dict[str, Optional[str]] = {"server_id": None, "api_key": None}
+
+
+def _new_write_token() -> str:
+    """Generate a random 32-char Zotero-Write-Token (prevents duplicate writes)."""
+    return secrets.token_hex(16)
 
 # Atom namespace used by the arXiv export API.
 _ATOM = "{http://www.w3.org/2005/Atom}"
@@ -129,17 +140,57 @@ def list_collections(timeout: float = 10.0) -> list[Dict]:
     return out
 
 
+def _zotero_item_exists(archive_id: str, timeout: float = 10.0, page_limit: int = 100) -> bool:
+    """Return True if an item with the given ``archiveID`` already exists.
+
+    The Zotero ``q`` full-text search parameter does not index the ``url``
+    metadata field — it only matches title/creator/year (or, in ``everything``
+    mode, indexed attachment/note text) — so searching for an arXiv URL almost
+    never finds an existing item, which let the same paper be saved over and
+    over. Instead, this scopes the search to items carrying our own
+    ``arxiv-digest`` tag (a small, bounded set) and paginates through them
+    looking for an exact ``archiveID`` match, which is reliable regardless of
+    indexing delays.
+    """
+    start = 0
+    while True:
+        try:
+            resp = requests.get(
+                f"{ZOTERO_LOCAL_BASE}/users/0/items",
+                headers={"Zotero-API-Version": ZOTERO_API_VERSION},
+                params={"tag": SOURCE_TAG, "start": start, "limit": page_limit},
+                timeout=timeout,
+            )
+            resp.raise_for_status()
+            items = resp.json()
+        except (requests.RequestException, ValueError):
+            return False
+        if not items:
+            return False
+        for it in items:
+            if (it.get("data") or {}).get("archiveID") == archive_id:
+                return True
+        if len(items) < page_limit:
+            return False
+        start += page_limit
+
+
 def _zotero_server_id(timeout: float = 2.0) -> Optional[str]:
     """Return the Zotero-Server-ID header, or None if absent.
 
     The header is only present in Zotero 10+. Its absence means the running
     Zotero predates 10 and its local API is read-only (writes unsupported).
+    Cached so we don't re-GET on every save.
     """
+    if _CACHE["server_id"] is not None:
+        return _CACHE["server_id"]
     try:
         resp = requests.get(f"{ZOTERO_LOCAL_BASE}/", timeout=timeout)
-        return resp.headers.get("Zotero-Server-ID")
+        sid = resp.headers.get("Zotero-Server-ID")
     except requests.RequestException:
         return None
+    _CACHE["server_id"] = sid
+    return sid
 
 
 def zotero_write_supported(timeout: float = 2.0) -> bool:
@@ -155,8 +206,11 @@ def zotero_write_supported(timeout: float = 2.0) -> bool:
 def _authorize_write(server_id: str, app_name: str = "arXiv Digest") -> Optional[str]:
     """Request a local API key from Zotero (pops the 'Allow this application?' dialog).
 
-    Returns the key, or None if the user denied or the request failed.
+    Returns the key, or None if the user denied or the request failed. The key is
+    cached so subsequent saves reuse it (no repeated dialogs / network calls).
     """
+    if _CACHE["api_key"] is not None:
+        return _CACHE["api_key"]
     try:
         resp = requests.post(
             f"{ZOTERO_LOCAL_BASE}/local/authorize",
@@ -173,9 +227,12 @@ def _authorize_write(server_id: str, app_name: str = "arXiv Digest") -> Optional
     if resp.status_code not in (200, 201):
         return None
     try:
-        return resp.json().get("key")
+        key = resp.json().get("key")
     except (ValueError, AttributeError):
         return None
+    if key:
+        _CACHE["api_key"] = key
+    return key
 
 
 def fetch_arxiv_atom(arxiv_id: str) -> Optional[ET.Element]:
@@ -306,6 +363,16 @@ def save_to_zotero(arxiv_id: str, collection_key: Optional[str] = None) -> Dict:
     if collection_key:
         item["collections"] = [collection_key]
 
+    # Dedup like the Zotero Connector: if an item for this arXiv id already
+    # exists in the library, skip the write so we can never create duplicates —
+    # even if the save is triggered repeatedly.
+    if _zotero_item_exists(item.get("archiveID", "")):
+        return {
+            "ok": False,
+            "already_exists": True,
+            "error": "Already in your Zotero library.",
+        }
+
     # Zotero < 10 exposes a read-only local API — writes are unsupported.
     server_id = _zotero_server_id()
     if server_id is None:
@@ -319,7 +386,8 @@ def save_to_zotero(arxiv_id: str, collection_key: Optional[str] = None) -> Dict:
         }
 
     # Zotero 10+: request a local API key (pops the 'Allow this application?'
-    # dialog), then write with it.
+    # dialog once, then cached), then write with it. If the cached key is
+    # consumed (single-use), re-authorize once and retry.
     api_key = _authorize_write(server_id)
     if api_key is None:
         return {
@@ -335,6 +403,7 @@ def save_to_zotero(arxiv_id: str, collection_key: Optional[str] = None) -> Dict:
         "Zotero-API-Version": ZOTERO_API_VERSION,
         "Zotero-Server-ID": server_id,
         "Zotero-API-Key": api_key,
+        "Zotero-Write-Token": _new_write_token(),
         "Content-Type": "application/json",
     }
     resp = requests.post(
@@ -343,6 +412,27 @@ def save_to_zotero(arxiv_id: str, collection_key: Optional[str] = None) -> Dict:
         data=json.dumps([item]),
         timeout=30,
     )
+    if resp.status_code == 401 and _CACHE["api_key"] is not None:
+        # Cached key was single-use and got consumed — clear it, re-authorize, retry.
+        _CACHE["api_key"] = None
+        api_key = _authorize_write(server_id)
+        if api_key is None:
+            return {
+                "ok": False,
+                "error": (
+                    "Zotero did not authorize the write. In Zotero, click Allow "
+                    "when the 'Allow this application to modify your library?' "
+                    "dialog appears, then try again."
+                ),
+            }
+        headers["Zotero-API-Key"] = api_key
+        headers["Zotero-Write-Token"] = _new_write_token()
+        resp = requests.post(
+            f"{ZOTERO_LOCAL_BASE}/users/0/items",
+            headers=headers,
+            data=json.dumps([item]),
+            timeout=30,
+        )
     if resp.status_code in (200, 201):
         try:
             created = resp.json()
