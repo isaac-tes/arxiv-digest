@@ -33,6 +33,50 @@ def test_gui_sidebar_has_fetch_button():
     assert "Fetch papers" in labels
 
 
+def test_zotero_save_callback_guards_against_duplicates(monkeypatch):
+    """The save callback must write to Zotero at most once per paper."""
+    import arxiv_gui
+    import zotero_bridge as zb
+
+    calls = {"n": 0}
+
+    def fake_save(_id, collection_key=None):
+        calls["n"] += 1
+        return {"ok": True, "item_key": "KEY123"}
+
+    monkeypatch.setattr(zb, "save_to_zotero", fake_save)
+
+    # Simulate session state as the GUI would have it.
+    arxiv_gui.st.session_state.saved_papers = set()
+    arxiv_gui.st.session_state.zotero_saving = set()
+    arxiv_gui.st.session_state["zotero_col_2608.16520"] = "My Library"
+
+    # Clicking Save twice (e.g. double-click / rerun) must only write once.
+    arxiv_gui._do_zotero_save("2608.16520", "Test paper")
+    arxiv_gui._do_zotero_save("2608.16520", "Test paper")
+    assert calls["n"] == 1
+    assert "2608.16520" in arxiv_gui.st.session_state.saved_papers
+
+
+def test_zotero_save_callback_skips_already_saved(monkeypatch):
+    """A paper already saved this session must not be written again."""
+    import arxiv_gui
+    import zotero_bridge as zb
+
+    calls = {"n": 0}
+
+    def fake_save(_id, collection_key=None):
+        calls["n"] += 1
+        return {"ok": True, "item_key": "KEY123"}
+
+    monkeypatch.setattr(zb, "save_to_zotero", fake_save)
+
+    arxiv_gui.st.session_state.saved_papers = {"2608.16520"}
+    arxiv_gui.st.session_state.zotero_saving = set()
+    arxiv_gui._do_zotero_save("2608.16520", "Test paper")
+    assert calls["n"] == 0
+
+
 def test_authors_html_highlights_named_authors():
     import arxiv_gui
 

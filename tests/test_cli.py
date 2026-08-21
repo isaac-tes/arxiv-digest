@@ -44,6 +44,7 @@ def _ns(**overrides) -> argparse.Namespace:
         rename_url=[],
         delete_url=[],
         set_default_feed=None,
+        score=None,
     )
     base.update(overrides)
     return argparse.Namespace(**base)
@@ -107,6 +108,40 @@ def test_determine_feed_unknown_name_raises():
     args = _ns(feed=["nope"])
     with pytest.raises(SystemExit):
         determine_feed(cfg, args)
+
+
+def test_format_score_breakdown_renders_all_sections():
+    paper = {
+        "title": "Test Paper",
+        "authors": "Alice Smith",
+        "subjects": "quant-ph",
+        "abstract": "x" * 300,
+    }
+    breakdown = {
+        "keywords": [("topology", 6)],
+        "authors": [("smith", 6)],
+        "subjects": {"quant-ph": 2},
+        "low_priority_hits": ["film"],
+        "low_priority_penalty": -5,
+        "abstract_bonus": 1,
+        "total": 10,
+    }
+    out = arxiv_digest.format_score_breakdown(paper, breakdown)
+    assert "Test Paper" in out
+    assert "Score: 10" in out
+    assert "'topology' (+6)" in out
+    assert "'smith' (+6)" in out
+    assert "'quant-ph' (+2)" in out
+    assert "Low-priority hits: film" in out
+    assert "Abstract bonus: +1" in out
+
+
+def test_fetch_paper_by_id_returns_none_on_network_error(monkeypatch):
+    def _boom(_id):
+        raise TimeoutError("timed out")
+
+    monkeypatch.setattr("zotero_bridge.fetch_arxiv_atom", _boom)
+    assert arxiv_digest.fetch_paper_by_id("2608.16520") is None
 
 
 def test_apply_cli_add_core_keyword():

@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.5.0] — 2026-08-21
 
 ### Added
 - **Zotero bridge** (`zotero_bridge.py`): save papers straight into your local
@@ -32,11 +32,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Persisted as `color_font_keyword` / `color_font_low_priority` /
   `color_font_author` / `color_font_subject`.
 - **Zotero collection picker**: the Save-to-Zotero control is now a **popover**
-  that lists your Zotero collections (plus **My Library**); pick one and the
-  paper is saved there (`save_to_zotero(arxiv_id, collection_key=…)`).
-- **Duplicate-save guard**: each paper saves at most once per session — the
-  button shows **Saved ✓** afterwards, so accidental re-clicks can't create
-  duplicates.
+  that lists your Zotero collections (plus **My Library**) with a filter-as-you-type
+  search bar; pick one and the paper is saved there
+  (`save_to_zotero(arxiv_id, collection_key=…)`).
+- **Duplicate-save guard**: saving runs via an `on_click` callback (exactly once
+  per click) with a per-paper in-flight guard and a session-state "saved" set, so
+  a paper can never be written to Zotero more than once per session — even on a
+  double-click or rerun. The button shows **Saved ✓** afterwards.
+- **pastweek uses the arXiv API date-range**: the `pastweek` timeframe now fetches
+  via the arXiv export API `submittedDate:[...]` query for a true 7-day window,
+  because arXiv's `/pastweek` HTML listing is unreliable (it returns 1–5 days).
+  `today` keeps the HTML `/new` feed. Fixes papers submitted on days the
+  `/pastweek` feed skipped (e.g. `2608.16520`).
 
 ### Changed
 - **Zotero bridge now detects read-only Zotero**: Zotero versions before 10
@@ -45,6 +52,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   explains that Zotero 10+ is required, instead of surfacing the cryptic 400. On
   Zotero 10+ it runs the local write-authorization flow (`POST /api/local/
   authorize`) to obtain a key.
+- **Zotero 10 connection is memory-efficient**: the server ID and authorized local
+  API key are cached, so we don't re-GET the server ID or re-prompt the authorize
+  dialog on every save. A consumed single-use key (401) triggers one re-authorize
+  and retry.
 - **Save confirmation is a toast**: "Saved to Zotero: …" now shows as a toast
   that auto-dismisses after 10 seconds (`st.toast(..., duration=10000)`) instead
   of a persistent success message.
@@ -60,11 +71,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (e.g. "submitted on 2026-08-17, but the fetched feed only covers 2026-08-18…")
   instead of a vague "likely outside the timeframe".
 - **Release automation** (`.github/workflows/release.yml`): pushing a `v*` tag runs the test suite, checks the tag matches `pyproject.toml`'s version, extracts this file's matching section as the release notes, and publishes the GitHub Release. The job fails rather than releasing if the tests fail, the versions disagree, or no changelog section exists for the tag.
-
-### Changed
 - **Release process**: GitHub Releases are now published for every tag, with notes taken verbatim from this file's matching section, so the two can't drift. Backfilled the missing `v0.2.0` release (`v0.3.0` / `v0.4.0` already had one).
 - **`.beads/issues.jsonl` and `.beads/interactions.jsonl` are no longer tracked in git.** Per the [beads sync model](https://github.com/gastownhall/beads/blob/main/docs/core-concepts/sync-concepts.md) these are passive exports, not the sync channel — cross-machine sync goes through Dolt (`refs/dolt/data` on origin, `bd dolt push` / `bd dolt pull`), which is configured for this repo, so collaborators are unaffected. Tracking them would have published issue text and contributor email addresses when the repo goes public. Beads config (`config.yaml`, `metadata.json`, `recipes.toml`, `hooks/`) stays tracked, as `config.yaml` is required for remote wiring.
 - `LICENSE` and `pyproject.toml` now name the copyright holder / author as **Isaac Tesfaye** rather than the `isaac-tes` GitHub handle.
+
+### Fixed
+- **Zotero save duplicated the same paper repeatedly**: the dedup check
+  (`_zotero_item_exists`) searched with Zotero's `q=<url>&qmode=everything`
+  full-text parameter, which does not index the `url`/`archiveID` metadata
+  fields — so it almost never found a paper that was already saved, and the
+  write went through again every time. It now searches the small, bounded set
+  of items carrying our own `arxiv-digest` tag and matches `archiveID`
+  exactly, which is reliable regardless of Zotero's text-indexing delays.
+- **"Saved to Zotero" toast kept re-appearing**: the save result was left in
+  `st.session_state` indefinitely, so any unrelated Streamlit rerun while the
+  popover stayed open re-displayed the toast — easy to mistake for the paper
+  being saved again. The result is now popped after being shown once.
+- Confirmed via live testing that the third-party
+  [zotero-arxiv-workflow](https://github.com/AllanChain/zotero-arxiv-workflow)
+  Zotero plugin, if installed, can compound this by reprocessing arXiv saves;
+  disabling it is recommended alongside this fix.
+
+### Known limitations
+- The Zotero save still attaches the arXiv PDF as a **linked** URL attachment,
+  not a locally-imported/downloaded file the way the official Zotero
+  Connector does (`arxiv_scraper_cli-ynp`).
 
 ## [0.4.1] — 2026-07-27
 

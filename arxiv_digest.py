@@ -12,9 +12,10 @@ import json
 import re
 import sys
 import time
+import xml.etree.ElementTree as ET
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import asdict, dataclass, field, replace
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Dict, List, Sequence
 
@@ -758,6 +759,116 @@ def fetch_feeds(urls: List[str], sections: List[str] | None = None, verbose: boo
     return all_papers
 
 
+# ── arXiv export API fetch (true date-range window) ─────────────────────────
+#
+# arXiv's /pastweek HTML listing is unreliable — it returns whatever days arXiv
+# currently has listed (often 1–5 days), not a guaranteed 7-day window. For a
+# genuine N-day window we query the arXiv export API with a `submittedDate:[...]`
+# range instead. Each paper's `section` is set to its submission day label so the
+# existing day-picker / filtering logic keeps working.
+
+_ARXIV_API = "http://export.arxiv.org/api/query"
+_API_ATOM = "{http://www.w3.org/2005/Atom}"
+_API_OPENSEARCH = "{http://a9.com/-/spec/opensearch/1.1/}"
+
+
+def _api_day_label(dt: datetime) -> str:
+    """Format a datetime as an arXiv day label, e.g. 'Thu, 20 Aug 2026'."""
+    return dt.strftime("%a, %d %b %Y")
+
+
+def fetch_feed_api(
+    category: str,
+    start_date: datetime,
+    end_date: datetime,
+    verbose: bool = False,
+    max_results: int = 2000,
+) -> List[dict]:
+    """Fetch papers in `category` submitted within [start_date, end_date].
+
+    Uses the arXiv export API's `submittedDate` range query, which gives a true
+    date window (unlike the /pastweek HTML listing). Returns paper dicts with the
+    same shape as `fetch_feed` (id, title, authors, link, subjects, abstract,
+    section=day label). Paginates through the API (100 results per request).
+    """
+    papers: List[dict] = []
+    start = 0
+    page_size = 100
+    # submittedDate range is inclusive on both ends, in YYYYMMDDHHMM form.
+    start_str = start_date.strftime("%Y%m%d%H%M")
+    end_str = end_date.strftime("%Y%m%d%H%M")
+    query = f"cat:{category} AND submittedDate:[{start_str} TO {end_str}]"
+
+    while True:
+        resp = requests.get(
+            _ARXIV_API,
+            params={
+                "search_query": query,
+                "start": start,
+                "max_results": page_size,
+                "sortBy": "submittedDate",
+                "sortOrder": "descending",
+            },
+            timeout=30,
+        )
+        resp.raise_for_status()
+        root = ET.fromstring(resp.content)
+
+        total_node = root.find(f"{_API_OPENSEARCH}totalResults")
+        total = int(total_node.text) if total_node is not None and total_node.text else 0
+
+        entries = root.findall(f"{_API_ATOM}entry")
+        for e in entries:
+            papers.append(_paper_from_api_entry(e))
+
+        if verbose:
+            print(f"  API {category}: fetched {len(papers)}/{total}")
+
+        if not entries or len(papers) >= total or len(papers) >= max_results:
+            break
+        start += page_size
+
+    return papers
+
+
+def _paper_from_api_entry(entry: ET.Element) -> dict:
+    """Build a paper dict (same shape as fetch_feed) from an arXiv API entry."""
+    def text(tag: str) -> str:
+        node = entry.find(f"{_API_ATOM}{tag}")
+        return (node.text or "").strip() if node is not None and node.text else ""
+
+    versioned_url = text("id")
+    arxiv_url = re.sub(r"v\d+$", "", versioned_url)
+    article_id = arxiv_url.rsplit("/abs/", 1)[-1] if "/abs/" in arxiv_url else ""
+
+    authors = ", ".join(
+        (a.find(f"{_API_ATOM}name").text or "").strip()
+        for a in entry.findall(f"{_API_ATOM}author")
+        if a.find(f"{_API_ATOM}name") is not None and a.find(f"{_API_ATOM}name").text
+    )
+    subjects = ", ".join(
+        c.get("term") for c in entry.findall(f"{_API_ATOM}category") if c.get("term")
+    )
+
+    pub = text("published")
+    day_label = ""
+    if pub:
+        try:
+            day_label = _api_day_label(datetime.fromisoformat(pub.replace("Z", "+00:00")))
+        except ValueError:
+            day_label = ""
+
+    return {
+        "id": article_id,
+        "title": text("title"),
+        "authors": authors,
+        "link": arxiv_url,
+        "subjects": subjects,
+        "abstract": text("summary"),
+        "section": day_label,
+    }
+
+
 # ── Submission-type / day filtering ──────────────────────────────────────────
 #
 # arXiv /new pages group entries under h3 headers: "New submissions (...)",
@@ -923,6 +1034,52 @@ def explain_score(paper: dict, cfg: Config) -> dict:
 
 def score_paper(paper: dict, cfg: Config) -> int:
     return explain_score(paper, cfg)["total"]
+
+
+def fetch_paper_by_id(arxiv_id: str) -> dict | None:
+    """Fetch a single arXiv paper (by id or URL) and return a paper dict.
+
+    Uses the arXiv export API (same as the GUI's Score-a-paper tab). Returns
+    None if the id is invalid or not found.
+    """
+    try:
+        import zotero_bridge as zb
+
+        entry = zb.fetch_arxiv_atom(arxiv_id)
+    except Exception:  # noqa: BLE001 - network failure -> None
+        return None
+    if entry is None:
+        return None
+    return _paper_from_api_entry(entry)
+
+
+def format_score_breakdown(paper: dict, breakdown: dict) -> str:
+    """Render a paper's score breakdown as human-readable text (CLI)."""
+    lines = []
+    lines.append(f"Title: {paper.get('title', '')}")
+    if paper.get("authors"):
+        lines.append(f"Authors: {paper['authors']}")
+    if paper.get("subjects"):
+        lines.append(f"Subjects: {paper['subjects']}")
+    lines.append(f"Score: {breakdown['total']}")
+    lines.append("")
+    if breakdown["keywords"]:
+        lines.append("Keywords matched:")
+        lines.append("  " + ", ".join(f"'{kw}' (+{w})" for kw, w in breakdown["keywords"]))
+    if breakdown["authors"]:
+        lines.append("Authors matched:")
+        lines.append("  " + ", ".join(f"'{a}' (+{w})" for a, w in breakdown["authors"]))
+    if breakdown["subjects"]:
+        lines.append("Subject bonuses:")
+        lines.append("  " + ", ".join(f"'{s}' (+{w})" for s, w in breakdown["subjects"].items()))
+    if breakdown["low_priority_hits"]:
+        lines.append(
+            f"Low-priority hits: {', '.join(breakdown['low_priority_hits'])} "
+            f"(penalty: {breakdown['low_priority_penalty']})"
+        )
+    if breakdown["abstract_bonus"]:
+        lines.append(f"Abstract bonus: +{breakdown['abstract_bonus']}")
+    return "\n".join(lines)
 
 
 def summarize(text: str) -> str:
@@ -1091,6 +1248,16 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
     )
     parser.add_argument("--verbose", action="store_true")
     parser.add_argument(
+        "--score",
+        metavar="ID_OR_URL",
+        help=(
+            "Score a single arXiv paper (by id or URL) against the current config "
+            "and print its per-aspect breakdown, without fetching the whole digest. "
+            "Optionally combine with --timeframe/--feed to also explain why it did "
+            "or didn't appear in that fetch."
+        ),
+    )
+    parser.add_argument(
         "--timeframe",
         choices=["today", "pastweek"],
         help="Select timeframe: 'today' for /new feeds (today's papers only), 'pastweek' for /pastweek feeds (last ~5 days)",
@@ -1176,10 +1343,37 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.save_config and cfg_path:
         cfg.dump(cfg_path)
 
+    # --score: score a single paper against the config without a full digest.
+    if args.score:
+        paper = fetch_paper_by_id(args.score)
+        if paper is None:
+            raise SystemExit(f"Could not fetch arXiv paper '{args.score}'.")
+        breakdown = explain_score(paper, cfg)
+        print(format_score_breakdown(paper, breakdown))
+        return 0
+
     feed_urls = determine_feed(cfg, args)
 
+    # pastweek uses the arXiv export API date-range for a true 7-day window
+    # (the /pastweek HTML listing is unreliable); today keeps the HTML /new feed.
+    timeframe = args.timeframe if args.timeframe else cfg.timeframe
     try:
-        papers = fetch_feeds(feed_urls, sections=args.sections, verbose=args.verbose)
+        if timeframe == "pastweek":
+            end = datetime.now()
+            start = end - timedelta(days=7)
+            feed_names = args.feed or cfg.default_feeds
+            papers: List[dict] = []
+            seen: set[str] = set()
+            for name in feed_names:
+                if name not in cfg.feeds:
+                    continue
+                for p in fetch_feed_api(name, start, end, verbose=args.verbose):
+                    if p["id"] in seen:
+                        continue
+                    seen.add(p["id"])
+                    papers.append(p)
+        else:
+            papers = fetch_feeds(feed_urls, sections=args.sections, verbose=args.verbose)
     except requests.RequestException as exc:
         raise SystemExit(f"Failed to fetch feeds {feed_urls}: {exc}") from exc
     
