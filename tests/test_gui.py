@@ -440,6 +440,49 @@ def _click_label(at, label, *, keyless=False):
     raise AssertionError(f"button {label!r} (keyless={keyless}) not found")
 
 
+def _checkbox(at, key):
+    for cb in at.checkbox:
+        if cb.key == key:
+            return cb
+    raise AssertionError(f"checkbox {key!r} not found")
+
+
+def test_load_profile_clears_stale_color_and_font_widget_state(monkeypatch, tmp_path):
+    """Load profile must restore color/font-toggle widgets, not just cfg.
+
+    Regression: _reset_widget_state()'s default key list only covered weight
+    and editor widgets, so after toggling a color/font checkbox in the
+    current session, loading a saved profile kept the stale in-session widget
+    value and silently wrote it back over the just-loaded profile.
+    """
+    from pathlib import Path
+    from streamlit.testing.v1 import AppTest
+    import arxiv_digest as ad
+
+    # AppTest re-executes arxiv_gui.py's top-level code fresh (it isn't just
+    # reusing the already-imported module), so PROFILES_DIR must be redirected
+    # by patching Path.home() before .run(), not by patching the module attr.
+    profiles_dir = tmp_path / ".arxiv_scraper" / "profiles"
+    profiles_dir.mkdir(parents=True)
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    saved = ad.Config()
+    saved.color_font_keyword = False
+    saved.dump(profiles_dir / "plain.json")
+
+    at = AppTest.from_file("arxiv_gui.py").run(timeout=TIMEOUT)
+    _checkbox(at, "color_font_keyword").set_value(True)
+    at.run(timeout=TIMEOUT)
+    assert at.session_state.cfg.color_font_keyword is True
+
+    at.sidebar.selectbox(key="active_profile").set_value("plain")
+    at.run(timeout=TIMEOUT)
+    _click_label(at, "Load profile")
+    at.run(timeout=TIMEOUT)
+
+    assert at.session_state.cfg.color_font_keyword is False, "cfg should reflect loaded profile"
+    assert _checkbox(at, "color_font_keyword").value is False, "widget stale after Load profile"
+
+
 def test_apply_weights_updates_cfg():
     """Sanity: applying a changed weight writes through to cfg.weights."""
     from streamlit.testing.v1 import AppTest

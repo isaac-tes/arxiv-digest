@@ -5,6 +5,12 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python: 3.12+](https://img.shields.io/badge/Python-3.12+-blue.svg)](https://www.python.org/downloads/)
 
+<p align="center">
+  <img src="docs/assets/showcase.jpg" alt="A ranked paper card in the GUI, with matched keywords and authors highlighted, a score breakdown, and a Save to Zotero button" width="900">
+  <br>
+  <em>Matched keywords and authors highlighted, a live score breakdown, one-click Save to Zotero.</em>
+</p>
+
 Fetches arXiv listing pages for **any** category, scores papers by your keyword / author / subject preferences, and presents the ranked digest either as a CLI report (terminal, Markdown, JSON) or a Streamlit GUI for interactive tuning. Works with any arXiv feed (`hep-th`, `cs.LG`, `math.AG`, …); the defaults just ship a condensed-matter / quantum-physics set you can replace.
 
 Two front-ends, one core:
