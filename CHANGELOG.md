@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **README preview image**: a centered screenshot of a ranked paper card
+  (highlighted keywords/authors, score breakdown, Save to Zotero) right under
+  the badges, synced to the docs site via `scripts/generate_readme.py`.
+
+### Fixed
+- **Color/font-toggle sidebar widgets could show stale state after switching
+  config**: `_reset_widget_state()`'s default key list only covered the
+  weight and editor widgets, not the highlight/color/font-tint checkboxes and
+  color pickers. Loading a profile, a starter preset, or resetting weights
+  now also clears those keys so the sidebar reliably reflects the config that
+  was just loaded.
+
 ## [0.5.0] — 2026-08-21
 
 ### Added
