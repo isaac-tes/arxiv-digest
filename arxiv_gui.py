@@ -191,11 +191,7 @@ def fetch_papers_cached(timeframe: str, feeds_key: Tuple[Tuple[str, str], ...]) 
     # today: HTML /new feed
     urls = []
     for _, base_url in feeds_key:
-        url = (
-            base_url.replace("/new", "/new")
-            .replace("/recent", "/new")
-            .replace("/pastweek", "/new")
-        )
+        url = base_url.replace("/recent", "/new").replace("/pastweek", "/new")
         urls.append(url)
     return ad.fetch_feeds(urls)
 
