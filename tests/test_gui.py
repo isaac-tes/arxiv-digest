@@ -483,6 +483,31 @@ def test_load_profile_clears_stale_color_and_font_widget_state(monkeypatch, tmp_
     assert _checkbox(at, "color_font_keyword").value is False, "widget stale after Load profile"
 
 
+def test_paper_authors_and_meta_text_readable_in_light_mode():
+    """Light-mode override must fix contrast without touching dark mode.
+
+    Regression: .paper-authors/.paper-meta hardcoded a near-white (#e6edf3)
+    / mid-grey (#8b949e) color tuned for Streamlit's dark theme, making both
+    barely visible on light theme's white background. A `prefers-color-scheme:
+    light` override should darken them, while the base (dark-mode) rule stays
+    exactly as it was.
+    """
+    import arxiv_gui
+
+    css = arxiv_gui._PAPER_CSS
+    base_authors_rule = css.split(".paper-authors {")[1].split("}")[0]
+    base_meta_rule = css.split(".paper-meta {")[1].split("}")[0]
+    assert "#e6edf3" in base_authors_rule, "dark-mode authors color must be unchanged"
+    assert "#8b949e" in base_meta_rule, "dark-mode meta color must be unchanged"
+
+    assert "@media (prefers-color-scheme: light)" in css
+    light_block = css.split("@media (prefers-color-scheme: light)")[1]
+    light_authors_rule = light_block.split(".paper-authors {")[1].split("}")[0]
+    light_meta_rule = light_block.split(".paper-meta {")[1].split("}")[0]
+    assert "#e6edf3" not in light_authors_rule, "light mode must not keep the near-white color"
+    assert "#8b949e" not in light_meta_rule, "light mode should use a darker, more legible grey"
+
+
 def test_apply_weights_updates_cfg():
     """Sanity: applying a changed weight writes through to cfg.weights."""
     from streamlit.testing.v1 import AppTest

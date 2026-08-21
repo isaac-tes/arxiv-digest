@@ -19,6 +19,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   color pickers. Loading a profile, a starter preset, or resetting weights
   now also clears those keys so the sidebar reliably reflects the config that
   was just loaded.
+- **Author names and the arXiv-link/subjects line were barely visible in
+  light mode**: `.paper-authors` / `.paper-meta` hardcoded a near-white /
+  mid-grey color tuned for Streamlit's dark theme. A `prefers-color-scheme:
+  light` override now darkens them for light mode; dark mode is unchanged.
 
 ## [0.5.0] — 2026-08-21
 
