@@ -397,6 +397,13 @@ _PAPER_CSS = """
 .paper-authors { font-size: 1.02rem; color: #e6edf3; margin: 0 0 .25rem 0; }
 .paper-meta { font-size: .9rem; color: #8b949e; margin: .25rem 0 0 0; }
 .paper-meta a { color: #58a6ff; text-decoration: none; }
+/* The colors above are tuned for Streamlit's dark theme (near-white/mid-grey
+   on a dark background) and are barely legible on light theme's white
+   background. Override just for light, so dark theme is untouched. */
+@media (prefers-color-scheme: light) {
+  .paper-authors { color: #24292f; }
+  .paper-meta { color: #57606a; }
+}
 .paper-meta a:hover { text-decoration: underline; }
 .paper-authors .hl-author {
   font-weight: 700; border-bottom: 1px dotted; cursor: help; padding: 0 1px;
