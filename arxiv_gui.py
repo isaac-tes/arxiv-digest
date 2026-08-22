@@ -226,6 +226,23 @@ _EDITOR_KEYS = [
     "editor_low_priority_kw",
     "editor_feeds",
 ]
+# Sidebar "Display" checkboxes/color pickers — same staleness risk as weights
+# and editors, but were missed when this guard was first introduced, so a
+# loaded profile's colors/font toggles kept getting silently overwritten by
+# whatever was already showing in the sidebar.
+_DISPLAY_KEYS = [
+    "highlight_authors",
+    "highlight_terms_title",
+    "highlight_terms_abstract",
+    "color_keyword",
+    "color_low_priority",
+    "color_author",
+    "color_subject",
+    "color_font_keyword",
+    "color_font_low_priority",
+    "color_font_author",
+    "color_font_subject",
+]
 
 
 def _reset_widget_state(*keys: str) -> None:
@@ -319,14 +336,17 @@ def render_sidebar():
         cfg().highlight_authors = st.checkbox(
             "Highlight authors", value=cfg().highlight_authors,
             help="Highlight authors that appear in your Authors list.",
+            key="highlight_authors",
         )
         cfg().highlight_terms_title = st.checkbox(
             "Highlight keywords in titles", value=cfg().highlight_terms_title,
             help="Light highlight of matched keywords / low-priority terms in titles.",
+            key="highlight_terms_title",
         )
         cfg().highlight_terms_abstract = st.checkbox(
             "Highlight keywords in abstracts", value=cfg().highlight_terms_abstract,
             help="Light highlight of matched keywords / low-priority terms in full abstracts.",
+            key="highlight_terms_abstract",
         )
 
         st.caption("Highlight colors (per aspect)")
@@ -377,6 +397,13 @@ _PAPER_CSS = """
 .paper-authors { font-size: 1.02rem; color: #e6edf3; margin: 0 0 .25rem 0; }
 .paper-meta { font-size: .9rem; color: #8b949e; margin: .25rem 0 0 0; }
 .paper-meta a { color: #58a6ff; text-decoration: none; }
+/* The colors above are tuned for Streamlit's dark theme (near-white/mid-grey
+   on a dark background) and are barely legible on light theme's white
+   background. Override just for light, so dark theme is untouched. */
+@media (prefers-color-scheme: light) {
+  .paper-authors { color: #24292f; }
+  .paper-meta { color: #57606a; }
+}
 .paper-meta a:hover { text-decoration: underline; }
 .paper-authors .hl-author {
   font-weight: 700; border-bottom: 1px dotted; cursor: help; padding: 0 1px;

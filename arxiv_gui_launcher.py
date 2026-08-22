@@ -21,7 +21,15 @@ def main() -> int:
         )
         return 1
     app = Path(__file__).resolve().parent / "arxiv_gui.py"
-    sys.argv = ["streamlit", "run", str(app), *sys.argv[1:]]
+    # Auto-open the browser so the GUI pops up without manually pasting the
+    # localhost URL. Streamlit's server.headless defaults to false (open the
+    # browser), but when launched through the `uv tool` wrapper it can miss the
+    # interactive context and stay headless. Force it unless the user passes an
+    # explicit --server.headless override.
+    if not any(a.startswith("--server.headless") for a in sys.argv[1:]):
+        sys.argv = ["streamlit", "run", str(app), "--server.headless", "false", *sys.argv[1:]]
+    else:
+        sys.argv = ["streamlit", "run", str(app), *sys.argv[1:]]
     return stcli.main()
 
 
