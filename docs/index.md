@@ -66,6 +66,21 @@ uv tool uninstall arxiv-digest         # remove
 
 Prerequisite: install [uv](https://docs.astral.sh/uv/) first — `curl -LsSf https://astral.sh/uv/install.sh | sh`. Python 3.12 or newer; `uv` will install it for you if missing.
 
+### Run without installing (uvx)
+
+Prefer not to install a persistent tool? `uvx` runs the package on the fly from
+your clone — no `uv tool install`, no PATH entry, nothing to uninstall:
+
+```bash
+uvx --from '.[gui]' arxiv-digest --top 10   # CLI, anywhere in the clone
+uvx --from '.[gui]' arxiv-gui               # GUI — opens your browser
+```
+
+`uvx` builds the package from the current directory each time, so it always
+picks up your latest edits (no `--reinstall` needed). It's the lightest way to
+try the tool or run it from a fresh clone. The `[gui]` extra pulls in Streamlit
++ pandas; drop it for CLI-only runs (`uvx --from . arxiv-digest --top 10`).
+
 ### Updating to the latest version
 
 One command, from inside your clone:
@@ -93,9 +108,10 @@ uv tool install '.[gui]' --reinstall   # rebuild the arxiv-digest / arxiv-gui to
 ```bash
 uv sync --group gui                  # one-time, installs Streamlit + pandas
 uv run streamlit run arxiv_gui.py    # opens http://localhost:8501 in your browser
+arxiv-gui                            # same, via the installed tool (opens browser)
 ```
 
-The first time you launch, the app loads `arxiv_config.json` if present in the project root, otherwise the built-in defaults. Profiles you save go to `~/.arxiv_scraper/profiles/` and persist across sessions / project clones.
+The GUI opens `http://localhost:8501` in your browser automatically. The first time you launch, the app loads `arxiv_config.json` if present in the project root, otherwise the built-in defaults. Profiles you save go to `~/.arxiv_scraper/profiles/` and persist across sessions / project clones.
 
 ### The daily flow
 
@@ -113,6 +129,34 @@ The first time you launch, the app loads `arxiv_config.json` if present in the p
 - **Feeds** — `name → URL` editor. Add custom arXiv lists (e.g. `hep-th=https://arxiv.org/list/hep-th/new`). The `/new` / `/pastweek` suffix is rewritten by the timeframe selector at fetch time, so you can paste any base URL.
 - **Scoring** — a **Whole-word matching** toggle (default on; untick for legacy substring matching), then number inputs for each weight: per-keyword bonus, per-author bonus, low-priority penalty, long-abstract bonus, the abstract-length threshold, and a **per-feed subject bonus** for every configured feed (subject scoring is driven by `feed_weights`; defaults `cond-mat.quant-gas` +4, `cond-mat.mes-hall` +4, `quant-ph` +2). *Apply weights* makes the change live; *Reset to defaults* puts it back.
 - **Profiles** — **Starter presets** at the top: pick a built-in bundle and **Load** (replace working config) or **Add** (merge it in) — never touches your saved profiles or `arxiv_config.json`. Below, save the current full config under a name (e.g. `topology-mode`, `quantum-gas-mode`). Files live in `~/.arxiv_scraper/profiles/<name>.json`. Buttons: **Load**, **Export** (download JSON), **Delete**, **Import** (upload JSON). Below: **Write project config** dumps the current config to `arxiv_config.json` next to `arxiv_digest.py`, which is what the **CLI** picks up on the next run — use this to push your GUI tweaks back into your daily CLI digest.
+
+### Saving papers to Zotero
+
+The GUI can save papers straight into your **local Zotero library** — the same
+mechanism the official Zotero Connector uses, with **no API-key setup**. A
+**Save to Zotero** popover sits next to each paper's score (and in the **Score a
+paper** tab). It fetches the paper from the arXiv export API and writes a
+`preprint` item with the same fields, category tags, and PDF/Snapshot
+attachments the Zotero Connector would produce, plus an `arxiv-digest` source
+tag. You can pick a **collection** (or **My Library**), and a toast confirms the
+save. Each paper saves at most once per session (the button shows **Saved ✓**
+afterwards) to avoid accidental duplicates.
+
+To enable it, saving uses Zotero's **local HTTP API**, which must be switched on:
+
+1. **Install/run Zotero 10 or newer** — older versions expose a read-only local
+   API and cannot save.
+2. Open Zotero → **Settings** (macOS: *Preferences*) → **Advanced** tab.
+3. Tick **"Allow other applications on this computer to communicate with
+   Zotero"**.
+4. Restart Zotero if prompted. The GUI sidebar should now show **Zotero:
+   connected**.
+5. On the **first save**, Zotero pops an *"Allow this application to modify your
+   library?"* dialog — click **Allow** (or **Always Allow**) once, then save
+   again.
+
+The sidebar shows a **Zotero: connected / not running** status pill so you can
+tell at a glance whether saving is available. See the [GUI guide](gui-guide.md#zotero-bridge) for full details.
 
 ### Tips
 

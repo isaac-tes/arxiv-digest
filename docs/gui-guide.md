@@ -9,9 +9,15 @@ uv sync --group gui                       # one-time
 uv run streamlit run arxiv_gui.py         # canonical
 ./launch_gui.sh                           # optional one-shot wrapper
 arxiv-gui                                 # if installed via `uv tool install '.[gui]'`
+uvx --from '.[gui]' arxiv-gui             # run on the fly, no install
 ```
 
-Default URL: `http://localhost:8501`. The bundled `.streamlit/config.toml` opts out of Streamlit telemetry and runs headless (no auto-opened browser tab — handy when launching from a script).
+Default URL: `http://localhost:8501`. The GUI **opens your browser
+automatically** — the `arxiv-gui` launcher passes `--server.headless false` so
+you don't have to copy-paste the localhost URL. (The bundled
+`.streamlit/config.toml` opts out of Streamlit telemetry; pass
+`--server.headless true` to suppress the auto-opened tab, e.g. when launching
+from a script.)
 
 ## The daily flow
 

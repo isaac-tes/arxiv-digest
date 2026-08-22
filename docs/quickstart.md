@@ -39,6 +39,19 @@ To uninstall:
 uv tool uninstall arxiv-digest
 ```
 
+### Path 2b — run without installing (uvx)
+
+Don't want a persistent tool on your PATH? `uvx` builds and runs the package
+from your clone on the fly — nothing to install or uninstall:
+
+```bash
+uvx --from '.[gui]' arxiv-digest --top 10   # CLI
+uvx --from '.[gui]' arxiv-gui               # GUI — opens your browser
+```
+
+Because `uvx` rebuilds from the current directory each run, it always picks up
+your latest edits (no `--reinstall`). Drop the `[gui]` extra for CLI-only runs.
+
 ## Path 3 — paste into ChatGPT
 
 `arxiv_digest.py` is intentionally a single file with only `requests` + `beautifulsoup4` as runtime deps. Paste the file into Code Interpreter / Advanced Data Analysis and run `python arxiv_digest.py --top 10`.

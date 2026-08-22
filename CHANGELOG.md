@@ -11,8 +11,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **README preview image**: a centered screenshot of a ranked paper card
   (highlighted keywords/authors, score breakdown, Save to Zotero) right under
   the badges, synced to the docs site via `scripts/generate_readme.py`.
+- **`uvx` run option**: the GUI/CLI can now be run on the fly without
+  installing a persistent tool — `uvx --from '.[gui]' arxiv-gui` (or
+  `arxiv-digest`). Documented in the README, quickstart, and GUI/CLI guides.
 
 ### Fixed
+- **GUI no longer auto-opened the browser**: the `arxiv-gui` launcher now
+  passes `--server.headless false` to Streamlit so the browser pops up
+  automatically instead of requiring a manual copy-paste of the localhost URL.
+- **`zotero_bridge` missing from the built package**: `zotero_bridge.py` was
+  absent from the wheel/sdist `only-include`/`include` lists, so the GUI
+  crashed with `ModuleNotFoundError` when installed via `uv tool install` or
+  run via `uvx`. It's now packaged, so the Zotero save feature works in
+  installed/`uvx` runs too.
 - **Color/font-toggle sidebar widgets could show stale state after switching
   config**: `_reset_widget_state()`'s default key list only covered the
   weight and editor widgets, not the highlight/color/font-tint checkboxes and

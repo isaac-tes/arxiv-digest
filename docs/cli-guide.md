@@ -1,6 +1,6 @@
 # CLI guide
 
-The CLI (`arxiv_digest.py`) is single-file by design — it's pasteable into ChatGPT Code Interpreter, scriptable for cron, and deterministic. After `uv tool install '.[gui]'` it's also available as the `arxiv-digest` command on your PATH.
+The CLI (`arxiv_digest.py`) is single-file by design — it's pasteable into ChatGPT Code Interpreter, scriptable for cron, and deterministic. After `uv tool install '.[gui]'` it's also available as the `arxiv-digest` command on your PATH; or run it on the fly with `uvx --from '.[gui]' arxiv-digest ...` without installing anything.
 
 ## Basic invocations
 
