@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.1] — 2026-08-22
+
 ### Added
 - **README preview image**: a centered screenshot of a ranked paper card
   (highlighted keywords/authors, score breakdown, Save to Zotero) right under
