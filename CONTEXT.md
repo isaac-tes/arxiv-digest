@@ -55,3 +55,18 @@ discussions.
 - **Absence reason**: the explanation for a paper not appearing in the digest:
   either it was fetched but ranked below `top_n`, or it was never fetched (outside
   the subscribed feeds or the timeframe).
+
+## Release & changelog
+
+- **Release notes**: the description attached to a GitHub Release. They are
+  generated automatically by GitHub from the commits since the previous tag
+  (`--generate-notes`), so they stay in sync with the commit history without
+  hand-writing.
+
+- **Conventional commit**: a commit whose subject starts with a type prefix
+  (`fix:`, `feat:`, `docs:`, `chore:`, `ci:`, `release:`). The type drives how
+  the change is grouped in the generated release notes.
+
+- **Commit trailer**: a structured line at the end of a commit message body.
+  `BREAKING CHANGE:` marks a change as breaking, which surfaces it prominently
+  in the release notes.

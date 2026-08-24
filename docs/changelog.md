@@ -1,6 +1,6 @@
 # Changelog
 
-The full release history lives in [CHANGELOG.md](https://github.com/isaac-tes/arxiv-digest/blob/main/CHANGELOG.md) at the repo root, in [Keep a Changelog](https://keepachangelog.com/) format.
+The full release history lives in [CHANGELOG.md](https://github.com/isaac-tes/arxiv-digest/blob/main/CHANGELOG.md) at the repo root. GitHub Release notes are generated automatically from the commit history on each release.
 
 ## Latest
 

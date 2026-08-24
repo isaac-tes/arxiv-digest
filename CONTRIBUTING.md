@@ -110,31 +110,129 @@ tag by hand:
 - `.github/workflows/tag-on-version-bump.yml`: when a push to `main` changes
   the `version` in `pyproject.toml`, it tags that commit `v<version>`.
 - `.github/workflows/release.yml`: fires on the `v*` tag, runs the test suite,
-  checks the tag matches `pyproject.toml`, and publishes a GitHub Release with
-  notes taken verbatim from the matching `CHANGELOG.md` section.
+  checks the tag matches `pyproject.toml`, and publishes the GitHub Release
+  with GitHub's **auto-generated release notes** (`--generate-notes`), derived
+  from the commits since the previous tag.
 
 So cutting a release is just: bump the version, merge to `main`, and let CI do
-the rest.
+the rest. The release notes are generated automatically from the commit history;
+you don't write them by hand.
 
 ### Full release (e.g. 0.6.0)
 
 1. On a branch off `main`, bump `version` in `pyproject.toml` (e.g. `0.6.0`).
-2. Add a `## [0.6.0] - YYYY-MM-DD` section at the top of `CHANGELOG.md` (above
-   `[Unreleased]`) with the user-visible changes.
-3. `uv lock` to refresh the lockfile.
-4. Commit as `release: v0.6.0` and push the branch.
-5. Merge to `main` (see above). CI tags `v0.6.0` and publishes the release
-   automatically. No manual `git tag` or `git push --tags` needed.
+2. `uv lock` to refresh the lockfile.
+3. Commit as `release: v0.6.0` and push the branch.
+4. Merge to `main` (see above). CI tags `v0.6.0` and publishes the release with
+   auto-generated notes. No manual `git tag`, `git push --tags`, or release-note
+   editing needed.
 
 ### Patch / hotfix (e.g. 0.6.1)
 
-Same flow, but bump only the patch digit and add a `## [0.6.1]` section:
+Same flow, but bump only the patch digit:
 
 1. Branch off `main`, fix the bug, add a regression test.
-2. Bump `version` to `0.6.1` in `pyproject.toml`; add the `## [0.6.1]` changelog
-   section.
+2. Bump `version` to `0.6.1` in `pyproject.toml`.
 3. `uv lock`, commit (`fix: ...`), push, merge to `main`. CI tags `v0.6.1` and
    releases it.
+
+### Commit conventions that shape the release notes
+
+GitHub's auto-generated release notes group commits by conventional-commit
+type and flag breaking changes. Write commit messages accordingly so the
+generated release notes read well.
+
+#### Type prefixes (leading flags)
+
+Every commit subject starts with a type prefix followed by a colon and a short
+summary. The type decides which section the commit lands in:
+
+| Prefix | Meaning | Release-notes section |
+|--------|---------|----------------------|
+| `feat:` | A new user-facing feature | **Features** |
+| `fix:` | A bug fix | **Bug Fixes** |
+| `docs:` | Documentation only | **Other** (or omitted) |
+| `chore:` | Maintenance, tooling, deps | **Other** (or omitted) |
+| `ci:` | CI / workflow changes | **Other** (or omitted) |
+| `refactor:` | Code change with no behaviour change | **Other** (or omitted) |
+| `test:` | Adding or updating tests | **Other** (or omitted) |
+| `perf:` | A performance improvement | **Other** (or omitted) |
+| `style:` | Formatting, whitespace, no logic change | **Other** (or omitted) |
+| `build:` | Build system / packaging changes | **Other** (or omitted) |
+| `release:` | Version bump for a release | **Other** (or omitted) |
+
+Examples:
+
+```text
+feat: add Save to Zotero button to each paper card
+fix: strip arXiv: prefix so pastweek abstracts resolve
+docs: document the release pipeline
+chore: bump streamlit to 1.30
+```
+
+Keep the summary under ~72 chars, imperative mood, no trailing period.
+
+#### Trailers (commit body)
+
+Trailers are structured `Key: value` lines at the end of the commit body. They
+carry metadata that GitHub and other tools read.
+
+| Trailer | Purpose |
+|---------|---------|
+| `BREAKING CHANGE:` | Marks the change as breaking. Surfaces it prominently in the release notes and signals a major version bump. |
+| `Co-authored-by:` | Credits a co-author. GitHub shows both authors on the commit. |
+| `Reviewed-by:` | Records a reviewer. |
+| `Signed-off-by:` | Certifies the Developer Certificate of Origin (DCO). |
+| `Closes #N` / `Fixes #N` | Links the commit to an issue; GitHub auto-closes it on merge. |
+| `Refs #N` | References an issue without closing it. |
+
+Example with a breaking change and an issue link:
+
+```text
+feat: switch subject scoring to feed_weights
+
+BREAKING CHANGE: the old weights.*_subject keys are replaced by
+feed_weights and migrate automatically on load.
+
+Closes #42
+```
+
+The most important trailer for the release notes is `BREAKING CHANGE:`. The
+others (`Co-authored-by:`, `Closes #N`, ...) are for attribution and issue
+linking, and are read by GitHub regardless of the release-notes generator.
+
+### Manual release (no automation)
+
+If you ever need to cut a release by hand (e.g. the workflows are down, or you
+want a one-off tag), here is the manual equivalent of what CI does:
+
+```bash
+# 1. Make sure the version is bumped and committed on main.
+#    pyproject.toml version must match the tag you're about to create.
+
+# 2. Tag the release commit and push the tag.
+git tag v0.6.0
+git push origin v0.6.0
+
+# 3. Create the GitHub Release with auto-generated notes.
+gh release create v0.6.0 --title v0.6.0 --generate-notes --latest
+
+# 4. (Optional) verify the release.
+gh release view v0.6.0
+```
+
+To re-publish notes for an existing tag (e.g. after a typo), regenerate them
+via the API and edit the release:
+
+```bash
+gh api -X POST "repos/isaac-tes/arxiv-digest/releases/generate-notes" \
+  -f tag_name="v0.6.0" --jq '.body' > release-notes.md
+gh release edit v0.6.0 --notes-file release-notes.md
+```
+
+The manual path runs the same test suite and version check that CI runs, so
+verify locally first with `uv run pytest -q` and confirm the tag matches
+`pyproject.toml`.
 
 ### If you ever need to tag manually
 

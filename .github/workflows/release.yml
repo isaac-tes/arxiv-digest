@@ -70,42 +70,24 @@ jobs:
           fi
           echo "version $proj matches tag $TAG"
 
-      # Notes come verbatim from CHANGELOG.md so the release page and the
-      # changelog cannot drift apart.
-      - name: Extract release notes from CHANGELOG
-        run: |
-          version="${TAG#v}"
-          awk -v want="$version" '
-            /^## \[/ {
-              if (found) exit
-              line = $0
-              sub(/^## \[/, "", line)
-              sub(/\].*$/, "", line)
-              if (line == want) { found = 1 }
-              next
-            }
-            found { print }
-          ' CHANGELOG.md > release-notes.md
-          # Drop leading/trailing blank lines only — interior blanks separate
-          # the "### Fixed" / "### Changed" headings and must survive.
-          python3 -c 'import pathlib; p = pathlib.Path("release-notes.md"); p.write_text(p.read_text().strip() + "\n")'
-          if [ ! -s release-notes.md ]; then
-            echo "::error::no CHANGELOG.md section found for [$version] — add one before tagging"
-            exit 1
-          fi
-          echo "--- notes ---"
-          cat release-notes.md
-
+      # Release notes use GitHub's built-in auto-generated notes (from the
+      # commits since the previous tag), so no hand-written changelog is
+      # needed and the release page stays in sync with the commit history.
       - name: Create release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           if gh release view "$TAG" >/dev/null 2>&1; then
-            echo "Release $TAG exists — updating notes."
+            echo "Release $TAG exists — regenerating notes."
+            # gh release edit has no --generate-notes, so regenerate via the
+            # GitHub API and update the release with the result.
+            gh api -X POST "repos/${{ github.repository }}/releases/generate-notes" \
+              -f tag_name="$TAG" \
+              --jq '.body' > release-notes.md
             gh release edit "$TAG" --notes-file release-notes.md
           else
             gh release create "$TAG" \
               --title "$TAG" \
-              --notes-file release-notes.md \
+              --generate-notes \
               --latest
           fi
