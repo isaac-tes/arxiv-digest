@@ -70,24 +70,44 @@ jobs:
           fi
           echo "version $proj matches tag $TAG"
 
-      # Release notes use GitHub's built-in auto-generated notes (from the
-      # commits since the previous tag), so no hand-written changelog is
-      # needed and the release page stays in sync with the commit history.
+      # Curated release notes come from the "## [Unreleased]" section of
+      # CHANGELOG.md (the hand-written "### Fixed" / "### Added" sections).
+      # They are prepended to GitHub's auto-generated full changelog, so the
+      # release page shows both a curated summary and the complete PR list.
+      - name: Extract curated notes from CHANGELOG
+        run: |
+          awk '
+            /^## \[Unreleased\]/ { in_unreleased = 1; next }
+            /^## \[/ && !/^## \[Unreleased\]/ { in_unreleased = 0 }
+            in_unreleased { print }
+          ' CHANGELOG.md \
+            | python3 -c 'import sys; print(sys.stdin.read().strip())' \
+            > curated-notes.md
+          if [ ! -s curated-notes.md ]; then
+            echo "::warning::no curated notes under [Unreleased] — using auto-generated notes only"
+          fi
+          echo "--- curated notes ---"
+          cat curated-notes.md
+
       - name: Create release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           if gh release view "$TAG" >/dev/null 2>&1; then
             echo "Release $TAG exists — regenerating notes."
-            # gh release edit has no --generate-notes, so regenerate via the
-            # GitHub API and update the release with the result.
+            # gh release edit has no --generate-notes, so regenerate the full
+            # changelog via the API, prepend the curated notes, and update.
             gh api -X POST "repos/${{ github.repository }}/releases/generate-notes" \
               -f tag_name="$TAG" \
-              --jq '.body' > release-notes.md
+              --jq '.body' > auto-notes.md
+            cat curated-notes.md auto-notes.md > release-notes.md
             gh release edit "$TAG" --notes-file release-notes.md
           else
+            # --notes-file prepends the curated sections; --generate-notes
+            # appends the auto-generated full changelog.
             gh release create "$TAG" \
               --title "$TAG" \
+              --notes-file curated-notes.md \
               --generate-notes \
               --latest
           fi

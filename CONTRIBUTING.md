@@ -110,22 +110,53 @@ tag by hand:
 - `.github/workflows/tag-on-version-bump.yml`: when a push to `main` changes
   the `version` in `pyproject.toml`, it tags that commit `v<version>`.
 - `.github/workflows/release.yml`: fires on the `v*` tag, runs the test suite,
-  checks the tag matches `pyproject.toml`, and publishes the GitHub Release
-  with GitHub's **auto-generated release notes** (`--generate-notes`), derived
-  from the commits since the previous tag.
+  checks the tag matches `pyproject.toml`, and publishes the GitHub Release.
 
-So cutting a release is just: bump the version, merge to `main`, and let CI do
-the rest. The release notes are generated automatically from the commit history;
-you don't write them by hand.
+The release page combines two kinds of notes:
+
+1. **Curated notes** (hand-written): the `## [Unreleased]` section of
+   `CHANGELOG.md`, written as `### Added` / `### Fixed` / `### Changed`
+   sections. These are prepended to the release.
+2. **Auto-generated full changelog**: GitHub's `--generate-notes`, listing
+   every merged PR, closed issue, and contributor since the previous tag. This
+   is appended automatically.
+
+So you write a short human-readable summary per release, and GitHub fills in
+the complete changelog. This is the pattern used by many public repos (e.g.
+TensorKit.jl, worktrunk).
+
+### Writing the curated notes
+
+Before a release, fill in the `## [Unreleased]` section of `CHANGELOG.md`:
+
+```markdown
+## [Unreleased]
+
+### Added
+- New feature or behaviour.
+
+### Changed
+- A change to existing behaviour.
+
+### Fixed
+- A bug fix.
+
+### Removed
+- Something taken away.
+```
+
+Delete the headings you don't use. If the section is empty, the release uses
+only the auto-generated changelog.
 
 ### Full release (e.g. 0.6.0)
 
 1. On a branch off `main`, bump `version` in `pyproject.toml` (e.g. `0.6.0`).
-2. `uv lock` to refresh the lockfile.
-3. Commit as `release: v0.6.0` and push the branch.
-4. Merge to `main` (see above). CI tags `v0.6.0` and publishes the release with
-   auto-generated notes. No manual `git tag`, `git push --tags`, or release-note
-   editing needed.
+2. Fill in the `## [Unreleased]` curated notes in `CHANGELOG.md`.
+3. `uv lock` to refresh the lockfile.
+4. Commit as `release: v0.6.0` and push the branch.
+5. Merge to `main` (see above). CI tags `v0.6.0` and publishes the release with
+   your curated notes prepended to the auto-generated changelog. No manual
+   `git tag`, `git push --tags`, or release-page editing needed.
 
 ### Patch / hotfix (e.g. 0.6.1)
 

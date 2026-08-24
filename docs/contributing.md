@@ -33,12 +33,16 @@ See [CONTRIBUTING.md](https://github.com/isaac-tes/arxiv-digest/blob/main/CONTRI
 ## Releases
 
 Releases are automated: bump `version` in `pyproject.toml`, merge to `main`,
-and CI tags `v<version>` and publishes the release with auto-generated notes.
-See [CONTRIBUTING.md](https://github.com/isaac-tes/arxiv-digest/blob/main/CONTRIBUTING.md#releases) for the full flow.
+and CI tags `v<version>` and publishes the release. The release page combines
+your **curated notes** (the `## [Unreleased]` section of `CHANGELOG.md`, written
+as `### Added` / `### Fixed` / `### Changed`) with GitHub's **auto-generated
+full changelog** (every merged PR, closed issue, and contributor).
+
+See [CONTRIBUTING.md](https://github.com/isaac-tes/arxiv-digest/blob/main/CONTRIBUTING.md#releases) for the full flow and the curated-notes template.
 
 To cut a release manually (no automation):
 
 ```bash
 git tag v0.6.0 && git push origin v0.6.0
-gh release create v0.6.0 --title v0.6.0 --generate-notes --latest
+gh release create v0.6.0 --title v0.6.0 --notes-file curated.md --generate-notes --latest
 ```
