@@ -1,6 +1,6 @@
 # CLI guide
 
-The CLI (`arxiv_digest.py`) is single-file by design — it's pasteable into ChatGPT Code Interpreter, scriptable for cron, and deterministic. After `uv tool install '.[gui]'` it's also available as the `arxiv-digest` command on your PATH; or run it on the fly with `uvx --from '.[gui]' arxiv-digest ...` without installing anything.
+The CLI (`arxiv_digest.py`) is single-file by design: it's pasteable into ChatGPT Code Interpreter, scriptable for cron, and deterministic. After `uv tool install '.[gui]'` it's also available as the `arxiv-digest` command on your PATH; or run it on the fly with `uvx --from '.[gui]' arxiv-digest ...` without installing anything.
 
 ## Basic invocations
 
@@ -52,14 +52,14 @@ The `--add-* / --remove-* / --rename-*` flags only stick if combined with `--sav
 
 `arxiv_config.json` lives next to `arxiv_digest.py` (gitignored). See [Scoring](scoring.md) for the `weights` block.
 
-The CLI never exposes flags for `weights` — to tune scoring weights, use the GUI's Scoring tab and click *Write project config*, or hand-edit the JSON.
+The CLI never exposes flags for `weights`. To tune scoring weights, use the GUI's Scoring tab and click *Write project config*, or hand-edit the JSON.
 
 ## Output formats
 
 - **Console** (default): copy-paste friendly digest, ranked.
 - **JSON** (`--output-json`): structured data with `generated_at`, `feed_urls`, `top_n`, `total_papers`, and the ranked `entries`.
 - **Markdown** (`--output-markdown`): formatted for Notion / Obsidian / Slack.
-- **Plain text**: redirect stdout — `... > digest.txt`.
+- **Plain text**: redirect stdout: `... > digest.txt`.
 
 ## ChatGPT / Code Interpreter
 

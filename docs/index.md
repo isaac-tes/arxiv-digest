@@ -15,10 +15,10 @@ Fetches arXiv listing pages for **any** category, scores papers by your keyword 
 
 Two front-ends, one core:
 
-- **CLI** (`arxiv_digest.py`) — single-file, scriptable, deterministic. Best for daily cron / cold-open use.
-- **GUI** (`arxiv_gui.py`) — Streamlit app. Best for tuning preferences, exploring why something ranked where it did, and managing multiple research profiles.
+- **CLI** (`arxiv_digest.py`): single-file, scriptable, deterministic. Best for daily cron / cold-open use.
+- **GUI** (`arxiv_gui.py`): Streamlit app. Best for tuning preferences, exploring why something ranked where it did, and managing multiple research profiles.
 
-Both share the same `Config` and `arxiv_config.json` — tweak in one, the other picks it up.
+Both share the same `Config` and `arxiv_config.json`; tweak in one, the other picks it up.
 
 📚 **Docs**: <https://isaac-tes.github.io/arxiv-digest/> (live once the repo is public).
 
@@ -39,7 +39,7 @@ Three built-in, read-only topic bundles (keywords + authors + feeds) give you a 
 | `quantum-many-body` | Thermalization, many-body localization, tensor networks, strongly correlated systems |
 | `floquet-topological` | Floquet engineering, periodically driven systems & topological matter |
 
-Pick one in the GUI **Profiles → Starter presets** (**Load** replaces your working config, **Add** merges it in) or on the CLI with `--preset NAME` / `--add-preset NAME` (see `--list-presets`). Presets never overwrite your saved profiles or `arxiv_config.json` — they only change the in-memory config until you explicitly save. Topic sets are editable starting points; edit freely.
+Pick one in the GUI **Profiles → Starter presets** (**Load** replaces your working config, **Add** merges it in) or on the CLI with `--preset NAME` / `--add-preset NAME` (see `--list-presets`). Presets never overwrite your saved profiles or `arxiv_config.json`; they only change the in-memory config until you explicitly save. Topic sets are editable starting points; edit freely.
 
 ---
 
@@ -64,12 +64,12 @@ arxiv-gui                          # launches the Streamlit GUI
 uv tool uninstall arxiv-digest         # remove
 ```
 
-Prerequisite: install [uv](https://docs.astral.sh/uv/) first — `curl -LsSf https://astral.sh/uv/install.sh | sh`. Python 3.12 or newer; `uv` will install it for you if missing.
+Prerequisite: install [uv](https://docs.astral.sh/uv/) first: `curl -LsSf https://astral.sh/uv/install.sh | sh`. Python 3.12 or newer; `uv` will install it for you if missing.
 
 ### Run without installing (uvx)
 
 Prefer not to install a persistent tool? `uvx` runs the package on the fly from
-your clone — no `uv tool install`, no PATH entry, nothing to uninstall:
+your clone, with no `uv tool install`, no PATH entry, and nothing to uninstall:
 
 ```bash
 uvx --from '.[gui]' arxiv-digest --top 10   # CLI, anywhere in the clone
@@ -97,7 +97,7 @@ git pull                               # newest code (or: git fetch && git check
 uv tool install '.[gui]' --reinstall   # rebuild the arxiv-digest / arxiv-gui tools
 ```
 
-> **Why `--reinstall`?** `uv tool` installs into an isolated environment that does **not** auto-track your clone, so `git pull` alone won't update the `arxiv-digest` / `arxiv-gui` commands — the reinstall rebuilds them. (If you `uv run` from the clone instead of installing as a tool, just `git pull` is enough.)
+> **Why `--reinstall`?** `uv tool` installs into an isolated environment that does **not** auto-track your clone, so `git pull` alone won't update the `arxiv-digest` / `arxiv-gui` commands. The reinstall rebuilds them. (If you `uv run` from the clone instead of installing as a tool, just `git pull` is enough.)
 
 ---
 
@@ -115,25 +115,25 @@ The GUI opens `http://localhost:8501` in your browser automatically. The first t
 
 ### The daily flow
 
-1. **Sidebar** — pick **Timeframe** (`today` or `pastweek`), **Top N**, and which **Feeds** to fetch from. Click **Fetch papers**. The fetch is cached for 1 hour per `(timeframe, feeds)` combo, so re-clicking is instant; use **Clear fetch cache** to force a refresh.
-2. **Papers tab** — papers appear ranked. Open *Why this score?* under any paper to see exactly which keywords / authors / subjects contributed. Open *Full abstract* to read more without leaving the page.
-3. **Tweak preferences** in the **Keywords**, **Authors**, **Low priority**, **Scoring** tabs. The Papers tab re-ranks live on the cached fetch — no re-fetch needed.
+1. **Sidebar**: pick **Timeframe** (`today` or `pastweek`), **Top N**, and which **Feeds** to fetch from. Click **Fetch papers**. The fetch is cached for 1 hour per `(timeframe, feeds)` combo, so re-clicking is instant; use **Clear fetch cache** to force a refresh.
+2. **Papers tab**: papers appear ranked. Open *Why this score?* under any paper to see exactly which keywords / authors / subjects contributed. Open *Full abstract* to read more without leaving the page.
+3. **Tweak preferences** in the **Keywords**, **Authors**, **Low priority**, **Scoring** tabs. The Papers tab re-ranks live on the cached fetch, with no re-fetch needed.
 4. **Download** the current ranked list as Markdown or JSON via the buttons above the search box. The output format is byte-identical to `--output-markdown` / `--output-json`, so existing pipelines keep working.
 
 ### Tabs in detail
 
-- **Papers** — ranked list, search box (filters by title / authors / abstract substring), MD + JSON download buttons. Per paper: rank, title, authors, section, summary, arXiv link, score badge, expandable score breakdown, expandable full abstract.
-- **Keywords** — spreadsheet-style editor for `core_keywords`. Add/remove rows, click *Save core keywords*. *Reset to defaults* restores the built-in list. Each match adds the *Per-keyword bonus* (default +6) to a paper's score.
-- **Authors** — same pattern for `named_authors`. Default +6 per match. Match is case-insensitive substring on author string.
-- **Low priority** — penalty list. If *any* term matches, the paper takes the *Low-priority penalty* (default −5) — once, not per hit.
-- **Feeds** — `name → URL` editor. Add custom arXiv lists (e.g. `hep-th=https://arxiv.org/list/hep-th/new`). The `/new` / `/pastweek` suffix is rewritten by the timeframe selector at fetch time, so you can paste any base URL.
-- **Scoring** — a **Whole-word matching** toggle (default on; untick for legacy substring matching), then number inputs for each weight: per-keyword bonus, per-author bonus, low-priority penalty, long-abstract bonus, the abstract-length threshold, and a **per-feed subject bonus** for every configured feed (subject scoring is driven by `feed_weights`; defaults `cond-mat.quant-gas` +4, `cond-mat.mes-hall` +4, `quant-ph` +2). *Apply weights* makes the change live; *Reset to defaults* puts it back.
-- **Profiles** — **Starter presets** at the top: pick a built-in bundle and **Load** (replace working config) or **Add** (merge it in) — never touches your saved profiles or `arxiv_config.json`. Below, save the current full config under a name (e.g. `topology-mode`, `quantum-gas-mode`). Files live in `~/.arxiv_scraper/profiles/<name>.json`. Buttons: **Load**, **Export** (download JSON), **Delete**, **Import** (upload JSON). Below: **Write project config** dumps the current config to `arxiv_config.json` next to `arxiv_digest.py`, which is what the **CLI** picks up on the next run — use this to push your GUI tweaks back into your daily CLI digest.
+- **Papers**: ranked list, search box (filters by title / authors / abstract substring), MD + JSON download buttons. Per paper: rank, title, authors, section, summary, arXiv link, score badge, expandable score breakdown, expandable full abstract.
+- **Keywords**: spreadsheet-style editor for `core_keywords`. Add/remove rows, click *Save core keywords*. *Reset to defaults* restores the built-in list. Each match adds the *Per-keyword bonus* (default +6) to a paper's score.
+- **Authors**: same pattern for `named_authors`. Default +6 per match. Match is case-insensitive substring on author string.
+- **Low priority**: penalty list. If *any* term matches, the paper takes the *Low-priority penalty* (default −5), once, not per hit.
+- **Feeds**: `name → URL` editor. Add custom arXiv lists (e.g. `hep-th=https://arxiv.org/list/hep-th/new`). The `/new` / `/pastweek` suffix is rewritten by the timeframe selector at fetch time, so you can paste any base URL.
+- **Scoring**: a **Whole-word matching** toggle (default on; untick for legacy substring matching), then number inputs for each weight: per-keyword bonus, per-author bonus, low-priority penalty, long-abstract bonus, the abstract-length threshold, and a **per-feed subject bonus** for every configured feed (subject scoring is driven by `feed_weights`; defaults `cond-mat.quant-gas` +4, `cond-mat.mes-hall` +4, `quant-ph` +2). *Apply weights* makes the change live; *Reset to defaults* puts it back.
+- **Profiles**: **Starter presets** at the top: pick a built-in bundle and **Load** (replace working config) or **Add** (merge it in), never touching your saved profiles or `arxiv_config.json`. Below, save the current full config under a name (e.g. `topology-mode`, `quantum-gas-mode`). Files live in `~/.arxiv_scraper/profiles/<name>.json`. Buttons: **Load**, **Export** (download JSON), **Delete**, **Import** (upload JSON). Below: **Write project config** dumps the current config to `arxiv_config.json` next to `arxiv_digest.py`, which is what the **CLI** picks up on the next run. Use this to push your GUI tweaks back into your daily CLI digest.
 
 ### Saving papers to Zotero
 
-The GUI can save papers straight into your **local Zotero library** — the same
-mechanism the official Zotero Connector uses, with **no API-key setup**. A
+The GUI can save papers straight into your **local Zotero library**, using the
+same mechanism the official Zotero Connector uses, with **no API-key setup**. A
 **Save to Zotero** popover sits next to each paper's score (and in the **Score a
 paper** tab). It fetches the paper from the arXiv export API and writes a
 `preprint` item with the same fields, category tags, and PDF/Snapshot
@@ -144,7 +144,7 @@ afterwards) to avoid accidental duplicates.
 
 To enable it, saving uses Zotero's **local HTTP API**, which must be switched on:
 
-1. **Install/run Zotero 10 or newer** — older versions expose a read-only local
+1. **Install/run Zotero 10 or newer**: older versions expose a read-only local
    API and cannot save.
 2. Open Zotero → **Settings** (macOS: *Preferences*) → **Advanced** tab.
 3. Tick **"Allow other applications on this computer to communicate with
@@ -152,7 +152,7 @@ To enable it, saving uses Zotero's **local HTTP API**, which must be switched on
 4. Restart Zotero if prompted. The GUI sidebar should now show **Zotero:
    connected**.
 5. On the **first save**, Zotero pops an *"Allow this application to modify your
-   library?"* dialog — click **Allow** (or **Always Allow**) once, then save
+   library?"* dialog: click **Allow** (or **Always Allow**) once, then save
    again.
 
 The sidebar shows a **Zotero: connected / not running** status pill so you can
@@ -160,9 +160,9 @@ tell at a glance whether saving is available. See the [GUI guide](gui-guide.md#z
 
 ### Tips
 
-- The score breakdown is the fastest way to figure out why a low-priority hit overshadowed a keyword match — open it before re-tweaking weights blindly.
+- The score breakdown is the fastest way to figure out why a low-priority hit overshadowed a keyword match. Open it before re-tweaking weights blindly.
 - Profiles are pure JSON; you can hand-edit them outside the GUI or check them into a separate dotfiles repo if you want them tracked.
-- The GUI never writes back to `arxiv_config.json` automatically — you must press **Write project config** in the Profiles tab. That keeps surprises out of your CLI workflow.
+- The GUI never writes back to `arxiv_config.json` automatically. You must press **Write project config** in the Profiles tab. That keeps surprises out of your CLI workflow.
 
 ---
 
@@ -242,7 +242,7 @@ The `--add-* / --remove-* / --rename-*` flags only stick if combined with `--sav
 }
 ```
 
-The CLI never exposes flags for `weights` — to tune scoring weights, use the GUI's Scoring tab and click *Write project config*, or hand-edit the JSON. Subject scoring is driven by `feed_weights` (a bonus per feed name found in a paper's subjects); configs written before v0.3.0 auto-migrate on load.
+The CLI never exposes flags for `weights`. To tune scoring weights, use the GUI's Scoring tab and click *Write project config*, or hand-edit the JSON. Subject scoring is driven by `feed_weights` (a bonus per feed name found in a paper's subjects); configs written before v0.3.0 auto-migrate on load.
 
 ### Scoring (defaults)
 
@@ -250,20 +250,20 @@ The CLI never exposes flags for `weights` — to tune scoring weights, use the G
 |------|---------------|
 | Per matched core keyword | **+6** |
 | Per matched named author | **+6** (author list only) |
-| Per-feed subject bonus | **per feed** — e.g. `cond-mat.quant-gas` +4, `cond-mat.mes-hall` +4, `quant-ph` +2 |
+| Per-feed subject bonus | **per feed**: e.g. `cond-mat.quant-gas` +4, `cond-mat.mes-hall` +4, `quant-ph` +2 |
 | Any low-priority term matches (applied once) | **−5** |
 | Abstract longer than 200 chars | **+1** |
 
-Scalar weights live in `weights`; subject scoring in `feed_weights` — both configurable in `arxiv_config.json` or the GUI Scoring tab. Any arXiv category works: add a feed, give it a `feed_weights` bonus.
+Scalar weights live in `weights`; subject scoring in `feed_weights`, both configurable in `arxiv_config.json` or the GUI Scoring tab. Any arXiv category works: add a feed, give it a `feed_weights` bonus.
 
-**Matching is whole-word by default** (`word_boundary_matching: true`). Keywords, authors, and low-priority terms match only as complete tokens — `mpo` scores *MPO* / *MPO-based* / *the mpo ansatz* but **not** *temporal* or *composition*, and author `ma` no longer matches *Mao*. Hyphens, spaces, and punctuation count as boundaries. Set `word_boundary_matching: false` (or untick **Whole-word matching** in the GUI Scoring tab) for the legacy substring behavior. Subjects/`feed_weights` always use substring matching, so a parent feed `cond-mat` still matches `cond-mat.quant-gas`.
+**Matching is whole-word by default** (`word_boundary_matching: true`). Keywords, authors, and low-priority terms match only as complete tokens: `mpo` scores *MPO* / *MPO-based* / *the mpo ansatz* but **not** *temporal* or *composition*, and author `ma` no longer matches *Mao*. Hyphens, spaces, and punctuation count as boundaries. Set `word_boundary_matching: false` (or untick **Whole-word matching** in the GUI Scoring tab) for the legacy substring behavior. Subjects/`feed_weights` always use substring matching, so a parent feed `cond-mat` still matches `cond-mat.quant-gas`.
 
 ### Output formats
 
 - **Console** (default): copy-paste friendly digest, ranked.
 - **JSON** (`--output-json`): structured data with `generated_at`, `feed_urls`, `top_n`, `total_papers`, and the ranked `entries`.
 - **Markdown** (`--output-markdown`): formatted for Notion / Obsidian / Slack.
-- **Plain text**: redirect stdout — `... > digest.txt`.
+- **Plain text**: redirect stdout: `... > digest.txt`.
 
 ---
 

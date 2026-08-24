@@ -18,7 +18,7 @@ Python floor: 3.12 (see `.python-version`).
 ## Workflow
 
 1. Branch off `main`: `git switch -c <kind>/<short-summary>` (e.g. `fix/score-explain-drift`).
-2. Make your change. Keep `arxiv_digest.py` single-file and pasteable into ChatGPT — that's a load-bearing property.
+2. Make your change. Keep `arxiv_digest.py` single-file and pasteable into ChatGPT; that's a load-bearing property.
 3. Add or update tests under `tests/`. The suite must stay green and network-free.
 4. Update `CHANGELOG.md` under `[Unreleased]`.
 5. Open a PR against `main`.
@@ -27,7 +27,7 @@ Python floor: 3.12 (see `.python-version`).
 
 - Type hints on public functions; small `dataclass`es over dicts where possible.
 - Default to no comments; only add them when the *why* is non-obvious.
-- Keep the CLI surface stable — flags don't change without a deprecation note in `CHANGELOG.md`.
+- Keep the CLI surface stable. Flags don't change without a deprecation note in `CHANGELOG.md`.
 
 ## Testing
 
@@ -41,7 +41,7 @@ uv run pytest -k weight                      # by name
 
 ## GUI changes
 
-- The Streamlit app lives in `arxiv_gui.py` and imports `arxiv_digest as ad`. Don't duplicate scoring or fetch logic in the GUI — extend `arxiv_digest.py` and call it.
+- The Streamlit app lives in `arxiv_gui.py` and imports `arxiv_digest as ad`. Don't duplicate scoring or fetch logic in the GUI; extend `arxiv_digest.py` and call it.
 - After GUI changes, run `tests/test_gui.py` (uses `streamlit.testing.v1.AppTest`, headless).
 
 ## Docs

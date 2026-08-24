@@ -12,12 +12,12 @@ widgets showing their old values. This was a Streamlit footgun: once a widget is
 given an explicit `key`, Streamlit ignores the `value=`/`default=` argument on
 every rerun because `st.session_state[key]` already holds a value.
 
-This is fixed — those handlers now clear the affected widget state before
+This is fixed: those handlers now clear the affected widget state before
 rerunning (`_reset_widget_state` in `arxiv_gui.py`) so the widgets re-read from
 the active config. If you still see stale values:
 
 - Use the in-app buttons (**Reset to defaults**, **Apply weights**) rather than
-  expecting an edit to apply automatically — list and weight edits commit on
+  expecting an edit to apply automatically. List and weight edits commit on
   **Save** / **Apply**.
 - Hard-refresh the browser tab, or restart `streamlit run arxiv_gui.py`.
 
@@ -33,7 +33,7 @@ sessions, or **Write project config** to feed the CLI.
 
 - The selected timeframe may genuinely have no new listings (`today` = arXiv
   `/new`, `pastweek` = `/pastweek`).
-- A feed URL may be wrong — feeds are edited on the **Feeds** tab and must point
+- A feed URL may be wrong. Feeds are edited on the **Feeds** tab and must point
   at an arXiv listing page, e.g. `https://arxiv.org/list/cond-mat/new`.
 - arXiv may be rate-limiting; click **Clear fetch cache** and retry.
 
@@ -42,7 +42,7 @@ sessions, or **Write project config** to feed the CLI.
 ### Flag names
 
 Use `--timeframe {today,pastweek}`. There are no `--today` / `--pastweek` /
-`--days` flags despite some older docs — confirm with `--help`.
+`--days` flags despite some older docs. Confirm with `--help`.
 
 ### Inspecting defaults
 

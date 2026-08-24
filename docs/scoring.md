@@ -1,6 +1,6 @@
 # Scoring
 
-Every paper is reduced to a single integer score. The CLI and GUI both rank by this score and slice to `top_n`. Scoring is fully transparent — the GUI's *Why this score?* expander shows the per-rule contribution.
+Every paper is reduced to a single integer score. The CLI and GUI both rank by this score and slice to `top_n`. Scoring is fully transparent: the GUI's *Why this score?* expander shows the per-rule contribution.
 
 ## Defaults
 
@@ -8,11 +8,11 @@ Every paper is reduced to a single integer score. The CLI and GUI both rank by t
 |------|---------------|
 | Per matched core keyword | **+6** |
 | Per matched named author | **+6** (matched against the author list only) |
-| Per-feed subject bonus | **per feed** — e.g. `cond-mat.quant-gas` +4, `cond-mat.mes-hall` +4, `quant-ph` +2 |
+| Per-feed subject bonus | **per feed**: e.g. `cond-mat.quant-gas` +4, `cond-mat.mes-hall` +4, `quant-ph` +2 |
 | Any low-priority term matches (applied once) | **−5** |
 | Abstract longer than 200 chars | **+1** |
 
-Scalar weights live in the `ScoringWeights` dataclass; **subject scoring is fully driven by `feed_weights`** — one bonus per configured feed, added when the feed name appears in a paper's subjects. Edit both in `arxiv_config.json` or the GUI's Scoring tab (a field per feed under *Per-feed subject bonuses*).
+Scalar weights live in the `ScoringWeights` dataclass; **subject scoring is fully driven by `feed_weights`**, one bonus per configured feed, added when the feed name appears in a paper's subjects. Edit both in `arxiv_config.json` or the GUI's Scoring tab (a field per feed under *Per-feed subject bonuses*).
 
 ## `weights` + `feed_weights` in `arxiv_config.json`
 
@@ -69,4 +69,4 @@ breakdown = explain_score(paper, cfg)
 # }
 ```
 
-`score_paper(paper, cfg)` is a thin wrapper that returns `breakdown["total"]`. The two functions can never drift — `score_paper` calls `explain_score` internally.
+`score_paper(paper, cfg)` is a thin wrapper that returns `breakdown["total"]`. The two functions can never drift: `score_paper` calls `explain_score` internally.

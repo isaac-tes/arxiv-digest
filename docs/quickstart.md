@@ -2,7 +2,7 @@
 
 Three install paths depending on what you want.
 
-## Path 1 — clone and run (recommended for tinkering)
+## Path 1: clone and run (recommended for tinkering)
 
 ```bash
 git clone https://github.com/isaac-tes/arxiv-digest.git
@@ -19,7 +19,7 @@ The GUI also ships an optional convenience launcher:
 ./launch_gui.sh                          # auto-syncs gui group, then runs
 ```
 
-## Path 2 — install as a tool (recommended for daily CLI use)
+## Path 2: install as a tool (recommended for daily CLI use)
 
 ```bash
 uv tool install '.[gui]'                 # from inside a clone
@@ -39,10 +39,10 @@ To uninstall:
 uv tool uninstall arxiv-digest
 ```
 
-### Path 2b — run without installing (uvx)
+### Path 2b: run without installing (uvx)
 
 Don't want a persistent tool on your PATH? `uvx` builds and runs the package
-from your clone on the fly — nothing to install or uninstall:
+from your clone on the fly, with nothing to install or uninstall:
 
 ```bash
 uvx --from '.[gui]' arxiv-digest --top 10   # CLI
@@ -52,13 +52,13 @@ uvx --from '.[gui]' arxiv-gui               # GUI — opens your browser
 Because `uvx` rebuilds from the current directory each run, it always picks up
 your latest edits (no `--reinstall`). Drop the `[gui]` extra for CLI-only runs.
 
-## Path 3 — paste into ChatGPT
+## Path 3: paste into ChatGPT
 
 `arxiv_digest.py` is intentionally a single file with only `requests` + `beautifulsoup4` as runtime deps. Paste the file into Code Interpreter / Advanced Data Analysis and run `python arxiv_digest.py --top 10`.
 
 ## Prerequisites
 
-- [uv](https://docs.astral.sh/uv/) — `curl -LsSf https://astral.sh/uv/install.sh | sh`
+- [uv](https://docs.astral.sh/uv/): `curl -LsSf https://astral.sh/uv/install.sh | sh`
 - Python 3.12 or newer (uv installs it for you if missing)
 
 ## Troubleshooting
