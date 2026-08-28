@@ -55,3 +55,42 @@ discussions.
 - **Absence reason** — the explanation for a paper not appearing in the digest:
   either it was fetched but ranked below `top_n`, or it was never fetched (outside
   the subscribed feeds or the timeframe).
+
+## Mobile app
+
+- **Digest service** — the FastAPI backend that exposes the shared scoring/fetch
+  engine to the mobile apps. The single source of truth for CLI, GUI, iOS, and
+  Android.
+
+- **Triage** — the act of quickly deciding a paper's fate in the mobile app by
+  swiping: right = star/save to a list, left = dismiss/penalize. The primary mobile
+  interaction.
+
+- **Swipe action** — a single triage decision (star, dismiss, or penalize) sent to
+  the backend as feedback. Distinct from a *score*: a swipe *changes* future scores.
+
+- **List** — a named, user-curated collection of saved papers (e.g. one per subfield,
+  the way Floquet/topological/anyon-Hubbard work is tracked separately). Multi-list
+  support is a strategic differentiator.
+
+- **Anchor paper** — a paper the user marks as core interest; used (in a later phase)
+  as an embedding-similarity reference to catch semantically related work that misses
+  the exact keywords.
+
+- **Signal** — a pluggable scoring dimension in the backend pipeline (keyword,
+  embedding, author-affinity, veto). Each signal contributes a score, an explanation,
+  and highlight ranges. The pipeline sums signals; adding one later is additive.
+
+- **Veto** — a penalty channel that can *suppress* a paper even with a decent positive
+  score (e.g. a blocked author or a blocked sub-keyword). Distinct from a negative
+  weight on the same axis.
+
+- **Feedback** — a recorded swipe action that reweights the relevant signal so the
+  model visibly adapts to the user's triage.
+
+- **User** — an account in the multi-tenant backend. Every config, list, and feedback
+  record is scoped to a user. v1 runs single-user but the schema is multi-tenant.
+
+- **Offline cache** — the app's local (SwiftData) copy of the last digest, saved
+  papers, and PDFs, so the app works without a connection. The server remains the
+  source of truth; the cache is a convenience.

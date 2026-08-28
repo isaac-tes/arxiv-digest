@@ -34,3 +34,29 @@ arxiv_config.json
 
 # Beads / Dolt files (added by bd init)
 .beads/proxieddb/
+
+# ── Mobile app (server/ + ios/) ────────────────────────────────────────────
+# FastAPI server runtime
+server/.venv/
+server/.env
+server/*.db
+server/*.sqlite3
+
+# SwiftPM build artifacts (created by `swift build` / `swift test`)
+ios/.build/
+ios/.swiftpm/
+ios/.build-arm64-apple-macosx/
+
+# Xcode-generated workspace when opening the SPM package
+ios/*.xcodeproj/
+ios/*.xcworkspace/
+ios/DerivedData/
+
+# Zotero Web API key (never commit)
+.env
+*.env
+
+
+# Python build artifacts
+*.egg-info/
+__pycache__/

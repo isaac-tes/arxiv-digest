@@ -1,0 +1,43 @@
+# XcodeGen spec for the arXiv Digest iOS app.
+#
+# Generates a proper .xcodeproj with a real iOS app bundle (bundle ID +
+# Info.plist), which the SPM executable target cannot provide — that's why the
+# app crashed with "missing bundleID for main bundle" when run from the SPM
+# scheme. The app links the ArxivDigestCore SPM library.
+#
+# Regenerate with:  xcodegen generate  (from this directory)
+
+name: ArxivDigest
+options:
+  bundleIdPrefix: com.arxivdigest
+  deploymentTarget:
+    iOS: "17.0"
+  createIntermediateGroups: true
+
+packages:
+  ArxivDigestCore:
+    path: .
+
+targets:
+  ArxivDigestApp:
+    type: application
+    platform: iOS
+    sources:
+      - path: Sources/ArxivDigestApp
+    dependencies:
+      - package: ArxivDigestCore
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.arxivdigest.app
+        PRODUCT_NAME: ArxivDigest
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: arXiv Digest
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UISupportedInterfaceOrientations: "UIInterfaceOrientationPortrait"
+        SWIFT_VERSION: "5.0"
+        TARGETED_DEVICE_FAMILY: "1,2"
+        CODE_SIGN_STYLE: Automatic
+        # Local dev: allow plain-HTTP to the FastAPI backend on the LAN.
+        INFOPLIST_KEY_NSAppTransportSecurity_NSAllowsArbitraryLoads: YES
+        # Local dev: allow the app to reach the backend on the local network.
+        INFOPLIST_KEY_NSLocalNetworkUsageDescription: "arXiv Digest connects to your local digest server to fetch and score papers."
