@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Keyword and author font tinting is on by default** in the GUI: the sidebar
+  *Font: keywords* / *Font: authors* toggles default to checked (low-priority and
+  subjects remain background-highlight only), matching the original behavior.
+
+### Changed
+- **Group-library saving removed.** Zotero's local HTTP API has no supported
+  `/groups` listing or write route, so group saves could never use the local
+  "Allow this application?" authorization flow. The Save-to-Zotero popover now
+  saves to personal **My Library** collections only; to place an item in a group,
+  copy/drag it there in Zotero. The cloud-API/key path, its settings, and the
+  `zotero_cloud` module were dropped (see ADR 0002, marked superseded).
+
+### Fixed
+- **False "Saved to Zotero:" toast after a denied/failed save.** The save outcome
+  was consumed only inside the popover, so a denial could linger and fire a
+  stale success seconds later. Success is now shown only by the transient
+  "Saved ✓" tick, and errors are consumed immediately — a denied or failed save
+  never shows as a success.
+- **arXiv pastweek fetch hardened against rate limits and timeouts.** The export
+  API fetch retries 429/5xx and read/connect timeouts with backoff (honoring
+  `Retry-After`), sends a descriptive `User-Agent`, and uses a moderate page size
+  (500) so a big query neither trips the 429 limiter nor exceeds the read
+  timeout.
+- **Duplicate sub-category feed requests removed.** A `cond-mat.*` feed is no
+  longer fetched when its parent `cond-mat` is also selected, cutting redundant
+  arXiv requests while preserving dedup.
+
 ## [0.5.1] - 2026-08-22
 
 ### Added
