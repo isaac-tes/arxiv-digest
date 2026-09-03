@@ -93,19 +93,23 @@ write the project config.
 
 ## Zotero bridge
 
-The GUI can save papers straight into your **local Zotero library**, using the
-same mechanism the official Zotero Connector uses. No API key setup is needed.
+The GUI saves papers into your **personal My Library** through Zotero's local
+HTTP API, using the same mechanism as the official Zotero Connector and without
+an API key.
 
 - **Save to Zotero** popover next to each paper's score, and in the **Score a
   paper** tab. It fetches the paper from the arXiv export API and writes a
   `preprint` item with the same fields, category tags, and PDF/Snapshot
   attachments the Zotero Connector would produce, plus an `arxiv-digest` source
   tag.
-- **Choose a collection**: the popover lists your Zotero collections (plus
-  **My Library**); pick one and the paper is saved there.
-- **Confirmation**: a toast shows *"Saved to Zotero: …"* and auto-dismisses
-  after 10 seconds. Each paper saves at most once per session (the button shows
-  **Saved ✓** afterwards) to avoid accidental duplicates.
+- **Choose a collection**: the popover lists the personal-library root
+  (`(no collection)`) and My Library's collections. Group-library saving is not
+  offered because Zotero's local HTTP API has no supported group-library route.
+  To put a saved paper in a group, drag or copy it from My Library to that group
+  in Zotero.
+- **Confirmation**: a transient **Saved ✓** appears next to the score for
+  ~30 seconds before the Save button returns. You can re-save a paper later;
+  the bridge prevents creating a duplicate of the same arXiv item in My Library.
 
 ### Enabling saving to Zotero
 

@@ -270,11 +270,12 @@ class Config:
     color_author: str = "#3fb950"
     color_subject: str = "#a371f7"
     # Per-aspect "color the font too" toggles. When True, the matched text's
-    # font is also tinted with the aspect color (default False = background
-    # highlight only, the original behavior).
-    color_font_keyword: bool = False
+    # font is also tinted with the aspect color. Keywords and authors are on
+    # by default; low-priority and subjects default to background highlight
+    # only.
+    color_font_keyword: bool = True
     color_font_low_priority: bool = False
-    color_font_author: bool = False
+    color_font_author: bool = True
     color_font_subject: bool = False
     weights: ScoringWeights = field(default_factory=ScoringWeights)
 
@@ -321,9 +322,9 @@ class Config:
             color_low_priority=str(data.get("color_low_priority", "#f85149")),
             color_author=str(data.get("color_author", "#3fb950")),
             color_subject=str(data.get("color_subject", "#a371f7")),
-            color_font_keyword=bool(data.get("color_font_keyword", False)),
+            color_font_keyword=bool(data.get("color_font_keyword", True)),
             color_font_low_priority=bool(data.get("color_font_low_priority", False)),
-            color_font_author=bool(data.get("color_font_author", False)),
+            color_font_author=bool(data.get("color_font_author", True)),
             color_font_subject=bool(data.get("color_font_subject", False)),
             weights=weights,
         )
@@ -772,6 +773,88 @@ _API_ATOM = "{http://www.w3.org/2005/Atom}"
 _API_OPENSEARCH = "{http://a9.com/-/spec/opensearch/1.1/}"
 
 
+# arXiv's export API rate-limits aggressive clients with HTTP 429. We stay on
+# its good side by (a) pacing successive requests, (b) sending a descriptive
+# User-Agent (arXiv asks for this so it can identify/contact the tool rather
+# than hard-block it), and (c) retrying transient 429 / 5xx responses with backoff
+# that honors the server's Retry-After header. arXiv recommends ~3s between
+# requests for bulk use; 1s is a practical middle ground for the GUI, with the
+# retry/backoff as the safety net for any residual rate limiting.
+_ARXIV_RATE_LIMIT_SECONDS = 1.0
+_MAX_API_RETRIES = 5
+# Page size is a speed/request-count tradeoff. 100 strings 20 requests together
+# (slow, and the burst trips anonymous 429s). 2000 folds a big query into one
+# request that can exceed the read timeout (crashing on ReadTimeout). 500 returns
+# within the timeout yet needs only a handful of requests — a week of cond-mat
+# (~2000) is 4 requests, a sub-field is 1 — so it's fast *and* still respectful.
+_API_PAGE_SIZE = 500
+_API_USER_AGENT = "arxiv-digest (research tool; https://github.com/isaac-tes/arxiv-digest)"
+# Status codes that are safe to retry with backoff.
+_RETRYABLE_STATUS = (429, 500, 502, 503, 504)
+# Transport-level failures (before any HTTP status exists) that are transient and
+# retryable: connection refused/reset and read/connect timeouts.
+_RETRYABLE_EXCEPTIONS = (requests.ConnectionError, requests.Timeout)
+
+
+def _retry_after_seconds(resp: requests.Response) -> float | None:
+    """Parse an HTTP ``Retry-After`` header into seconds (None if absent/malformed)."""
+    wait = resp.headers.get("Retry-After")
+    if wait is None:
+        return None
+    try:
+        return max(float(wait), 0.0)
+    except ValueError:
+        return None
+
+
+def _api_get_with_retry(params: dict, verbose: bool = False) -> requests.Response:
+    """GET the arXiv export API, retrying transient failures with backoff.
+
+    Sends a descriptive ``User-Agent``. Retries are triggered by either a
+    retryable status (429 / 5xx) or a transport exception (read/connect timeout,
+    connection reset) — both are transient and both would otherwise crash a long
+    multi-feed fetch. Each retry waits ``Retry-After`` when the server sends one,
+    else backs off exponentially from ``_ARXIV_RATE_LIMIT_SECONDS``, up to
+    ``_MAX_API_RETRIES`` attempts. A non-retryable HTTP error still raises via
+    ``raise_for_status``; once retries are exhausted the last error is re-raised.
+    """
+    last_err: Exception | None = None
+    for attempt in range(_MAX_API_RETRIES + 1):
+        try:
+            resp = requests.get(
+                _ARXIV_API,
+                params=params,
+                timeout=30,
+                headers={"User-Agent": _API_USER_AGENT},
+            )
+        except _RETRYABLE_EXCEPTIONS as exc:
+            delay = _ARXIV_RATE_LIMIT_SECONDS * (2**attempt)
+            if verbose:
+                print(
+                    f"  API {type(exc).__name__}; retrying in {delay:.0f}s "
+                    f"(attempt {attempt + 1}/{_MAX_API_RETRIES + 1})"
+                )
+            last_err = exc
+            time.sleep(delay)
+            continue
+
+        if resp.status_code in _RETRYABLE_STATUS:
+            wait = _retry_after_seconds(resp)
+            delay = wait if wait is not None else _ARXIV_RATE_LIMIT_SECONDS * (2**attempt)
+            if verbose:
+                print(
+                    f"  API {resp.status_code}; retrying in {delay:.0f}s "
+                    f"(attempt {attempt + 1}/{_MAX_API_RETRIES + 1})"
+                )
+            last_err = requests.HTTPError(f"{resp.status_code} Server Error", response=resp)
+            time.sleep(delay)
+            continue
+
+        resp.raise_for_status()
+        return resp
+    raise last_err  # type: ignore[misc]
+
+
 def _api_day_label(dt: datetime) -> str:
     """Format a datetime as an arXiv day label, e.g. 'Thu, 20 Aug 2026'."""
     return dt.strftime("%a, %d %b %Y")
@@ -789,29 +872,30 @@ def fetch_feed_api(
     Uses the arXiv export API's `submittedDate` range query, which gives a true
     date window (unlike the /pastweek HTML listing). Returns paper dicts with the
     same shape as `fetch_feed` (id, title, authors, link, subjects, abstract,
-    section=day label). Paginates through the API (100 results per request).
+    section=day label). Paginates through the API (100 results per request),
+    pacing each page by ``_ARXIV_RATE_LIMIT_SECONDS`` and retrying transient 429 /
+    5xx responses with exponential backoff (see `_api_get_with_retry`), so a
+    rate limit degrades to a slower fetch instead of a hard crash.
     """
     papers: List[dict] = []
     start = 0
-    page_size = 100
+    page_size = _API_PAGE_SIZE
     # submittedDate range is inclusive on both ends, in YYYYMMDDHHMM form.
     start_str = start_date.strftime("%Y%m%d%H%M")
     end_str = end_date.strftime("%Y%m%d%H%M")
     query = f"cat:{category} AND submittedDate:[{start_str} TO {end_str}]"
 
     while True:
-        resp = requests.get(
-            _ARXIV_API,
-            params={
+        resp = _api_get_with_retry(
+            {
                 "search_query": query,
                 "start": start,
                 "max_results": page_size,
                 "sortBy": "submittedDate",
                 "sortOrder": "descending",
             },
-            timeout=30,
+            verbose=verbose,
         )
-        resp.raise_for_status()
         root = ET.fromstring(resp.content)
 
         total_node = root.find(f"{_API_OPENSEARCH}totalResults")
@@ -827,6 +911,8 @@ def fetch_feed_api(
         if not entries or len(papers) >= total or len(papers) >= max_results:
             break
         start += page_size
+        # Pace between paginated pages so arXiv's export API doesn't rate-limit us.
+        time.sleep(_ARXIV_RATE_LIMIT_SECONDS)
 
     return papers
 

@@ -108,3 +108,6 @@ nav:
   - Project:
       - Contributing: contributing.md
       - Changelog: changelog.md
+      - Architecture Decisions:
+          - Zotero local-API bridge: adr/0001-zotero-local-api-bridge.md
+          - Group libraries via cloud API: adr/0002-group-libraries-via-cloud-api.md

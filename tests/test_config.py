@@ -78,6 +78,32 @@ def test_default_config_basics():
     assert cfg.weights == ScoringWeights()
 
 
+def test_font_tint_defaults_keyword_and_author_true():
+    """Keywords and authors fonts are tinted by default; low-priority and
+    subjects are not. This drives the GUI checkbox pre-check state."""
+    cfg = Config()
+    assert cfg.color_font_keyword is True
+    assert cfg.color_font_author is True
+    assert cfg.color_font_low_priority is False
+    assert cfg.color_font_subject is False
+
+
+def test_font_tint_defaults_from_json_fallback_true():
+    """Empty/pre-feature JSON falls back to the same tinting defaults."""
+    cfg = Config.from_json({})
+    assert cfg.color_font_keyword is True
+    assert cfg.color_font_author is True
+    assert cfg.color_font_low_priority is False
+    assert cfg.color_font_subject is False
+
+
+def test_font_tint_explicit_false_still_respected():
+    """A stored config that explicitly turned a tint off keeps it off."""
+    cfg = Config.from_json({"color_font_keyword": False, "color_font_author": False})
+    assert cfg.color_font_keyword is False
+    assert cfg.color_font_author is False
+
+
 def test_default_keyword_list_no_duplicates():
     kws = _default_core_keywords()
     assert len(kws) == len(set(kws)), "default core_keywords must not contain duplicates"

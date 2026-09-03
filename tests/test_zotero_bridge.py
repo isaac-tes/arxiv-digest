@@ -43,7 +43,7 @@ class _MockResponse:
 
     def raise_for_status(self):
         if self.status_code >= 400:
-            raise RuntimeError(f"HTTP {self.status_code}")
+            raise zb.requests.HTTPError(f"HTTP {self.status_code}")
 
     def json(self):
         return self._json

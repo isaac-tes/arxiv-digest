@@ -33,8 +33,9 @@ def test_gui_sidebar_has_fetch_button():
     assert "Fetch papers" in labels
 
 
-def test_zotero_save_callback_guards_against_duplicates(monkeypatch):
-    """The save callback must write to Zotero at most once per paper."""
+def test_zotero_save_callback_blocks_concurrent_save_in_flight(monkeypatch):
+    """While a save is in flight for a paper, a second invocation is blocked
+    (prevents a double-click from triggering two concurrent writes)."""
     import arxiv_gui
     import zotero_bridge as zb
 
@@ -46,20 +47,19 @@ def test_zotero_save_callback_guards_against_duplicates(monkeypatch):
 
     monkeypatch.setattr(zb, "save_to_zotero", fake_save)
 
-    # Simulate session state as the GUI would have it.
-    arxiv_gui.st.session_state.saved_papers = set()
-    arxiv_gui.st.session_state.zotero_saving = set()
+    # A save is already in flight for this paper (its id is in zotero_saving).
+    arxiv_gui.st.session_state.zotero_saving = {"2608.16520"}
     arxiv_gui.st.session_state["zotero_col_2608.16520"] = "My Library"
 
-    # Clicking Save twice (e.g. double-click / rerun) must only write once.
     arxiv_gui._do_zotero_save("2608.16520", "Test paper")
-    arxiv_gui._do_zotero_save("2608.16520", "Test paper")
-    assert calls["n"] == 1
-    assert "2608.16520" in arxiv_gui.st.session_state.saved_papers
+    assert calls["n"] == 0
 
 
-def test_zotero_save_callback_skips_already_saved(monkeypatch):
-    """A paper already saved this session must not be written again."""
+def test_zotero_save_callback_allows_resave(monkeypatch):
+    """A previously-saved paper can be saved again (duplication is the user's
+    call); the callback records a fresh Saved-tick timestamp on success."""
+    import time
+
     import arxiv_gui
     import zotero_bridge as zb
 
@@ -70,11 +70,98 @@ def test_zotero_save_callback_skips_already_saved(monkeypatch):
         return {"ok": True, "item_key": "KEY123"}
 
     monkeypatch.setattr(zb, "save_to_zotero", fake_save)
+    monkeypatch.setattr(arxiv_gui, "_zotero_collections_cached", lambda: [])
 
-    arxiv_gui.st.session_state.saved_papers = {"2608.16520"}
+    arxiv_gui.st.session_state.zotero_saving = set()
+    arxiv_gui.st.session_state.zotero_saved_at = {}
+    arxiv_gui.st.session_state["zotero_col_2608.16520"] = "(no collection)"
+
+    # Second save must be allowed (no saved_papers guard anymore).
+    arxiv_gui._do_zotero_save("2608.16520", "Test paper")
+    arxiv_gui._do_zotero_save("2608.16520", "Test paper")
+    assert calls["n"] == 2
+    # The ticket records a timestamp close to now for each success.
+    saved_at = arxiv_gui.st.session_state.zotero_saved_at["2608.16520"]
+    assert abs(time.monotonic() - saved_at) < 5
+
+
+def test_zotero_save_callback_denied_never_records_success(monkeypatch):
+    """A denied local authorization stays an error and cannot show a success tick."""
+    import arxiv_gui
+    import zotero_bridge as zb
+
+    monkeypatch.setattr(arxiv_gui, "_zotero_collections_cached", lambda: [])
+    monkeypatch.setattr(
+        zb,
+        "save_to_zotero",
+        lambda *args, **kwargs: {"ok": False, "error": "Zotero did not grant write access."},
+    )
+    arxiv_gui.st.session_state.zotero_saving = set()
+    arxiv_gui.st.session_state.zotero_saved_at = {}
+
+    arxiv_gui._do_zotero_save("2608.16520", "Test paper")
+    assert "2608.16520" not in arxiv_gui.st.session_state.zotero_saved_at
+    assert arxiv_gui.st.session_state["zotero_result_2608.16520"] == (
+        "error",
+        "Zotero did not grant write access.",
+    )
+
+
+def test_zotero_tick_is_fresh(monkeypatch):
+    import time
+
+    import arxiv_gui
+
+    assert arxiv_gui._zotero_tick_is_fresh(None) is False
+    now = time.monotonic()
+    assert arxiv_gui._zotero_tick_is_fresh(now) is True
+    assert arxiv_gui._zotero_tick_is_fresh(now - 5, now=now) is True
+    assert arxiv_gui._zotero_tick_is_fresh(now - 31, now=now) is False
+    assert arxiv_gui._zotero_tick_is_fresh(now - 100, now=now) is False
+
+
+def test_zotero_tick_app_fresh_caption_stale_popover():
+    """A fresh Saved-tick renders the 'Saved ✓' caption only; a stale one
+    renders the full popover with its Save button again."""
+    from streamlit.testing.v1 import AppTest
+
+    at = AppTest.from_file("tests/fixtures/zotero_tick_app.py").run(timeout=15)
+    captions = [c.value for c in at.caption]
+    assert "Saved ✓" in captions, captions
+    save_buttons = [b.label for b in at.button]
+    assert "Save" in save_buttons, save_buttons
+
+
+def test_zotero_collection_options_personal_library(monkeypatch):
+    """The save popover offers the personal-library root and collections."""
+    import arxiv_gui
+
+    monkeypatch.setattr(
+        arxiv_gui, "_zotero_collections_cached",
+        lambda: [{"key": "AAAA1111", "name": "To Read"}],
+    )
+    assert arxiv_gui._zotero_collection_options() == ["(no collection)", "To Read"]
+    assert arxiv_gui._zotero_collection_key_for("(no collection)") is None
+    assert arxiv_gui._zotero_collection_key_for("To Read") == "AAAA1111"
+
+
+def test_zotero_save_callback_defaults_to_personal_library(monkeypatch):
+    """Saves always target the personal library root or its chosen collection."""
+    import arxiv_gui
+    import zotero_bridge as zb
+
+    captured = {}
+    monkeypatch.setattr(arxiv_gui, "_zotero_collections_cached", lambda: [])
+
+    def fake_save(_id, collection_key=None):
+        captured["collection_key"] = collection_key
+        return {"ok": True, "item_key": "KEY123"}
+
+    monkeypatch.setattr(zb, "save_to_zotero", fake_save)
+
     arxiv_gui.st.session_state.zotero_saving = set()
     arxiv_gui._do_zotero_save("2608.16520", "Test paper")
-    assert calls["n"] == 0
+    assert captured["collection_key"] is None
 
 
 def test_authors_html_highlights_named_authors():
@@ -151,7 +238,26 @@ def test_highlight_subjects_no_match_is_plain():
 
     out = arxiv_gui._highlight_subjects("Mathematics", {"quant-ph": 2})
     assert "hl-subject" not in out
-    assert out == "Mathematics"
+
+
+def test_pastweek_feeds_to_fetch_drops_subcategory_when_parent_present():
+    """A sub-category feed is elided when its parent is also fetched (less requests)."""
+    import arxiv_gui
+
+    feeds = (
+        ("cond-mat.quant-gas", "u"),
+        ("cond-mat.mes-hall", "u"),
+        ("quant-ph", "u"),
+        ("cond-mat", "u"),
+    )
+    assert arxiv_gui._pastweek_feeds_to_fetch(feeds) == ["quant-ph", "cond-mat"]
+
+    # Without the parent, the sub-categories are fetched normally.
+    assert arxiv_gui._pastweek_feeds_to_fetch(feeds[1:3]) == ["cond-mat.mes-hall", "quant-ph"]
+
+    # A name that merely shares a prefix (not a dotted child) is kept.
+    feeds2 = (("cond-matx", "u"), ("cond-mat", "u"))
+    assert arxiv_gui._pastweek_feeds_to_fetch(feeds2) == ["cond-matx", "cond-mat"]
 
 
 def test_highlight_subjects_empty():
@@ -356,6 +462,42 @@ def test_gui_sidebar_has_three_highlight_toggles():
     labels = {c.label for c in at.sidebar.checkbox}
     assert {"Highlight authors", "Highlight keywords in titles",
             "Highlight keywords in abstracts"} <= labels
+
+
+def test_gui_font_tint_checkboxes_checked_by_default():
+    """A fresh session shows the font-tint checkboxes ON (fonts tinted by default)."""
+    from streamlit.testing.v1 import AppTest
+
+    at = AppTest.from_file("arxiv_gui.py").run(timeout=15)
+    boxes = {c.label: c for c in at.sidebar.checkbox}
+    assert boxes["Font: keywords"].value is True
+    assert boxes["Font: authors"].value is True
+    # low-priority and subject font tinting stay off by default.
+    assert boxes["Font: low priority"].value is False
+    assert boxes["Font: subjects"].value is False
+    # The config object backs the checkboxes.
+    assert at.session_state["cfg"].color_font_keyword is True
+    assert at.session_state["cfg"].color_font_author is True
+
+
+def test_gui_font_defaults_reapply_when_session_version_stale(monkeypatch):
+    """A session that kept stale widget state (old default-version) re-applies the
+    new ON defaults instead of letting the stale unchecked checkbox win."""
+    import arxiv_digest as ad
+    from streamlit.testing.v1 import AppTest
+
+    # Reproduce a running session whose cfg exists but whose sidebar already
+    # holds an old font value and an out-of-date default version (hot-reload case).
+    at = AppTest.from_file("arxiv_gui.py")
+    at.session_state["cfg"] = ad.Config()                  # defaults: font ON
+    at.session_state["cfg_default_version"] = "1"          # older than current
+    at.session_state["color_font_keyword"] = False          # stale unchecked box
+    at.run(timeout=15)
+
+    boxes = {c.label: c for c in at.sidebar.checkbox}
+    assert boxes["Font: keywords"].value is True
+    assert boxes["Font: authors"].value is True
+    assert not list(at.exception)
 
 
 def test_gui_papers_tab_filters_replacements_and_offers_day_picker():
