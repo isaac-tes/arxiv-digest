@@ -11,6 +11,7 @@ from __future__ import annotations
 import html
 import json
 import re
+import time
 from dataclasses import asdict, fields
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -77,26 +78,66 @@ def _zotero_collections_cached() -> list[dict]:
     return zb.list_collections()
 
 
+_NO_COLLECTION = "(no collection)"
+
+
+def _zotero_collection_options() -> list[str]:
+    """Labels for the personal-library collection dropdown."""
+    return [_NO_COLLECTION] + [c["name"] for c in _zotero_collections_cached()]
+
+
+def _zotero_collection_key_for(name: str) -> str | None:
+    """Map a personal-library collection label to its key."""
+    if name == _NO_COLLECTION:
+        return None
+    for c in _zotero_collections_cached():
+        if c["name"] == name:
+            return c["key"]
+    return None
+
+
+# How long the transient "Saved ✓" indicator stays visible after a save, and
+# the auto-re-run interval used to retire it. The fragment timer is only live
+# while a tick is fresh, so idle papers carry no recurring work.
+SAVED_TICK_SECONDS = 30.0
+FRAGMENT_RERUN_SECONDS = 10.0
+
+
+def _zotero_tick_is_fresh(saved_at: float | None, now: float | None = None) -> bool:
+    """Whether a saved timestamp is still within the "Saved ✓" window.
+
+    ``None`` (never saved) is never fresh. ``now`` defaults to ``time.monotonic()``
+    but is injectable for deterministic tests.
+    """
+    if saved_at is None:
+        return False
+    now = time.monotonic() if now is None else now
+    return (now - saved_at) < SAVED_TICK_SECONDS
+
+
+def _set_zotero_saved(arxiv_id: str) -> None:
+    """Record a successful save so the transient 'Saved ✓' tick shows."""
+    if "zotero_saved_at" not in st.session_state:
+        st.session_state.zotero_saved_at = {}
+    st.session_state.zotero_saved_at[arxiv_id] = time.monotonic()
+
+
 def _do_zotero_save(arxiv_id: str, title: str) -> None:
     """Callback for the Save button — runs exactly once per click.
 
-    Performs the save and records the outcome in session state so the render
-    can display it. Guarded so each paper saves at most once per session and a
-    double-click can't trigger a second write.
+    Saves to the user's **personal** Zotero library via the local bridge (the
+    fast, no-key path that pops Zotero's own "Allow this application?" dialog).
+    Records a transient outcome so the render can show it. A denied/failed save
+    is stored as an error and must never show a success toast.
     """
-    if arxiv_id in st.session_state.saved_papers:
-        return
     if arxiv_id in st.session_state.zotero_saving:
         return  # a save is already in flight for this paper
     st.session_state.zotero_saving.add(arxiv_id)
+    # A retry supersedes any outcome still waiting to be rendered.
+    st.session_state.pop(f"zotero_result_{arxiv_id}", None)
 
-    # Resolve the chosen collection name -> key from the cached list.
-    collection_key = None
-    chosen = st.session_state.get(f"zotero_col_{arxiv_id}")
-    if chosen and chosen != "My Library":
-        collection_key = next(
-            (c["key"] for c in _zotero_collections_cached() if c["name"] == chosen), None
-        )
+    collection = st.session_state.get(f"zotero_col_{arxiv_id}", _NO_COLLECTION)
+    collection_key = _zotero_collection_key_for(collection)
 
     try:
         result = zb.save_to_zotero(arxiv_id, collection_key=collection_key)
@@ -105,13 +146,11 @@ def _do_zotero_save(arxiv_id: str, title: str) -> None:
         st.session_state.zotero_saving.discard(arxiv_id)
         return
 
-    if result.get("ok"):
-        st.session_state.saved_papers.add(arxiv_id)
-        st.session_state[f"zotero_result_{arxiv_id}"] = ("ok", title)
-    elif result.get("already_exists"):
-        # Already in the library — treat as saved so we stop trying.
-        st.session_state.saved_papers.add(arxiv_id)
-        st.session_state[f"zotero_result_{arxiv_id}"] = ("ok", title)
+    if result.get("ok") or result.get("already_exists"):
+        # Success (or already present) — record the transient 'Saved ✓' tick.
+        # The tick, not a lingering one-shot, is the success indicator, so a
+        # later rerun can never fire a stale 'Saved to Zotero:' toast.
+        _set_zotero_saved(arxiv_id)
     else:
         st.session_state[f"zotero_result_{arxiv_id}"] = (
             "error", result.get("error", "Zotero save failed."),
@@ -119,51 +158,77 @@ def _do_zotero_save(arxiv_id: str, title: str) -> None:
     st.session_state.zotero_saving.discard(arxiv_id)
 
 
+def _zotero_saved_at(arxiv_id: str) -> float | None:
+    """Return the recorded save timestamp for a paper, or None if never saved."""
+    records = st.session_state.zotero_saved_at if "zotero_saved_at" in st.session_state else {}
+    return records.get(arxiv_id)
+
+
 def _render_zotero_save_button(arxiv_id: str, title: str) -> None:
     """A 'Save to Zotero' popover next to a paper, like the Zotero Connector.
 
-    Opens a popover listing the user's Zotero collections (plus 'My Library').
-    Saving runs via an on_click callback (exactly once per click) and is guarded
-    so each paper saves at most once per session. The confirmation toast
-    auto-dismisses after 10s.
+    Opens a popover with a **Collection** dropdown for the personal My Library
+    and a Save button. Group-library saving is intentionally not offered because
+    Zotero's local API has no supported group-library route. After a successful save a transient 'Saved ✓' caption replaces the
+    popover for ``SAVED_TICK_SECONDS``; it then returns on its own because the
+    decorative fragment carries a ``run_every`` auto-re-run while the tick is
+    fresh. The timer is only registered while the tick is fresh, so idle papers
+    carry no recurring background work (the small residue after a tick expires
+    is dropped on the next full re-render).
     """
-    if arxiv_id in st.session_state.saved_papers:
-        st.caption("Saved ✓")
-        return
+    fresh_tick = _zotero_tick_is_fresh(_zotero_saved_at(arxiv_id))
 
-    with st.popover("Save to Zotero", width="stretch"):
-        st.caption("Choose a collection, then save.")
-        collections = _zotero_collections_cached()
-        # Filter-as-you-type search bar at the top of the dropdown.
-        search = st.text_input(
-            "Search collections", placeholder="Filter…", key=f"zotero_search_{arxiv_id}"
-        ).strip().lower()
-        if search:
-            collections = [c for c in collections if search in c["name"].lower()]
-        options = ["My Library"] + [c["name"] for c in collections]
-        st.selectbox("Collection", options=options, key=f"zotero_col_{arxiv_id}")
-        st.button(
-            "Save",
-            key=f"zotero_do_{arxiv_id}",
-            type="primary",
-            on_click=_do_zotero_save,
-            args=(arxiv_id, title),
-        )
-
-        # Show the outcome of the last save attempt for this paper, once —
-        # the result is popped so an unrelated rerun with the popover still
-        # open doesn't keep re-firing the "Saved" toast (which looked like
-        # the paper was being saved over and over).
+    @st.fragment(run_every=f"{FRAGMENT_RERUN_SECONDS}s" if fresh_tick else None)
+    def _tick_or_popover() -> None:
+        # Consume the pending result before the fresh-tick early return. The
+        # old implementation popped inside the popover, so an error/success
+        # could linger unseen and a stale success toast appeared seconds later.
         result = st.session_state.pop(f"zotero_result_{arxiv_id}", None)
         if result:
             kind, msg = result
-            if kind == "ok":
-                st.toast(f"Saved to Zotero: {msg}", duration=10000)
-            else:
+            if kind == "error":
                 st.error(msg)
+
+        if _zotero_tick_is_fresh(_zotero_saved_at(arxiv_id)):
+            st.caption("Saved ✓")
+            return
+
+        with st.popover("Save to Zotero", width="stretch"):
+            st.caption("Choose a collection, then save to My Library.")
+            st.selectbox(
+                "Collection",
+                options=_zotero_collection_options(),
+                key=f"zotero_col_{arxiv_id}",
+            )
+            st.button(
+                "Save",
+                key=f"zotero_do_{arxiv_id}",
+                type="primary",
+                on_click=_do_zotero_save,
+                args=(arxiv_id, title),
+            )
+
+    _tick_or_popover()
 
 
 # ────────────────────────── Fetching with cache ──────────────────────────
+
+def _pastweek_feeds_to_fetch(feeds_key: Tuple[Tuple[str, str], ...]) -> list[str]:
+    """Feed names to query, dropping sub-categories already covered by a parent.
+
+    In arXiv's dotted hierarchy ``cond-mat.quant-gas`` is a sub-category of
+    ``cond-mat``, and a ``cat:cond-mat`` query already returns every
+    sub-category's papers. When both a parent and one of its sub-categories are
+    configured (eg. the default cond-mat + quant-gas + mes-hall set), fetching
+    the parent alone avoids redundant requests; results are deduplicated by id
+    anyway, so no paper is lost.
+    """
+    names = [name for name, _ in feeds_key]
+    return [
+        name for name in names
+        if not any(name.startswith(other + ".") for other in names if other != name)
+    ]
+
 
 @st.cache_data(ttl=3600, show_spinner=False)
 def fetch_papers_cached(timeframe: str, feeds_key: Tuple[Tuple[str, str], ...]) -> list[dict]:
@@ -180,12 +245,18 @@ def fetch_papers_cached(timeframe: str, feeds_key: Tuple[Tuple[str, str], ...]) 
         start = end - timedelta(days=7)
         all_papers: list[dict] = []
         seen: set[str] = set()
-        for name, _ in feeds_key:
+        to_fetch = _pastweek_feeds_to_fetch(feeds_key)
+        for idx, name in enumerate(to_fetch):
             for p in ad.fetch_feed_api(name, start, end):
                 if p["id"] in seen:
                     continue
                 seen.add(p["id"])
                 all_papers.append(p)
+            # arXiv's export API rate-limits rapid consecutive calls (HTTP 429). Space
+            # the *actual* fetches apart so a multi-feed pastweek fetch isn't blocked;
+            # the result is cached for an hour, so this is a one-off cost.
+            if idx < len(to_fetch) - 1:
+                time.sleep(ad._ARXIV_RATE_LIMIT_SECONDS)
         return all_papers
 
     # today: HTML /new feed
@@ -198,15 +269,34 @@ def fetch_papers_cached(timeframe: str, feeds_key: Tuple[Tuple[str, str], ...]) 
 
 # ────────────────────────── Session state init ──────────────────────────
 
+# Bump whenever a config default changes (eg. keyword/author font tinting
+# switched to ON) so an already-open session re-applies the new defaults once,
+# instead of keeping stale sidebar widget state that overrides them.
+_FONT_DEFAULT_VERSION = "2"
+
+
 def init_state():
     if "cfg" not in st.session_state:
         st.session_state.cfg = ad.Config.load(PROJECT_CONFIG if PROJECT_CONFIG.exists() else None)
+        st.session_state.cfg_default_version = _FONT_DEFAULT_VERSION
+        # A fresh session should show the config's actual defaults (e.g. keyword
+        # and author font tinting now default ON). Without this, Streamlit would
+        # return a stale sidebar checkbox value from a widget key seeded earlier
+        # in the session and silently overwrite the config default (the same
+        # staleness _reset_widget_state guards against on profile load).
+        _reset_widget_state(*_DISPLAY_KEYS)
+    elif st.session_state.get("cfg_default_version") != _FONT_DEFAULT_VERSION:
+        # The defaults changed while this session was already alive (Streamlit
+        # keeps session_state across a hot-reload rerun). Re-apply the new
+        # defaults once by clearing the display widget keys so they re-read cfg.
+        st.session_state.cfg_default_version = _FONT_DEFAULT_VERSION
+        _reset_widget_state(*_DISPLAY_KEYS)
     if "papers" not in st.session_state:
         st.session_state.papers = []
     if "last_fetch" not in st.session_state:
         st.session_state.last_fetch = None
-    if "saved_papers" not in st.session_state:
-        st.session_state.saved_papers = set()
+    if "zotero_saved_at" not in st.session_state:
+        st.session_state.zotero_saved_at = {}
     if "zotero_saving" not in st.session_state:
         st.session_state.zotero_saving = set()
 
@@ -384,8 +474,8 @@ def render_sidebar():
         st.subheader("Zotero")
         render_zotero_status_pill()
         st.caption(
-            "Save papers to your Zotero library via the local API. Requires the "
-            "Zotero desktop app to be running."
+            "Save papers to your personal Zotero library via the local API. "
+            "Group-library saving is not available through Zotero's local API."
         )
 
 

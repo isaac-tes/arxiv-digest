@@ -39,10 +39,16 @@ discussions.
   library via Zotero's local HTTP API (`localhost:23119`). Enables one-click
   "Save to Zotero" without manual API-key setup.
 
-- **Save to Zotero**: the action of writing a paper into the user's Zotero library
+- **Save to Zotero**: the action of writing a paper into a chosen Zotero library
   as a `preprint` item, replicating what the Zotero Connector produces for an arXiv
   page (same fields, category tags, and PDF/Snapshot attachments), plus a single
-  `arxiv-digest` source tag.
+  `arxiv-digest` source tag. The GUI never blocks a save; it shows a transient
+  "Saved ✓" indicator that expires after 30 seconds so the same paper can be
+  re-saved. Duplicate prevention is a My-Library concern, not the tool's decision.
+
+- **Save target**: the personal My Library root or one of its collections chosen
+  in the Zotero save popover. Group-library targets are intentionally not
+  offered because Zotero's local HTTP API has no supported group-library route.
 
 - **Connector-faithful**: describing a saved item whose fields and tags match what
   the official Zotero Connector would produce for the same arXiv page.

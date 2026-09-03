@@ -151,12 +151,15 @@ def _zotero_item_exists(archive_id: str, timeout: float = 10.0, page_limit: int 
     ``arxiv-digest`` tag (a small, bounded set) and paginates through them
     looking for an exact ``archiveID`` match, which is reliable regardless of
     indexing delays.
+
+    Dedup runs against the personal My Library only.
     """
+    items_url = f"{ZOTERO_LOCAL_BASE}/users/0/items"
     start = 0
     while True:
         try:
             resp = requests.get(
-                f"{ZOTERO_LOCAL_BASE}/users/0/items",
+                items_url,
                 headers={"Zotero-API-Version": ZOTERO_API_VERSION},
                 params={"tag": SOURCE_TAG, "start": start, "limit": page_limit},
                 timeout=timeout,
@@ -342,7 +345,8 @@ def build_preprint_item(entry: ET.Element, version: Optional[str] = None) -> Dic
 def save_to_zotero(arxiv_id: str, collection_key: Optional[str] = None) -> Dict:
     """Fetch an arXiv paper and save it to the local Zotero library.
 
-    If ``collection_key`` is given, the item is added to that collection.
+    If ``collection_key`` is given, the item is added to that personal-library
+    collection. Group-library saving is not supported by Zotero's local API.
     Returns a dict with ``ok`` (bool) and either ``item_key`` or ``error``.
     Raises on network/API failures so the caller can surface a message.
     """

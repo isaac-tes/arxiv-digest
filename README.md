@@ -11,12 +11,9 @@
   <em>Matched keywords and authors highlighted, a live score breakdown, one-click Save to Zotero.</em>
 </p>
 
-Fetches arXiv listing pages for **any** category, scores papers by your keyword / author / subject preferences, and presents the ranked digest either as a CLI report (terminal, Markdown, JSON) or a Streamlit GUI for interactive tuning. Works with any arXiv feed (`hep-th`, `cs.LG`, `math.AG`, …); the defaults just ship a condensed-matter / quantum-physics set you can replace.
+Fetches arXiv listing pages for **any** category, scores papers by your keyword / author / subject preferences, and presents the ranked digest as a **web app** (`arxiv-gui`) for interactive browsing and tuning, or as a CLI report (terminal, Markdown, JSON) for automation. Works with any arXiv feed (`hep-th`, `cs.LG`, `math.AG`, …); the defaults just ship a condensed-matter / quantum-physics set you can replace.
 
-Two front-ends, one core:
-
-- **CLI** (`arxiv_digest.py`): single-file, scriptable, deterministic. Best for daily cron / cold-open use.
-- **GUI** (`arxiv_gui.py`): Streamlit app. Best for tuning preferences, exploring why something ranked where it did, and managing multiple research profiles.
+**👋 Most people should use the web app.** It runs in your browser, shows each paper's keyword / author / subject hits highlighted in color, explains *why* it scored what it did, and offers one-click **Save to Zotero**. The CLI is there for those who want a scriptable, terminal-first digest sharing the exact same preferences and config.
 
 Both share the same `Config` and `arxiv_config.json`; tweak in one, the other picks it up.
 
@@ -43,37 +40,85 @@ Pick one in the GUI **Profiles → Starter presets** (**Load** replaces your wor
 
 ---
 
-## Quick start
+## 🖥️ Start with the web app (recommended)
+
+Three steps: install `uv`, install the app, run `arxiv-gui`. Your browser opens with the ranked digest and you can start tuning right away.
+
+### 1. Install uv
+
+<details>
+<summary><b>Only if you don't have <code>uv</code> yet</b> — install it on your OS (one command), then come back</summary>
+
+`uv` is a fast, single-binary Python package manager. Official install scripts:
+
+- **macOS / Linux (curl)**
+  ```bash
+  curl -LsSf https://astral.sh/uv/install.sh | sh
+  ```
+- **Windows (PowerShell)**
+  ```powershell
+  powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+  ```
+- **Homebrew (macOS / Linux)**
+  ```bash
+  brew install uv
+  ```
+
+Then restart your terminal (so the `uv` command is on your `PATH`) and verify with `uv --version`. See the official [uv install docs](https://docs.astral.sh/uv/getting-started/installation/).
+
+</details>
+
+Already have `uv`? Skip straight to step 2.
+
+### 2. Get the app
 
 ```bash
-cd .../arxiv-digest
-uv sync                                               # base install
-uv run python arxiv_digest.py --top 15                # CLI: print top 15
-uv sync --group gui                                   # add GUI deps
-uv run streamlit run arxiv_gui.py                     # GUI: opens in browser
-./launch_gui.sh                                       # optional one-shot wrapper
+git clone <repo-url> arxiv-digest
+cd arxiv-digest
+uv tool install '.[gui]'      # installs the arxiv-gui web app on your PATH
 ```
 
-### Install as a tool (CLI + GUI on your PATH)
+> `.[gui]` pulls in the web app's dependencies (Streamlit + pandas). If you only
+> ever use the CLI, omit the `[gui]` extra: `uv tool install .`.
+
+### 3. Run the web app
+
+```bash
+arxiv-gui
+```
+
+Your browser opens `http://localhost:8501`. Feeds default to a condensed-matter /
+quantum-physics set — hit **Fetch papers** in the sidebar and start reading. Pick
+a [starter preset](#starter-presets) if you'd rather start from a prepared topic
+bundle.
+
+**Prefer not to install?** `uvx` runs the web app on the fly with nothing to
+uninstall:
+
+```bash
+uvx --from '.[gui]' arxiv-gui     # from inside the clone
+```
+
+### Install as a tool on your PATH (CLI + GUI)
 
 ```bash
 uv tool install '.[gui]'           # from inside a clone
 arxiv-digest --top 10              # CLI command, anywhere
-arxiv-gui                          # launches the Streamlit GUI
+arxiv-gui                          # launches the web app
 
-uv tool uninstall arxiv-digest         # remove
+uv tool uninstall arxiv-digest     # remove
 ```
 
-Prerequisite: install [uv](https://docs.astral.sh/uv/) first: `curl -LsSf https://astral.sh/uv/install.sh | sh`. Python 3.12 or newer; `uv` will install it for you if missing.
+Python 3.12 or newer is required; `uv` installs it for you if it's missing.
 
 ### Run without installing (uvx)
 
-Prefer not to install a persistent tool? `uvx` runs the package on the fly from
-your clone, with no `uv tool install`, no PATH entry, and nothing to uninstall:
+`uvx` runs the package on the fly from your clone, with no `uv tool install`, no
+PATH entry, and nothing to uninstall:
 
 ```bash
 uvx --from '.[gui]' arxiv-digest --top 10   # CLI, anywhere in the clone
-uvx --from '.[gui]' arxiv-gui               # GUI — opens your browser
+uvx --from '.[gui]' arxiv-gui               # web app — opens your browser
 ```
 
 `uvx` builds the package from the current directory each time, so it always
@@ -105,10 +150,17 @@ uv tool install '.[gui]' --reinstall   # rebuild the arxiv-digest / arxiv-gui to
 
 ### Launching
 
+The quickest way to open it is the installed `arxiv-gui` command:
+
+```bash
+arxiv-gui                            # opens http://localhost:8501 in your browser
+```
+
+Or, running straight from a clone (after `uv sync --group gui`):
+
 ```bash
 uv sync --group gui                  # one-time, installs Streamlit + pandas
 uv run streamlit run arxiv_gui.py    # opens http://localhost:8501 in your browser
-arxiv-gui                            # same, via the installed tool (opens browser)
 ```
 
 The GUI opens `http://localhost:8501` in your browser automatically. The first time you launch, the app loads `arxiv_config.json` if present in the project root, otherwise the built-in defaults. Profiles you save go to `~/.arxiv_scraper/profiles/` and persist across sessions / project clones.
@@ -138,11 +190,20 @@ same mechanism the official Zotero Connector uses, with **no API-key setup**. A
 paper** tab). It fetches the paper from the arXiv export API and writes a
 `preprint` item with the same fields, category tags, and PDF/Snapshot
 attachments the Zotero Connector would produce, plus an `arxiv-digest` source
-tag. You can pick a **collection** (or **My Library**), and a toast confirms the
-save. Each paper saves at most once per session (the button shows **Saved ✓**
-afterwards) to avoid accidental duplicates.
+tag.
 
-To enable it, saving uses Zotero's **local HTTP API**, which must be switched on:
+From the popover you choose a **collection** in your personal **My Library**
+(or its root) and click **Save**. A transient **Saved ✓** confirms a successful
+save for ~30 seconds before the Save button returns. Failed or denied saves are
+shown as errors — never as a success. You are free to re-save a paper later; the
+bridge prevents creating a duplicate of the same arXiv item in My Library.
+
+> **Group libraries:** The local Zotero HTTP API does not expose a supported
+> group-library listing or write route, so this app intentionally offers
+> **personal My Library only**. To put a saved paper in a group, drag or copy it
+> from My Library to the group in Zotero.
+
+To enable saving, Zotero's **local HTTP API** must be switched on:
 
 1. **Install/run Zotero 10 or newer**: older versions expose a read-only local
    API and cannot save.
@@ -167,6 +228,10 @@ tell at a glance whether saving is available. See the [GUI guide](docs/gui-guide
 ---
 
 ## CLI guide
+
+Prefer a terminal / scriptable digest (for cron, CI, or `--output-markdown/--json`
+reports)? The `arxiv-digest` CLI shares the exact same `Config`, `arxiv_config.json`,
+and starter presets as the web app — tweak in one, the other picks it up.
 
 ### Basic invocations
 
