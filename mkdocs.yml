@@ -93,9 +93,6 @@ extra:
     - icon: fontawesome/brands/github
       link: https://github.com/isaac-tes/arxiv-digest
       name: GitHub
-    - icon: fontawesome/solid/envelope
-      link: mailto:isaac-tes
-      name: Contact
 
 nav:
   - Home: index.md

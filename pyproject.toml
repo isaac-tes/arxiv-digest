@@ -8,7 +8,7 @@ version = "0.5.4"
 description = "Score and rank fresh arXiv papers from any category, via a CLI or a Streamlit GUI."
 readme = "README.md"
 license = { text = "MIT" }
-authors = [{ name = "isaac-tes", email = "isaac-tes" }]
+authors = [{ name = "isaac-tes" }]
 requires-python = ">=3.12"
 keywords = ["arxiv", "research", "cond-mat", "quant-ph", "streamlit", "cli"]
 classifiers = [
