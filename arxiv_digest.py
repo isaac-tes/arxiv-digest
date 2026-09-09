@@ -132,7 +132,6 @@ def _default_named_authors() -> List[str]:
         "ozawa",
         "carusotto",
         "goldman",
-        
         "pollmann",
         "verresen",
         "barbiero",
@@ -345,14 +344,14 @@ class Config:
 #
 # Read-only, built-in research-topic bundles a new user can pick as a starting
 # point instead of the generic cond-mat default.
-# a quantum physics research profile. Presets are
+# Presets are
 # NEVER written to disk on their own — Load/Add only mutate the in-memory
 # Config; the user's arxiv_config.json and ~/.arxiv_scraper profiles are
 # untouched unless they explicitly Save / --save-config.
 #
 # Each preset defines keywords + authors + feeds/feed_weights; scalar prefs
-# (weights, top_n, timeframe, flags) stay at Config defaults. Authors always
-# include famous *distinctive* surnames per field
+# (weights, top_n, timeframe, flags) stay at Config defaults. Authors use
+# famous *distinctive* surnames per field
 # (short/common ones like 'wu'/'link'/'ma' are omitted — they over-match even
 # with whole-word matching), capped at 10.
 
@@ -747,10 +746,7 @@ def fetch_feeds(urls: List[str], sections: List[str] | None = None, verbose: boo
     for u in urls:
         if verbose:
             print(f"Fetching {u}...")
-        try:
-            papers = fetch_feed(u, sections=sections, verbose=verbose)
-        except Exception:
-            raise
+        papers = fetch_feed(u, sections=sections, verbose=verbose)
         for p in papers:
             pid = p.get("id")
             if pid in seen_ids:
@@ -953,6 +949,34 @@ def _paper_from_api_entry(entry: ET.Element) -> dict:
         "abstract": text("summary"),
         "section": day_label,
     }
+
+
+def fetch_pastweek(
+    feed_names: Sequence[str],
+    start: datetime,
+    end: datetime,
+    verbose: bool = False,
+) -> List[dict]:
+    """Fetch several feeds across a date window, deduplicating by arXiv id.
+
+    ``feed_names`` are category strings (each must be a key of ``cfg.feeds``,
+    validated by the caller). Each is queried through :func:`fetch_feed_api`
+    for the window ``[start, end]`` and results are concatenated, skipping any
+    id already seen so overlapping categories (a parent ``cond-mat`` plus its
+    sub-categories) contribute each paper once. Calls are spaced apart so the
+    arXiv export API doesn't rate-limit.
+    """
+    papers: List[dict] = []
+    seen: set[str] = set()
+    for idx, name in enumerate(feed_names):
+        for p in fetch_feed_api(name, start, end, verbose=verbose):
+            if p["id"] in seen:
+                continue
+            seen.add(p["id"])
+            papers.append(p)
+        if idx < len(feed_names) - 1:
+            time.sleep(_ARXIV_RATE_LIMIT_SECONDS)
+    return papers
 
 
 # ── Submission-type / day filtering ──────────────────────────────────────────
@@ -1246,23 +1270,58 @@ def format_markdown(entries: List[dict], total_papers: int, requested_top: int) 
     return "\n".join(lines).strip()
 
 
+def _timeframe_suffix(timeframe: str) -> str:
+    """Return the arXiv listing suffix for ``timeframe`` (``new`` or ``pastweek``)."""
+    return "new" if timeframe == "today" else "pastweek"
+
+
+def feed_url(base_url: str, timeframe: str) -> str:
+    """Return ``base_url`` with its listing suffix rewritten for ``timeframe``.
+
+    arXiv listing URLs end in one of ``/new``, ``/recent``, or ``/pastweek``
+    (older configs may hold any of these). Only the trailing ``/new``,
+    ``/recent``, or ``/pastweek`` segment is rewritten, to ``/new`` for
+    ``today`` or ``/pastweek`` otherwise; the rest of the URL is untouched.
+    """
+    suffix = _timeframe_suffix(timeframe)
+    for old in ("/new", "/recent", "/pastweek"):
+        if base_url.endswith(old):
+            return base_url[: -len(old)] + f"/{suffix}"
+    return base_url
+
+
+def _validate_feed_names(cfg: Config, names: Sequence[str]) -> None:
+    """Raise ``SystemExit`` on any feed name that is neither known nor a URL.
+
+    Every entry in ``names`` must either be a key of ``cfg.feeds`` or an explicit
+    ``http(s)://`` URL. Unknown names are a hard error rather than a silent skip,
+    so a typo in ``--feed`` or a stale ``default_feeds`` entry can't quietly
+    produce an empty digest.
+    """
+    unknown = [
+        n for n in names if n not in cfg.feeds and not n.startswith(("http://", "https://"))
+    ]
+    if unknown:
+        raise SystemExit(
+            "Unknown feed(s): "
+            + ", ".join(repr(n) for n in unknown)
+            + ". Add them with '--add-url NAME=URL' or edit the config."
+        )
+
+
 def determine_feed(cfg: Config, args: argparse.Namespace) -> List[str]:
     # This function is kept for backward compatibility but main now supports
     # multiple feeds via --feed (action=append). If args.feed is provided it
     # may be a list of names/URLs; return a list of URLs.
-    
+
     # Determine timeframe to use
     timeframe = args.timeframe if args.timeframe else cfg.timeframe
-    timeframe_suffix = "new" if timeframe == "today" else "pastweek"
-    
+
     if args.feed:
         urls: List[str] = []
         for key in args.feed:
             if key in cfg.feeds:
-                # Replace the timeframe suffix in the URL
-                base_url = cfg.feeds[key]
-                url = base_url.replace("/new", f"/{timeframe_suffix}").replace("/recent", f"/{timeframe_suffix}").replace("/pastweek", f"/{timeframe_suffix}")
-                urls.append(url)
+                urls.append(feed_url(cfg.feeds[key], timeframe))
                 continue
             if key.startswith("http"):
                 urls.append(key)
@@ -1273,10 +1332,7 @@ def determine_feed(cfg: Config, args: argparse.Namespace) -> List[str]:
     urls: List[str] = []
     for feed_name in cfg.default_feeds:
         if feed_name in cfg.feeds:
-            # Replace the timeframe suffix in the URL
-            base_url = cfg.feeds[feed_name]
-            url = base_url.replace("/new", f"/{timeframe_suffix}").replace("/recent", f"/{timeframe_suffix}").replace("/pastweek", f"/{timeframe_suffix}")
-            urls.append(url)
+            urls.append(feed_url(cfg.feeds[feed_name], timeframe))
     if urls:
         return urls
 
@@ -1438,6 +1494,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(format_score_breakdown(paper, breakdown))
         return 0
 
+    feed_names = args.feed or cfg.default_feeds
+    _validate_feed_names(cfg, feed_names)
     feed_urls = determine_feed(cfg, args)
 
     # pastweek uses the arXiv export API date-range for a true 7-day window
@@ -1447,17 +1505,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         if timeframe == "pastweek":
             end = datetime.now()
             start = end - timedelta(days=7)
-            feed_names = args.feed or cfg.default_feeds
-            papers: List[dict] = []
-            seen: set[str] = set()
-            for name in feed_names:
-                if name not in cfg.feeds:
-                    continue
-                for p in fetch_feed_api(name, start, end, verbose=args.verbose):
-                    if p["id"] in seen:
-                        continue
-                    seen.add(p["id"])
-                    papers.append(p)
+            # The export API queries by category, so explicit URL feeds (only
+            # usable on the HTML path) are excluded here.
+            api_names = [n for n in feed_names if not n.startswith("http")]
+            papers = fetch_pastweek(api_names, start, end, verbose=args.verbose)
         else:
             papers = fetch_feeds(feed_urls, sections=args.sections, verbose=args.verbose)
     except requests.RequestException as exc:

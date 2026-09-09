@@ -36,11 +36,12 @@ def test_each_preset_is_populated():
             assert f in cfg.feeds, (name, f)
 
 
-def test__and__in_every_preset():
+def test_every_preset_has_authors():
     for name in preset_names():
         authors = [a.lower() for a in preset_config(name).named_authors]
-        assert "" in authors, name
-        assert "" in authors, name
+        assert authors, name
+        # no personal/private-group author names leak into the public presets
+        assert not (set(authors) & { ""}), name
 
 
 def test_author_count_capped_at_ten():
@@ -84,7 +85,7 @@ def test_merge_preset_unions_without_touching_scalars():
     assert "myauthor" in merged.named_authors
     assert "myfeed" in merged.feeds
     # preset content added
-    assert "" in [a.lower() for a in merged.named_authors]
+    assert "eisert" in [a.lower() for a in merged.named_authors]
     assert len(merged.core_keywords) > 1
     # scalars untouched
     assert merged.top_n == 7
@@ -92,14 +93,14 @@ def test_merge_preset_unions_without_touching_scalars():
 
 
 def test_merge_preset_dedups_case_insensitively_preserving_order():
-    base = Config(core_keywords=["Floquet", "unique-base-kw"], named_authors=[""],
+    base = Config(core_keywords=["Floquet", "unique-base-kw"], named_authors=["Einstein"],
                   feeds={}, default_feeds=[])
     merged = merge_preset(base, "floquet-topological")
     lowered = [k.lower() for k in merged.core_keywords]
     assert lowered.count("floquet") == 1               # no dup despite preset also having it
     assert merged.core_keywords[0] == "Floquet"        # base order kept first
     assert "unique-base-kw" in merged.core_keywords
-    assert [a.lower() for a in merged.named_authors].count("") == 1
+    assert [a.lower() for a in merged.named_authors].count("einstein") == 1
 
 
 def test_merge_preset_does_not_mutate_input():

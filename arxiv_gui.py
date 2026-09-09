@@ -243,27 +243,13 @@ def fetch_papers_cached(timeframe: str, feeds_key: Tuple[Tuple[str, str], ...]) 
     if timeframe == "pastweek":
         end = datetime.now()
         start = end - timedelta(days=7)
-        all_papers: list[dict] = []
-        seen: set[str] = set()
         to_fetch = _pastweek_feeds_to_fetch(feeds_key)
-        for idx, name in enumerate(to_fetch):
-            for p in ad.fetch_feed_api(name, start, end):
-                if p["id"] in seen:
-                    continue
-                seen.add(p["id"])
-                all_papers.append(p)
-            # arXiv's export API rate-limits rapid consecutive calls (HTTP 429). Space
-            # the *actual* fetches apart so a multi-feed pastweek fetch isn't blocked;
-            # the result is cached for an hour, so this is a one-off cost.
-            if idx < len(to_fetch) - 1:
-                time.sleep(ad._ARXIV_RATE_LIMIT_SECONDS)
-        return all_papers
+        return ad.fetch_pastweek(to_fetch, start, end)
 
     # today: HTML /new feed
     urls = []
     for _, base_url in feeds_key:
-        url = base_url.replace("/recent", "/new").replace("/pastweek", "/new")
-        urls.append(url)
+        urls.append(ad.feed_url(base_url, "today"))
     return ad.fetch_feeds(urls)
 
 
@@ -497,9 +483,18 @@ _PAPER_CSS = """
 .paper-meta a:hover { text-decoration: underline; }
 .paper-authors .hl-author {
   font-weight: 700; border-bottom: 1px dotted; cursor: help; padding: 0 1px;
-  border-radius: 3px; transition: background .12s;
+  border-radius: 3px; transition: background .12s; position: relative;
 }
 .paper-authors .hl-author:hover { background: rgba(127,127,127,.18); }
+.paper-authors .hl-author .hl-tip {
+  visibility: hidden; opacity: 0; transition: opacity .12s;
+  position: absolute; z-index: 1000; bottom: 145%; left: 0;
+  background: #1f2630; color: #e6edf3; padding: 6px 9px; border-radius: 6px;
+  width: max-content; max-width: 320px; font-size: .8rem; font-weight: 400;
+  line-height: 1.35; border: 1px solid #30363d; box-shadow: 0 4px 12px rgba(0,0,0,.45);
+  white-space: normal;
+}
+.paper-authors .hl-author:hover .hl-tip { visibility: visible; opacity: 1; }
 /* CSS tooltip — Streamlit strips the `title` attribute, so we roll our own. */
 .tip { position: relative; border-bottom: 1px dotted #8b949e; cursor: help; }
 .tip .tip-text {
@@ -639,8 +634,8 @@ def _authors_html(
             if font:
                 style += f"color:{color};"
             out.append(
-                f'<span class="hl-author" style="{style}" title="Highlighted author '
-                f'(+{bonus} to score)">{esc}</span>'
+                f'<span class="hl-author" style="{style}">{esc}'
+                f'<span class="hl-tip">Highlighted author (+{bonus} to score)</span></span>'
             )
         else:
             out.append(esc)

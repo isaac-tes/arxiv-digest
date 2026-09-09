@@ -24,7 +24,7 @@ from a script.)
 1. **Sidebar**: pick **Timeframe** (`today` / `pastweek`), **Top N**, and which **Feeds** to fetch from. Click **Fetch papers**. Cached for 1 hour per `(timeframe, feeds)` combo; click **Clear fetch cache** to force a refresh.
 2. **Papers tab**: papers appear ranked. Open *Why this score?* to see exactly which keywords / authors / subjects contributed. Open *Full abstract* without leaving the page.
 3. **Tweak preferences** in the **Keywords**, **Authors**, **Low priority**, **Scoring** tabs. The Papers tab re-ranks live on the cached fetch, with no re-fetch needed.
-4. **Download** the current ranked list as Markdown or JSON. Output is byte-identical to `--output-markdown` / `--output-json`, so existing pipelines keep working.
+4. **Download** the current ranked list as Markdown or JSON. The Markdown is `--output-markdown`'s format; the JSON holds the same ranked `entries` as `--output-json` (it omits the CLI-only `feed_urls`/`sections` header fields).
 
 ## Filtering: replacements & single past days
 
@@ -50,10 +50,10 @@ with **no re-fetch**.
 - **Papers**: ranked list, search box (filters by title / authors / abstract), MD + JSON download buttons. Per paper: rank, title, authors, subjects, section, summary, arXiv link, score badge, a **Save to Zotero** button, expandable score breakdown, expandable full abstract.
 - **Score a paper**: paste an arXiv link or ID to see how it would score under your current config, why it did (or didn't) appear in the digest, and save it to Zotero.
 - **Keywords**: spreadsheet-style editor for `core_keywords`. Each match adds the *Per-keyword bonus* (default +6).
-- **Authors**: same pattern for `named_authors`. Default +6 per match. Case-insensitive substring match.
+- **Authors**: same pattern for `named_authors`. Default +6 per match. Whole-word match by default (configurable in Scoring, like keywords).
 - **Low priority**: penalty list. If *any* term matches, the paper takes the *Low-priority penalty* (default −5), once, not per hit.
 - **Feeds**: `name → URL` editor. Add custom arXiv lists (e.g. `hep-th=https://arxiv.org/list/hep-th/new`). The `/new` / `/pastweek` suffix is rewritten by the timeframe selector.
-- **Scoring**: number inputs for each weight: per-keyword bonus, per-author bonus, the three subject bonuses, low-priority penalty, long-abstract bonus, abstract-length threshold. **Per-feed bonuses**: every extra feed you add in the Feeds tab gets its own bonus field here (raise or lower how much a paper from that feed scores). Set to 0 to disable.
+- **Scoring**: number inputs for each weight: per-keyword bonus, per-author bonus, per-feed subject bonuses, low-priority penalty, long-abstract bonus, abstract-length threshold. **Per-feed bonuses**: every extra feed you add in the Feeds tab gets its own bonus field here (raise or lower how much a paper from that feed scores). Set to 0 to disable.
 - **Profiles**: save / load / export / import named configs. Files live in `~/.arxiv_scraper/profiles/<name>.json` and persist across project clones. **Write project config** dumps the current config to `arxiv_config.json` in the project root, which is what the CLI picks up on the next run. Use this to push GUI tweaks into your daily CLI digest.
 
 ## Highlighting

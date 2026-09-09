@@ -19,6 +19,8 @@ Both share the same `Config` and `arxiv_config.json`; tweak in one, the other pi
 
 📚 **Docs**: <https://isaac-tes.github.io/arxiv-digest/> (live once the repo is public).
 
+Other arXiv-digest tools already exist (see [Similar projects](#similar-projects)). This one is separate from them and scores a different way: with transparent keyword, author, and subject rules rather than a language model. It needs no API key, runs on any arXiv category, and can save matches into Zotero.
+
 ## Defaults
 
 - **Feeds**: any arXiv listing works; ships defaulting to `cond-mat`, `cond-mat.mes-hall`, `cond-mat.quant-gas`, `quant-ph` (edit in the Feeds tab or `arxiv_config.json`)
@@ -36,7 +38,7 @@ Three built-in, read-only topic bundles (keywords + authors + feeds) give you a 
 | `quantum-many-body` | Thermalization, many-body localization, tensor networks, strongly correlated systems |
 | `floquet-topological` | Floquet engineering, periodically driven systems & topological matter |
 
-Pick one in the GUI **Profiles → Starter presets** (**Load** replaces your working config, **Add** merges it in) or on the CLI with `--preset NAME` / `--add-preset NAME` (see `--list-presets`). Presets never overwrite your saved profiles or `arxiv_config.json`; they only change the in-memory config until you explicitly save. Topic sets are editable starting points; edit freely.
+Pick one in the GUI **Profiles → Starter presets** (**Load** replaces your working config, **Add** merges it in) or on the CLI with `--preset NAME` / `--add-preset NAME` (see `--list-presets`). Presets never overwrite your saved profiles or `arxiv_config.json`; they only change the in-memory config until you explicitly save. Topic sets are editable starting points tuned for quantum physics.
 
 ---
 
@@ -170,7 +172,7 @@ The GUI opens `http://localhost:8501` in your browser automatically. The first t
 1. **Sidebar**: pick **Timeframe** (`today` or `pastweek`), **Top N**, and which **Feeds** to fetch from. Click **Fetch papers**. The fetch is cached for 1 hour per `(timeframe, feeds)` combo, so re-clicking is instant; use **Clear fetch cache** to force a refresh.
 2. **Papers tab**: papers appear ranked. Open *Why this score?* under any paper to see exactly which keywords / authors / subjects contributed. Open *Full abstract* to read more without leaving the page.
 3. **Tweak preferences** in the **Keywords**, **Authors**, **Low priority**, **Scoring** tabs. The Papers tab re-ranks live on the cached fetch, with no re-fetch needed.
-4. **Download** the current ranked list as Markdown or JSON via the buttons above the search box. The output format is byte-identical to `--output-markdown` / `--output-json`, so existing pipelines keep working.
+4. **Download** the current ranked list as Markdown or JSON via the buttons above the search box. The Markdown is ``--output-markdown``'s format; the JSON holds the same ranked ``entries`` as ``--output-json`` (it omits the CLI-only ``feed_urls``/``sections`` header fields), so consumers that read the ``entries`` keep working.
 
 ### Tabs in detail
 
@@ -263,6 +265,8 @@ uv run python arxiv_digest.py --list-config --no-config
 | `--top N` | Override number of entries to print (default: 20). |
 | `--timeframe {today,pastweek}` | Override which arXiv listing window to scrape. |
 | `--sections NAME ...` | Limit to specific date-section titles (e.g. `"Thu, 4 Dec 2025"`). |
+| `--include-replacements` | Keep arXiv *Replacement submissions* (hidden by default; only present in the `today` feed). |
+| `--score ID_OR_URL` | Score a single arXiv paper (by id or URL) against the current config and print its per-aspect breakdown, without fetching the whole digest. |
 | `--output-json [PATH]` | Write JSON. Bare flag → `reports/digest-YYYY-MM-DD.json`. |
 | `--output-markdown [PATH]` | Write Markdown. Bare flag → `reports/digest-YYYY-MM-DD.md`. |
 | `--config PATH` | Use a non-default config JSON path. |
@@ -343,3 +347,17 @@ uv run pytest -k weight   # filter by name
 Covers `Config` defaults & JSON round-trips, every scoring rule independently, a property test that `score_paper == explain_score(...)["total"]`, CLI flag handling, formatting helpers, HTML parsing of `fetch_feed` against a fixture, and a Streamlit GUI render smoke test. `requests.get` is monkey-patched so no network calls hit arXiv during tests.
 
 `uv sync --group dev` installs both `test` and `gui` groups in one shot.
+
+---
+
+## Similar projects
+
+[AutoLLM/ArxivDigest](https://github.com/AutoLLM/ArxivDigest) is the other project in this space. It uses GPT to rank papers against a plain-language description of your interests and can email you the digest, but it has not been updated since May 2024. It expects an OpenAI API key and a SendGrid account.
+
+This project is independent of it and shares no code with it. The two suit different workflows:
+
+- AutoLLM/ArxivDigest asks a language model how relevant a paper is; arxiv-digest applies fixed scoring rules you can inspect and tune.
+- AutoLLM/ArxivDigest is set up to run as a scheduled GitHub Action that emails results; arxiv-digest runs locally, on demand, and writes console, Markdown, or JSON output.
+- arxiv-digest adds a browser GUI, per-paper score breakdowns, and one-click Save to Zotero; AutoLLM/ArxivDigest does not.
+
+Both are MIT-licensed. Neither depends on the other.

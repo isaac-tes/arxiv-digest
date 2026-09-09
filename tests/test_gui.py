@@ -772,5 +772,5 @@ def test_gui_add_preset_merges_cfg():
     at.button(key="preset_add").click().run()
     assert not list(at.exception)
     authors = [a.lower() for a in at.session_state["cfg"].named_authors]
-    assert "" in authors
+    assert "schnell" in authors
     assert len(authors) >= before  # union never shrinks
