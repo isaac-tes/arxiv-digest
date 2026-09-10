@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "arxiv-digest"
-version = "0.5.4"
+version = "0.5.5"
 description = "Score and rank fresh arXiv papers from any category, via a CLI or a Streamlit GUI."
 readme = "README.md"
 license = { text = "MIT" }

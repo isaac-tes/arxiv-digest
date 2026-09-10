@@ -4,6 +4,7 @@
 [![Release](https://img.shields.io/github/v/release/isaac-tes/arxiv-digest?sort=semver)](https://github.com/isaac-tes/arxiv-digest/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/isaac-tes/arxiv-digest/blob/main/LICENSE)
 [![Python: 3.12+](https://img.shields.io/badge/Python-3.12+-blue.svg)](https://www.python.org/downloads/)
+[![Docs](https://img.shields.io/badge/docs-GitHub%20Pages-2ea44f)](https://isaac-tes.github.io/arxiv-digest/)
 
 <p align="center">
   <img src="assets/showcase.jpg" alt="A ranked paper card in the GUI, with matched keywords and authors highlighted, a score breakdown, and a Save to Zotero button" width="900">

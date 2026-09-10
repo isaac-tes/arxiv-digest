@@ -8,6 +8,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Docs badge** in the README links directly to the GitHub Pages site.
+
+### Changed
+- **Feed URL and timeframe handling is shared by the CLI and GUI** through the
+  `feed_url()` and `fetch_pastweek()` helpers.
+- **Starter presets and package metadata no longer include personal research
+  profile details.** The presets remain generic quantum-physics starting points.
+- **CLI and GUI documentation now agree** on JSON output, scoring, and the
+  available command-line flags.
+
+### Fixed
+- **Unknown feeds now fail clearly during pastweek fetches** instead of
+  producing an empty digest.
+- **Author hover tooltips now render in the GUI** through its CSS tooltip styles.
+
+## [0.5.4] - 2026-09-03
+
+### Added
 - **Keyword and author font tinting is on by default** in the GUI: the sidebar
   *Font: keywords* / *Font: authors* toggles default to checked (low-priority and
   subjects remain background-highlight only), matching the original behavior.
