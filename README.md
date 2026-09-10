@@ -49,7 +49,7 @@ Three steps: install `uv`, install the app, run `arxiv-gui`. Your browser opens 
 ### 1. Install uv
 
 <details>
-<summary><b>Only if you don't have <code>uv</code> yet</b> — install it on your OS (one command), then come back</summary>
+<summary><b>Only if you don't have <code>uv</code> yet</b>: install it on your OS (one command), then come back</summary>
 
 `uv` is a fast, single-binary Python package manager. Official install scripts:
 
@@ -90,7 +90,7 @@ arxiv-gui
 ```
 
 Your browser opens `http://localhost:8501`. Feeds default to a condensed-matter /
-quantum-physics set — hit **Fetch papers** in the sidebar and start reading. Pick
+quantum-physics set. Hit **Fetch papers** in the sidebar and start reading. Pick
 a [starter preset](#starter-presets) if you'd rather start from a prepared topic
 bundle.
 
@@ -197,7 +197,7 @@ tag.
 From the popover you choose a **collection** in your personal **My Library**
 (or its root) and click **Save**. A transient **Saved ✓** confirms a successful
 save for ~30 seconds before the Save button returns. Failed or denied saves are
-shown as errors — never as a success. You are free to re-save a paper later; the
+shown as errors. You are free to re-save a paper later; the
 bridge prevents creating a duplicate of the same arXiv item in My Library.
 
 > **Group libraries:** The local Zotero HTTP API does not expose a supported
@@ -233,7 +233,7 @@ tell at a glance whether saving is available. See the [GUI guide](docs/gui-guide
 
 Prefer a terminal / scriptable digest (for cron, CI, or `--output-markdown/--json`
 reports)? The `arxiv-digest` CLI shares the exact same `Config`, `arxiv_config.json`,
-and starter presets as the web app — tweak in one, the other picks it up.
+and starter presets as the web app: tweak in one, the other picks it up.
 
 ### Basic invocations
 
