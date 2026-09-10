@@ -32,12 +32,4 @@
          <loc>https://isaac-tes.github.io/arxiv-digest/troubleshooting/</loc>
          <lastmod>2026-09-10</lastmod>
     </url>
-    <url>
-         <loc>https://isaac-tes.github.io/arxiv-digest/adr/0001-zotero-local-api-bridge/</loc>
-         <lastmod>2026-09-10</lastmod>
-    </url>
-    <url>
-         <loc>https://isaac-tes.github.io/arxiv-digest/adr/0002-group-libraries-via-cloud-api/</loc>
-         <lastmod>2026-09-10</lastmod>
-    </url>
 </urlset>
