@@ -38,7 +38,7 @@ uv run python arxiv_digest.py --list-config --no-config
 | `--output-markdown [PATH]` | Write Markdown. Bare flag → `reports/digest-YYYY-MM-DD.md`. |
 | `--config PATH` | Use a non-default config JSON path. |
 | `--no-config` | Ignore the config file even if present. |
-| `--preset NAME` | Start from a built-in [starter preset](#starter-presets) (replaces the config's content). |
+| `--preset NAME` | Start from a built-in [starter preset](./#starter-presets) (replaces the config's content). |
 | `--add-preset NAME` | Union a starter preset's keywords/authors/feeds onto the current config (repeatable). |
 | `--list-presets` | List the built-in starter presets and exit. |
 | `--save-config` | Persist current (modified) config back to `--config` path. |
