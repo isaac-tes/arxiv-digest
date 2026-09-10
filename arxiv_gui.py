@@ -13,7 +13,7 @@ import json
 import re
 import time
 from dataclasses import asdict, fields
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Tuple
 
@@ -214,20 +214,14 @@ def _render_zotero_save_button(arxiv_id: str, title: str) -> None:
 # ────────────────────────── Fetching with cache ──────────────────────────
 
 def _pastweek_feeds_to_fetch(feeds_key: Tuple[Tuple[str, str], ...]) -> list[str]:
-    """Feed names to query, dropping sub-categories already covered by a parent.
+    """Return every selected category for the export-API fetch.
 
-    In arXiv's dotted hierarchy ``cond-mat.quant-gas`` is a sub-category of
-    ``cond-mat``, and a ``cat:cond-mat`` query already returns every
-    sub-category's papers. When both a parent and one of its sub-categories are
-    configured (eg. the default cond-mat + quant-gas + mes-hall set), fetching
-    the parent alone avoids redundant requests; results are deduplicated by id
-    anyway, so no paper is lost.
+    The export API's ``cat:cond-mat`` query is *not* a wildcard for dotted
+    subcategories such as ``cond-mat.quant-gas``. Keep parent and child feeds
+    here; :func:`arxiv_digest.fetch_pastweek` deduplicates overlapping papers by
+    arXiv id after querying each category.
     """
-    names = [name for name, _ in feeds_key]
-    return [
-        name for name in names
-        if not any(name.startswith(other + ".") for other in names if other != name)
-    ]
+    return [name for name, _ in feeds_key]
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
@@ -241,7 +235,7 @@ def fetch_papers_cached(timeframe: str, feeds_key: Tuple[Tuple[str, str], ...]) 
     listing is unreliable (it returns 1–5 days, not a guaranteed week).
     """
     if timeframe == "pastweek":
-        end = datetime.now()
+        end = datetime.now(UTC)
         start = end - timedelta(days=7)
         to_fetch = _pastweek_feeds_to_fetch(feeds_key)
         return ad.fetch_pastweek(to_fetch, start, end)

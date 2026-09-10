@@ -25,7 +25,7 @@ Other arXiv-digest tools already exist (see [Similar projects](#similar-projects
 ## Defaults
 
 - **Feeds**: any arXiv listing works; ships defaulting to `cond-mat`, `cond-mat.mes-hall`, `cond-mat.quant-gas`, `quant-ph` (edit in the Feeds tab or `arxiv_config.json`)
-- **Timeframe**: `pastweek` (last ~5 days)
+- **Timeframe**: `pastweek` (a true seven-day submission window)
 - **Top N**: 20
 - **Output**: stdout
 
@@ -170,7 +170,7 @@ The GUI opens `http://localhost:8501` in your browser automatically. The first t
 
 ### The daily flow
 
-1. **Sidebar**: pick **Timeframe** (`today` or `pastweek`), **Top N**, and which **Feeds** to fetch from. Click **Fetch papers**. The fetch is cached for 1 hour per `(timeframe, feeds)` combo, so re-clicking is instant; use **Clear fetch cache** to force a refresh.
+1. **Sidebar**: pick **Timeframe** (`today` or `pastweek`), **Top N**, and which **Feeds** to fetch from. Click **Fetch papers**. The fetch is cached for 1 hour per `(timeframe, feeds)` combo, so re-clicking is instant; use **Clear fetch cache** to force a refresh. The `pastweek` fetch queries each selected category and uses arXiv's announcement sections for its day labels.
 2. **Papers tab**: papers appear ranked. Open *Why this score?* under any paper to see exactly which keywords / authors / subjects contributed. Open *Full abstract* to read more without leaving the page.
 3. **Tweak preferences** in the **Keywords**, **Authors**, **Low priority**, **Scoring** tabs. The Papers tab re-ranks live on the cached fetch, with no re-fetch needed.
 4. **Download** the current ranked list as Markdown or JSON via the buttons above the search box. The Markdown is ``--output-markdown``'s format; the JSON holds the same ranked ``entries`` as ``--output-json`` (it omits the CLI-only ``feed_urls``/``sections`` header fields), so consumers that read the ``entries`` keep working.

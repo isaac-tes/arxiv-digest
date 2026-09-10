@@ -56,6 +56,49 @@ def test_paper_from_api_entry_builds_paper_dict():
     assert paper["section"] == "Mon, 17 Aug 2026"  # day label from published date
 
 
+def test_parse_listing_day_labels_uses_arxiv_section_dates():
+    html = """
+    <h3>Thu, 10 Sep 2026 (showing 1 of 1 entries )</h3>
+    <dt><a href="/abs/2609.10541" title="Abstract">arXiv:2609.10541</a></dt>
+    <dd></dd>
+    <h3>Wed, 9 Sep 2026 (showing 1 of 1 entries )</h3>
+    <dt><a href="/abs/2609.09017" title="Abstract">arXiv:2609.09017</a></dt>
+    <dd></dd>
+    """
+    assert ad._parse_listing_day_labels(html) == {
+        "2609.10541": "Thu, 10 Sep 2026",
+        "2609.09017": "Wed, 09 Sep 2026",
+    }
+
+
+def test_fetch_pastweek_reconciles_api_papers_with_listing_day_labels(monkeypatch):
+    paper = {
+        "id": "2609.10541",
+        "title": "Symplectic Hopf Insulator",
+        "authors": "Isaac Tesfaye",
+        "link": "https://arxiv.org/abs/2609.10541",
+        "subjects": "cond-mat.mes-hall, cond-mat.quant-gas",
+        "abstract": "abstract",
+        "section": "Wed, 09 Sep 2026",
+    }
+    listing = b"""
+    <h3>Thu, 10 Sep 2026 (showing 1 of 1 entries )</h3>
+    <dt><a href=\"/abs/2609.10541\" title=\"Abstract\">arXiv:2609.10541</a></dt>
+    <dd></dd>
+    """
+
+    monkeypatch.setattr(ad, "fetch_feed_api", lambda *args, **kwargs: [paper.copy()])
+    monkeypatch.setattr(ad.time, "sleep", lambda _seconds: None)
+    monkeypatch.setattr(
+        ad.requests,
+        "get",
+        lambda *args, **kwargs: _MockResponse(content=listing),
+    )
+
+    papers = ad.fetch_pastweek(["cond-mat.mes-hall"], datetime(2026, 9, 3), datetime(2026, 9, 10))
+    assert papers[0]["section"] == "Thu, 10 Sep 2026"
+
+
 def test_fetch_feed_api_parses_entries_and_sets_day_labels(monkeypatch):
     calls = {}
 

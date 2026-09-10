@@ -761,8 +761,8 @@ def fetch_feeds(urls: List[str], sections: List[str] | None = None, verbose: boo
 # arXiv's /pastweek HTML listing is unreliable — it returns whatever days arXiv
 # currently has listed (often 1–5 days), not a guaranteed 7-day window. For a
 # genuine N-day window we query the arXiv export API with a `submittedDate:[...]`
-# range instead. Each paper's `section` is set to its submission day label so the
-# existing day-picker / filtering logic keeps working.
+# range instead. Each paper's `section` starts with its submission-day fallback;
+# `fetch_pastweek` reconciles it with arXiv's official announcement sections.
 
 _ARXIV_API = "http://export.arxiv.org/api/query"
 _API_ATOM = "{http://www.w3.org/2005/Atom}"
@@ -854,6 +854,70 @@ def _api_get_with_retry(params: dict, verbose: bool = False) -> requests.Respons
 def _api_day_label(dt: datetime) -> str:
     """Format a datetime as an arXiv day label, e.g. 'Thu, 20 Aug 2026'."""
     return dt.strftime("%a, %d %b %Y")
+
+
+def _canonical_day_label(label: str) -> str:
+    """Normalize arXiv's sometimes-unpadded HTML date labels."""
+    try:
+        return _api_day_label(datetime.strptime(label, "%a, %d %b %Y"))
+    except ValueError:
+        return label
+
+
+def _parse_listing_day_labels(html: str) -> Dict[str, str]:
+    """Map arXiv ids to the day sections used by an HTML listing page.
+
+    The export API exposes a submission timestamp, not the announcement batch
+    date shown by arXiv's ``/pastweek`` page.  In particular, a paper submitted
+    late on Wednesday can be listed by arXiv under Thursday.  Keep the API as
+    the source of paper metadata, but use the official listing section when it
+    is available so the GUI/CLI day picker agrees with arXiv.
+    """
+    soup = BeautifulSoup(html, "html.parser")
+    labels: Dict[str, str] = {}
+    for h3 in soup.find_all("h3"):
+        section_name = h3.get_text(" ", strip=True)
+        day_label = section_day_label(section_name)
+        if day_label is None:
+            continue
+        day_label = _canonical_day_label(day_label)
+
+        stop = h3.find_next("h3")
+        node = h3.next_sibling
+        while node is not None and node is not stop:
+            if getattr(node, "name", None) == "dt":
+                anchor = node.find("a", title="Abstract")
+                if anchor is not None:
+                    href = anchor.get("href", "") or ""
+                    raw_id = (
+                        href.rsplit("/abs/", 1)[-1]
+                        if "/abs/" in href
+                        else anchor.get_text(strip=True)
+                    )
+                    paper_id = normalize_arxiv_id(raw_id)
+                    if paper_id:
+                        labels[paper_id] = day_label
+            node = node.next_sibling
+    return labels
+
+
+def _fetch_listing_day_labels(category: str, verbose: bool = False) -> Dict[str, str]:
+    """Fetch arXiv's authoritative day labels for one category.
+
+    ``show=2000`` asks the listing page to include the full recent window,
+    rather than only the first page of a busy category.  This is a best-effort
+    annotation step; callers retain the API-derived fallback section if the
+    HTML request fails.
+    """
+    from urllib.parse import quote
+
+    url = f"https://arxiv.org/list/{quote(category, safe='.')}/pastweek?show=2000"
+    resp = requests.get(url, timeout=30, headers={"User-Agent": _API_USER_AGENT})
+    resp.raise_for_status()
+    labels = _parse_listing_day_labels(resp.content)
+    if verbose:
+        print(f"  Listing labels {category}: {len(labels)} papers")
+    return labels
 
 
 def fetch_feed_api(
@@ -963,8 +1027,9 @@ def fetch_pastweek(
     validated by the caller). Each is queried through :func:`fetch_feed_api`
     for the window ``[start, end]`` and results are concatenated, skipping any
     id already seen so overlapping categories (a parent ``cond-mat`` plus its
-    sub-categories) contribute each paper once. Calls are spaced apart so the
-    arXiv export API doesn't rate-limit.
+    sub-categories) contribute each paper once. API-derived sections are
+    reconciled with arXiv's HTML announcement-day sections. Calls are spaced
+    apart so the arXiv export API doesn't rate-limit.
     """
     papers: List[dict] = []
     seen: set[str] = set()
@@ -976,6 +1041,22 @@ def fetch_pastweek(
             papers.append(p)
         if idx < len(feed_names) - 1:
             time.sleep(_ARXIV_RATE_LIMIT_SECONDS)
+
+    # The API's ``published`` field is the submission timestamp.  It cannot
+    # reproduce arXiv's announcement-day grouping (for example, 2609.10541 is
+    # submitted on Wed 09 Sep UTC but appears in arXiv's Thu 10 Sep listing).
+    # Reconcile sections against the official HTML listing; retain the API
+    # section as a fallback when a category page is unavailable or truncated.
+    listing_labels: Dict[str, str] = {}
+    for name in feed_names:
+        try:
+            listing_labels.update(_fetch_listing_day_labels(name, verbose=verbose))
+        except requests.RequestException as exc:
+            if verbose:
+                print(f"  Warning: Could not fetch {name} day labels: {exc}")
+    for paper in papers:
+        if label := listing_labels.get(paper.get("id", "")):
+            paper["section"] = label
     return papers
 
 
@@ -1503,7 +1584,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     timeframe = args.timeframe if args.timeframe else cfg.timeframe
     try:
         if timeframe == "pastweek":
-            end = datetime.now()
+            end = datetime.now(UTC)
             start = end - timedelta(days=7)
             # The export API queries by category, so explicit URL feeds (only
             # usable on the HTML path) are excluded here.

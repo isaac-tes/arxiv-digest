@@ -13,12 +13,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - **Feed URL and timeframe handling is shared by the CLI and GUI** through the
   `feed_url()` and `fetch_pastweek()` helpers.
+- **Pastweek keeps a true seven-day submission window.** Its day labels now use
+  the announcement sections shown by arXiv, so the GUI and the arXiv listing
+  use the same dates.
 - **Starter presets and package metadata no longer include personal research
   profile details.** The presets remain generic quantum-physics starting points.
 - **CLI and GUI documentation now agree** on JSON output, scoring, and the
   available command-line flags.
 
 ### Fixed
+- **Pastweek fetches now query every selected category.** The export API treats
+  `cat:cond-mat` as an exact category rather than a wildcard for feeds such as
+  `cond-mat.quant-gas` and `cond-mat.mes-hall`.
+- **Scores and fetched results now agree for subcategory papers.** A paper that
+  scores within the configured Top N is no longer omitted because its selected
+  subcategory was skipped by the GUI.
 - **Unknown feeds now fail clearly during pastweek fetches** instead of
   producing an empty digest.
 - **Author hover tooltips now render in the GUI** through its CSS tooltip styles.

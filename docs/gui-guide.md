@@ -37,10 +37,11 @@ from a script.)
 - **Day picker** (Papers tab): when a fetch returns several days (i.e.
   `pastweek`), a **Day** selector lets you view just one past day's ranking,
   useful if you skipped yesterday and want its dedicated list today.
-  - **Limitation:** only the days arXiv's `pastweek` feed still lists (roughly
-    the last 5 days) are reachable. arXiv exposes **no URL for an arbitrary
-    older day**, so days beyond that window cannot be retrieved this way. The
-    picker only ever offers days actually present in the current fetch.
+  - **Limitation:** the fetch covers seven days of submissions, while the day
+    labels follow the announcement sections currently shown by arXiv. Weekends
+    and holidays may therefore be folded into the next announcement day. arXiv
+    exposes **no URL for an arbitrary older day**, so the picker only offers
+    sections present in the current fetch.
 
 Both filters are applied at display time, so toggling them re-ranks instantly
 with **no re-fetch**.

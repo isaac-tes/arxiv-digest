@@ -240,8 +240,13 @@ def test_highlight_subjects_no_match_is_plain():
     assert "hl-subject" not in out
 
 
-def test_pastweek_feeds_to_fetch_drops_subcategory_when_parent_present():
-    """A sub-category feed is elided when its parent is also fetched (less requests)."""
+def test_pastweek_feeds_to_fetch_keeps_parent_and_subcategories():
+    """The export API needs each selected category queried explicitly.
+
+    Unlike arXiv's HTML listing, ``cat:cond-mat`` is not a wildcard for
+    dotted subcategories, so dropping ``cond-mat.quant-gas`` here would lose
+    papers that are present in the selected subcategory feeds.
+    """
     import arxiv_gui
 
     feeds = (
@@ -250,12 +255,14 @@ def test_pastweek_feeds_to_fetch_drops_subcategory_when_parent_present():
         ("quant-ph", "u"),
         ("cond-mat", "u"),
     )
-    assert arxiv_gui._pastweek_feeds_to_fetch(feeds) == ["quant-ph", "cond-mat"]
+    assert arxiv_gui._pastweek_feeds_to_fetch(feeds) == [
+        "cond-mat.quant-gas",
+        "cond-mat.mes-hall",
+        "quant-ph",
+        "cond-mat",
+    ]
 
-    # Without the parent, the sub-categories are fetched normally.
-    assert arxiv_gui._pastweek_feeds_to_fetch(feeds[1:3]) == ["cond-mat.mes-hall", "quant-ph"]
-
-    # A name that merely shares a prefix (not a dotted child) is kept.
+    # A name that merely shares a prefix (not a dotted child) is kept too.
     feeds2 = (("cond-matx", "u"), ("cond-mat", "u"))
     assert arxiv_gui._pastweek_feeds_to_fetch(feeds2) == ["cond-matx", "cond-mat"]
 
