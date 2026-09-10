@@ -70,21 +70,33 @@ jobs:
           fi
           echo "version $proj matches tag $TAG"
 
-      # Curated release notes come from the "## [Unreleased]" section of
-      # CHANGELOG.md (the hand-written "### Fixed" / "### Added" sections).
-      # They are prepended to GitHub's auto-generated full changelog, so the
-      # release page shows both a curated summary and the complete PR list.
+      # Prefer the matching version section in CHANGELOG.md. The Unreleased
+      # section remains a fallback for the next release while its notes are
+      # being prepared. Curated notes are prepended to GitHub's auto-generated
+      # full changelog.
       - name: Extract curated notes from CHANGELOG
         run: |
-          awk '
-            /^## \[Unreleased\]/ { in_unreleased = 1; next }
-            /^## \[/ && !/^## \[Unreleased\]/ { in_unreleased = 0 }
-            in_unreleased { print }
-          ' CHANGELOG.md \
-            | python3 -c 'import sys; print(sys.stdin.read().strip())' \
-            > curated-notes.md
+          python3 - "$TAG" <<'PY' > curated-notes.md
+          import pathlib
+          import re
+          import sys
+
+          changelog = pathlib.Path("CHANGELOG.md").read_text(encoding="utf-8")
+          version = sys.argv[1].removeprefix("v")
+
+          def section(name: str) -> str:
+              match = re.search(
+                  rf"^## \[{re.escape(name)}\][^\n]*\n(.*?)(?=^## \[|\Z)",
+                  changelog,
+                  flags=re.MULTILINE | re.DOTALL,
+              )
+              return match.group(1).strip() if match else ""
+
+          notes = section(version) or section("Unreleased")
+          print(notes)
+          PY
           if [ ! -s curated-notes.md ]; then
-            echo "::warning::no curated notes under [Unreleased] — using auto-generated notes only"
+            echo "::warning::no curated notes for $TAG or under [Unreleased] — using auto-generated notes only"
           fi
           echo "--- curated notes ---"
           cat curated-notes.md

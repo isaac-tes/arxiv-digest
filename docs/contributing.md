@@ -34,9 +34,10 @@ See [CONTRIBUTING.md](https://github.com/isaac-tes/arxiv-digest/blob/main/CONTRI
 
 Releases are automated: bump `version` in `pyproject.toml`, merge to `main`,
 and CI tags `v<version>` and publishes the release. The release page combines
-your **curated notes** (the `## [Unreleased]` section of `CHANGELOG.md`, written
-as `### Added` / `### Fixed` / `### Changed`) with GitHub's **auto-generated
-full changelog** (every merged PR, closed issue, and contributor).
+your **curated notes** (the matching `## [<version>]` section of
+`CHANGELOG.md`, with `## [Unreleased]` as a fallback) with GitHub's
+**auto-generated full changelog** (every merged PR, closed issue, and
+contributor).
 
 See [CONTRIBUTING.md](https://github.com/isaac-tes/arxiv-digest/blob/main/CONTRIBUTING.md#releases) for the full flow and the curated-notes template.
 

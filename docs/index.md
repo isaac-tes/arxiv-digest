@@ -18,8 +18,6 @@ Fetches arXiv listing pages for **any** category, scores papers by your keyword 
 
 Both share the same `Config` and `arxiv_config.json`; tweak in one, the other picks it up.
 
-📚 **Docs**: <https://isaac-tes.github.io/arxiv-digest/> (live once the repo is public).
-
 Other arXiv-digest tools already exist (see [Similar projects](#similar-projects)). This one is separate from them and scores a different way: with transparent keyword, author, and subject rules rather than a language model. It needs no API key, runs on any arXiv category, and can save matches into Zotero.
 
 ## Defaults
