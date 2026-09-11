@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "arxiv-digest"
-version = "0.5.6"
+version = "0.6.0"
 description = "Score and rank fresh arXiv papers from any category, via a CLI or a Streamlit GUI."
 readme = "README.md"
 license = { text = "MIT" }
@@ -66,6 +66,7 @@ only-include = [
     "arxiv_digest.py",
     "arxiv_gui.py",
     "arxiv_gui_launcher.py",
+    "update_check.py",
     "zotero_bridge.py",
 ]
 
@@ -74,6 +75,7 @@ include = [
     "arxiv_digest.py",
     "arxiv_gui.py",
     "arxiv_gui_launcher.py",
+    "update_check.py",
     "zotero_bridge.py",
     "README.md",
     "LICENSE",

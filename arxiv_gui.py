@@ -304,6 +304,7 @@ _DISPLAY_KEYS = [
     "highlight_authors",
     "highlight_terms_title",
     "highlight_terms_abstract",
+    "highlight_terms_summary",
     "color_keyword",
     "color_low_priority",
     "color_author",
@@ -417,6 +418,11 @@ def render_sidebar():
             "Highlight keywords in abstracts", value=cfg().highlight_terms_abstract,
             help="Light highlight of matched keywords / low-priority terms in full abstracts.",
             key="highlight_terms_abstract",
+        )
+        cfg().highlight_terms_summary = st.checkbox(
+            "Highlight keywords in summaries", value=cfg().highlight_terms_summary,
+            help="Same highlight as full abstracts, applied to the truncated abstract summary on each paper card. Off by default.",
+            key="highlight_terms_summary",
         )
 
         st.caption("Highlight colors (per aspect)")
@@ -798,16 +804,20 @@ def render_papers_tab():
     for e in filtered:
         with st.container(border=True):
             head, score_col = st.columns([5, 1])
+
+            def _hl(t: str) -> str:
+                return _highlight_terms(
+                    t, cfg().core_keywords, cfg().low_priority_kw, kw_bonus, lp_pen,
+                    word_boundary=cfg().word_boundary_matching,
+                    color_kw=cfg().color_keyword, color_lp=cfg().color_low_priority,
+                    font_kw=cfg().color_font_keyword, font_lp=cfg().color_font_low_priority,
+                )
+
             with head:
                 kw_bonus = cfg().weights.core_keyword
                 lp_pen = cfg().weights.low_priority_penalty
                 if cfg().highlight_terms_title:
-                    title_html = _highlight_terms(
-                        e["title"], cfg().core_keywords, cfg().low_priority_kw, kw_bonus, lp_pen,
-                        word_boundary=cfg().word_boundary_matching,
-                        color_kw=cfg().color_keyword, color_lp=cfg().color_low_priority,
-                        font_kw=cfg().color_font_keyword, font_lp=cfg().color_font_low_priority,
-                    )
+                    title_html = _hl(e["title"])
                 else:
                     title_html = html.escape(e["title"])
                 st.markdown(
@@ -828,7 +838,10 @@ def render_papers_tab():
                 )
                 if e["section"]:
                     st.caption(f"Section: {e['section']}")
-                st.write(e["summary"])
+                if cfg().highlight_terms_summary:
+                    st.markdown(f'{_hl(e["summary"])}', unsafe_allow_html=True)
+                else:
+                    st.write(e["summary"])
                 if e["subjects"] or e["link"]:
                     meta_parts = []
                     if e["link"]:
@@ -855,9 +868,7 @@ def render_papers_tab():
                 abstract = paper_by_id.get(e["id"], {}).get("abstract", "") or "(unavailable)"
                 if cfg().highlight_terms_abstract and abstract != "(unavailable)":
                     st.markdown(
-                        f'<div class="paper-abstract">'
-                        f'{_highlight_terms(abstract, cfg().core_keywords, cfg().low_priority_kw, cfg().weights.core_keyword, cfg().weights.low_priority_penalty, word_boundary=cfg().word_boundary_matching, color_kw=cfg().color_keyword, color_lp=cfg().color_low_priority, font_kw=cfg().color_font_keyword, font_lp=cfg().color_font_low_priority)}'
-                        f'</div>',
+                        f'<div class="paper-abstract">{_hl(abstract)}</div>',
                         unsafe_allow_html=True,
                     )
                 else:

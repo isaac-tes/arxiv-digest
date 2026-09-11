@@ -12,38 +12,9 @@
   <em>Matched keywords and authors highlighted, a live score breakdown, one-click Save to Zotero.</em>
 </p>
 
-Fetches arXiv listing pages for **any** category, scores papers by your keyword / author / subject preferences, and presents the ranked digest as a **web app** (`arxiv-gui`) for interactive browsing and tuning, or as a CLI report (terminal, Markdown, JSON) for automation. Works with any arXiv feed (`hep-th`, `cs.LG`, `math.AG`, …); the defaults just ship a condensed-matter / quantum-physics set you can replace.
-
-**👋 Most people should use the web app.** It runs in your browser, shows each paper's keyword / author / subject hits highlighted in color, explains *why* it scored what it did, and offers one-click **Save to Zotero**. The CLI is there for those who want a scriptable, terminal-first digest sharing the exact same preferences and config.
-
-Both share the same `Config` and `arxiv_config.json`; tweak in one, the other picks it up.
-
-Other arXiv-digest tools already exist (see [Similar projects](#similar-projects)). This one is separate from them and scores a different way: with transparent keyword, author, and subject rules rather than a language model. It needs no API key, runs on any arXiv category, and can save matches into Zotero.
-
-## Defaults
-
-- **Feeds**: any arXiv listing works; ships defaulting to `cond-mat`, `cond-mat.mes-hall`, `cond-mat.quant-gas`, `quant-ph` (edit in the Feeds tab or `arxiv_config.json`)
-- **Timeframe**: `pastweek` (a true seven-day submission window)
-- **Top N**: 20
-- **Output**: stdout
-
-### Starter presets
-
-Three built-in, read-only topic bundles (keywords + authors + feeds) give you a starting point instead of the generic default:
-
-| Preset | Focus |
-|--------|-------|
-| `open-quantum-systems` | Lindbladian dynamics, dissipation, driven-dissipative & non-Markovian systems |
-| `quantum-many-body` | Thermalization, many-body localization, tensor networks, strongly correlated systems |
-| `floquet-topological` | Floquet engineering, periodically driven systems & topological matter |
-
-Pick one in the GUI **Profiles → Starter presets** (**Load** replaces your working config, **Add** merges it in) or on the CLI with `--preset NAME` / `--add-preset NAME` (see `--list-presets`). Presets never overwrite your saved profiles or `arxiv_config.json`; they only change the in-memory config until you explicitly save. Topic sets are editable starting points tuned for quantum physics.
-
----
-
 ## 🖥️ Start with the web app (recommended)
 
-Three steps: install `uv`, install the app, run `arxiv-gui`. Your browser opens with the ranked digest and you can start tuning right away.
+Three steps: install `uv`, clone and install the app, run `arxiv-gui`. Your browser opens with the ranked digest and you can start tuning right away.
 
 ### 1. Install uv
 
@@ -74,7 +45,8 @@ Already have `uv`? Skip straight to step 2.
 ### 2. Get the app
 
 ```bash
-git clone <repo-url> arxiv-digest
+git clone https://github.com/isaac-tes/arxiv-digest.git
+# git clone git@github.com:isaac-tes/arxiv-digest.git
 cd arxiv-digest
 uv tool install '.[gui]'      # installs the arxiv-gui web app on your PATH
 ```
@@ -82,60 +54,61 @@ uv tool install '.[gui]'      # installs the arxiv-gui web app on your PATH
 > `.[gui]` pulls in the web app's dependencies (Streamlit + pandas). If you only
 > ever use the CLI, omit the `[gui]` extra: `uv tool install .`.
 
-### 3. Run the web app
+### 3. Run it
 
 ```bash
-arxiv-gui
+arxiv-gui                     # web app — opens http://localhost:8501 in your browser
+arxiv-digest --top 10         # CLI digest, prints ranked papers to stdout
 ```
 
-Your browser opens `http://localhost:8501`. Feeds default to a condensed-matter /
-quantum-physics set. Hit **Fetch papers** in the sidebar and start reading. Pick
-a [starter preset](#starter-presets) if you'd rather start from a prepared topic
-bundle.
+In the GUI, hit **Fetch papers** in the sidebar and start reading. Feeds default
+to a condensed-matter / quantum-physics set. Pick a
+[starter preset](#starter-presets) under **Profiles** if you'd rather start from
+a prepared topic bundle.
 
-**Prefer not to install?** `uvx` runs the web app on the fly with nothing to
-uninstall:
+### Alternatives
 
-```bash
-uvx --from '.[gui]' arxiv-gui     # from inside the clone
-```
-
-### Install as a tool on your PATH (CLI + GUI)
+**Prefer not to install anything?** `uvx` runs the app on the fly from the
+clone, with no PATH entry and nothing to uninstall:
 
 ```bash
-uv tool install '.[gui]'           # from inside a clone
-arxiv-digest --top 10              # CLI command, anywhere
-arxiv-gui                          # launches the web app
-
-uv tool uninstall arxiv-digest     # remove
-```
-
-Python 3.12 or newer is required; `uv` installs it for you if it's missing.
-
-### Run without installing (uvx)
-
-`uvx` runs the package on the fly from your clone, with no `uv tool install`, no
-PATH entry, and nothing to uninstall:
-
-```bash
-uvx --from '.[gui]' arxiv-digest --top 10   # CLI, anywhere in the clone
 uvx --from '.[gui]' arxiv-gui               # web app — opens your browser
+uvx --from '.[gui]' arxiv-digest --top 10   # CLI
 ```
 
-`uvx` builds the package from the current directory each time, so it always
-picks up your latest edits (no `--reinstall` needed). It's the lightest way to
-try the tool or run it from a fresh clone. The `[gui]` extra pulls in Streamlit
-+ pandas; drop it for CLI-only runs (`uvx --from . arxiv-digest --top 10`).
+**Want to hack on the code?** Run straight from the clone instead of installing
+as a tool:
+
+```bash
+uv sync --group dev                      # CLI + GUI + tests + docs
+uv run pytest -q                         # full test suite, ~2s, no network
+uv run streamlit run arxiv_gui.py        # GUI in browser at localhost:8501
+```
+
+`uv tool install` puts both commands on your PATH in an isolated environment;
+remove them with `uv tool uninstall arxiv-digest`. The `[gui]` extra pulls in
+Streamlit + pandas; use `uv tool install .` for a CLI-only install.
 
 ### Updating to the latest version
 
-One command, from inside your clone:
+If you installed as a tool, one command, from anywhere, no clone needed:
 
 ```bash
-./scripts/update.sh
+arxiv-digest update          # (or: arxiv-digest upgrade)
 ```
 
-It pulls the newest code and rebuilds the installed tools. Equivalent manual steps:
+It checks the latest release tag on GitHub and reinstalls the `arxiv-digest` /
+`arxiv-gui` tools from it (keeping CLI-only installs CLI-only). On Windows it
+prints the exact command to run, because the running `.exe` would lock the
+upgrade.
+
+You'll also get a one-line notice at the end of normal digest runs when a newer
+release is out (checked against the GitHub releases API at most once a day,
+cached in `~/.arxiv_scraper/update_check.json`, silent when offline). Suppress
+it with `--no-update-check`.
+
+Prefer updating from your clone (e.g. to track a branch or an unreleased
+commit)?
 
 ```bash
 cd arxiv-digest
@@ -143,7 +116,38 @@ git pull                               # newest code (or: git fetch && git check
 uv tool install '.[gui]' --reinstall   # rebuild the arxiv-digest / arxiv-gui tools
 ```
 
+`./scripts/update.sh` does the same two steps in one shot.
+
 > **Why `--reinstall`?** `uv tool` installs into an isolated environment that does **not** auto-track your clone, so `git pull` alone won't update the `arxiv-digest` / `arxiv-gui` commands. The reinstall rebuilds them. (If you `uv run` from the clone instead of installing as a tool, just `git pull` is enough.)
+
+---
+
+**👋 Most people should use the web app.** It runs in your browser, shows each paper's keyword / author / subject hits highlighted in color, explains *why* it scored what it did, and offers one-click **Save to Zotero**. The CLI is there for those who want a scriptable, terminal-first digest sharing the exact same preferences and config.
+
+Both share the same `Config` and `arxiv_config.json`; tweak in one, the other picks it up.
+
+Fetches arXiv listing pages for **any** category, scores papers by your keyword / author / subject preferences, and presents the ranked digest as a **web app** (`arxiv-gui`) for interactive browsing and tuning, or as a CLI report (terminal, Markdown, JSON) for automation. Works with any arXiv feed (`hep-th`, `cs.LG`, `math.AG`, …); the defaults just ship a condensed-matter / quantum-physics set you can replace.
+
+Other arXiv-digest tools already exist (see [Similar projects](#similar-projects)). This one is separate from them and scores a different way: with transparent keyword, author, and subject rules rather than a language model. It needs no API key, runs on any arXiv category, and can save matches into Zotero.
+
+## Defaults
+
+- **Feeds**: any arXiv listing works; ships defaulting to `cond-mat`, `cond-mat.mes-hall`, `cond-mat.quant-gas`, `quant-ph` (edit in the Feeds tab or `arxiv_config.json`)
+- **Timeframe**: `pastweek` (a true seven-day submission window)
+- **Top N**: 20
+- **Output**: stdout
+
+### Starter presets
+
+Three built-in, read-only topic bundles (keywords + authors + feeds) give you a starting point instead of the generic default:
+
+| Preset | Focus |
+|--------|-------|
+| `open-quantum-systems` | Lindbladian dynamics, dissipation, driven-dissipative & non-Markovian systems |
+| `quantum-many-body` | Thermalization, many-body localization, tensor networks, strongly correlated systems |
+| `floquet-topological` | Floquet engineering, periodically driven systems & topological matter |
+
+Pick one in the GUI **Profiles → Starter presets** (**Load** replaces your working config, **Add** merges it in) or on the CLI with `--preset NAME` / `--add-preset NAME` (see `--list-presets`). Presets never overwrite your saved profiles or `arxiv_config.json`; they only change the in-memory config until you explicitly save. Topic sets are editable starting points tuned for quantum physics.
 
 ---
 
@@ -170,12 +174,15 @@ The GUI opens `http://localhost:8501` in your browser automatically. The first t
 
 1. **Sidebar**: pick **Timeframe** (`today` or `pastweek`), **Top N**, and which **Feeds** to fetch from. Click **Fetch papers**. The fetch is cached for 1 hour per `(timeframe, feeds)` combo, so re-clicking is instant; use **Clear fetch cache** to force a refresh. The `pastweek` fetch queries each selected category and uses arXiv's announcement sections for its day labels.
 2. **Papers tab**: papers appear ranked. Open *Why this score?* under any paper to see exactly which keywords / authors / subjects contributed. Open *Full abstract* to read more without leaving the page.
-3. **Tweak preferences** in the **Keywords**, **Authors**, **Low priority**, **Scoring** tabs. The Papers tab re-ranks live on the cached fetch, with no re-fetch needed.
+3. **Tweak preferences** in the **Keywords**, **Authors**, **Low priority**, and **Scoring** tabs. The Papers tab re-ranks live on the cached fetch, with no re-fetch needed. Want to check a specific paper outside the current fetch? Use the **Score a paper** tab.
 4. **Download** the current ranked list as Markdown or JSON via the buttons above the search box. The Markdown is ``--output-markdown``'s format; the JSON holds the same ranked ``entries`` as ``--output-json`` (it omits the CLI-only ``feed_urls``/``sections`` header fields), so consumers that read the ``entries`` keep working.
 
 ### Tabs in detail
 
-- **Papers**: ranked list, search box (filters by title / authors / abstract substring), MD + JSON download buttons. Per paper: rank, title, authors, section, summary, arXiv link, score badge, expandable score breakdown, expandable full abstract.
+The GUI has eight tabs, in order: **Papers**, **Score a paper**, **Keywords**, **Authors**, **Low priority**, **Feeds**, **Scoring**, **Profiles**.
+
+- **Papers**: ranked list, search box (filters by title / authors / abstract substring), MD + JSON download buttons. Per paper: rank, title, authors, section, summary, arXiv link, score badge, a **Save to Zotero** button, expandable score breakdown, expandable full abstract.
+- **Score a paper**: paste an arXiv link or ID to see how it would score under your current config, why it did (or didn't) appear in the digest, and save it to Zotero.
 - **Keywords**: spreadsheet-style editor for `core_keywords`. Add/remove rows, click *Save core keywords*. *Reset to defaults* restores the built-in list. Each match adds the *Per-keyword bonus* (default +6) to a paper's score.
 - **Authors**: same pattern for `named_authors`. Default +6 per match. Match is case-insensitive substring on author string.
 - **Low priority**: penalty list. If *any* term matches, the paper takes the *Low-priority penalty* (default −5), once, not per hit.
@@ -275,6 +282,7 @@ uv run python arxiv_digest.py --list-config --no-config
 | `--list-presets` | List the built-in starter presets and exit. |
 | `--save-config` | Persist current (modified) config back to `--config` path. |
 | `--list-config` | Print the resolved config as JSON and exit. |
+| `--no-update-check` | Skip the cached check for a newer release at the end of the run. |
 | `--verbose` | Log fetch progress to stderr. |
 | `--add-core W` / `--remove-core W` / `--rename-core OLD:NEW` | Mutate `core_keywords`. |
 | `--add-author N` / `--remove-author N` / `--rename-author OLD:NEW` | Mutate `named_authors`. |

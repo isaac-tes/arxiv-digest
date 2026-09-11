@@ -5,9 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.6.0] - 2026-09-11
+
+### Added
+- **`arxiv-digest update` (alias: `arxiv-digest upgrade`).** The CLI now
+  self-updates: it reinstalls the tool from the latest GitHub release tag,
+  so the upgrade works even without the original clone. A cached (24 h)
+  check prints a one-line notice at the end of normal runs when a newer
+  release is out; `--no-update-check` suppresses it, and notice + upgrade
+  both fail silently when GitHub is unreachable.
+- **Summary highlight toggle.** The sidebar Display section gains a fourth
+  checkbox that highlights matched keywords / low-priority terms in the
+  truncated abstract summaries on the paper cards, mirroring the full-
+  abstract highlight. Off by default.
 
 ### Changed
+- **Quickstart simplified.** Setup is now clone → `uv tool install '.[gui]'`
+  → `arxiv-gui`; the README leads with the quick start and moves defaults,
+  starter presets, and the feature overview below it. The GUI guide lists
+  the eight tabs the app actually renders, including **Score a paper**.
 - **Architecture decision records remain in the repository but are excluded
   from the public GitHub Pages site.**
 

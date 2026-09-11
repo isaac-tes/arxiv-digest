@@ -35,3 +35,4 @@ arxiv_config.json
 
 # Beads / Dolt files (added by bd init)
 .beads/proxieddb/
+.vscode/

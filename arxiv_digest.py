@@ -22,6 +22,8 @@ from typing import Dict, List, Sequence
 import requests
 from bs4 import BeautifulSoup
 
+import update_check
+
 DEFAULT_FEEDS = [
     "cond-mat.quant-gas",
     "cond-mat.mes-hall",
@@ -262,6 +264,8 @@ class Config:
     highlight_authors: bool = True
     highlight_terms_title: bool = True
     highlight_terms_abstract: bool = True
+    # Summary (truncated abstract on the paper card) highlight; off by default.
+    highlight_terms_summary: bool = False
     # Per-aspect highlight colors (hex strings). Each scored-and-highlightable
     # aspect maps to one color; defaults mirror the original hardcoded palette.
     color_keyword: str = "#388bfd"
@@ -317,6 +321,7 @@ class Config:
             highlight_authors=bool(data.get("highlight_authors", True)),
             highlight_terms_title=bool(data.get("highlight_terms_title", True)),
             highlight_terms_abstract=bool(data.get("highlight_terms_abstract", True)),
+            highlight_terms_summary=bool(data.get("highlight_terms_summary", False)),
             color_keyword=str(data.get("color_keyword", "#388bfd")),
             color_low_priority=str(data.get("color_low_priority", "#f85149")),
             color_author=str(data.get("color_author", "#3fb950")),
@@ -1437,6 +1442,11 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
     parser.add_argument("--save-config", action="store_true", help="Persist modified config back to --config path")
     parser.add_argument("--list-config", action="store_true", help="Print current config and exit")
     parser.add_argument(
+        "--no-update-check",
+        action="store_true",
+        help="Skip the cached check for a newer release at the end of the run",
+    )
+    parser.add_argument(
         "--preset",
         choices=list(PRESETS),
         help="Start from a built-in starter preset (replaces the config's content). See --list-presets.",
@@ -1542,7 +1552,14 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    args = parse_args(argv or sys.argv[1:])
+    argv = list(argv) if argv is not None else sys.argv[1:]
+
+    # `arxiv-digest update` / `arxiv-digest upgrade`: self-update subcommand,
+    # handled before argparse (which only knows flags).
+    if argv and argv[0] in {"update", "upgrade"}:
+        return update_check.run_self_upgrade()
+
+    args = parse_args(argv)
 
     if args.list_presets:
         for name in preset_names():
@@ -1641,6 +1658,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         markdown_path.write_text(markdown, encoding="utf-8")
         if args.verbose:
             print(f"Saved digest Markdown to {markdown_path}")
+
+    # One-line update notice (cached 24 h, fails silently when GitHub is
+    # unreachable). Interactive default runs only; --no-update-check suppresses.
+    if not args.no_update_check and sys.stdout.isatty():
+        notice = update_check.check_for_update()
+        if notice:
+            print(notice)
     return 0
 
 

@@ -1,65 +1,84 @@
 # Quickstart
 
-Three install paths depending on what you want.
+Two commands get you the web app: clone the repo, install it as a tool.
 
-## Path 1: clone and run (recommended for tinkering)
+## 1. Install uv
+
+Skip this if you already have `uv` (check with `uv --version`).
+
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh      # macOS / Linux
+```
+
+Windows (PowerShell): `powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"`, or `brew install uv` on macOS. Restart your terminal afterwards. See the official [uv install docs](https://docs.astral.sh/uv/getting-started/installation/).
+
+## 2. Clone and install
 
 ```bash
 git clone https://github.com/isaac-tes/arxiv-digest.git
 cd arxiv-digest
+uv tool install '.[gui]'      # puts arxiv-digest + arxiv-gui on your PATH
+```
+
+Python 3.12 or newer is required; `uv` installs it for you if it's missing.
+
+## 3. Run it
+
+```bash
+arxiv-gui                     # web app — opens http://localhost:8501 in your browser
+arxiv-digest --top 10         # CLI digest, prints ranked papers to stdout
+```
+
+In the GUI, hit **Fetch papers** in the sidebar and start reading. Pick a
+[starter preset](index.md#starter-presets) under **Profiles** if you'd rather begin from
+a prepared topic bundle (e.g. *open quantum systems*). To tune what counts as a
+match, edit the **Keywords** / **Authors** / **Scoring** tabs; the Papers tab
+re-ranks instantly.
+
+Updating after a while? One command, no clone needed:
+
+```bash
+arxiv-digest update    # reinstalls from the latest GitHub release
+```
+
+Or from inside the clone (e.g. to track a branch):
+
+```bash
+git pull
+uv tool install '.[gui]' --reinstall    # rebuilds both commands on PATH
+```
+
+To remove: `uv tool uninstall arxiv-digest`.
+
+---
+
+## Alternatives
+
+### Run without installing (uvx)
+
+`uvx` builds and runs the package from your clone on the fly, with nothing to
+install or uninstall:
+
+```bash
+uvx --from '.[gui]' arxiv-gui               # web app — opens your browser
+uvx --from '.[gui]' arxiv-digest --top 10   # CLI
+```
+
+Drop the `[gui]` extra for CLI-only runs (`uvx --from . arxiv-digest --top 10`).
+
+### Run from the clone (for development)
+
+If you want to hack on the code or run the test suite:
+
+```bash
 uv sync --group dev                      # CLI + GUI + tests + docs
-uv run pytest -q                         # 74-test suite, ~1s
+uv run pytest -q                         # full test suite, ~2s, no network
 uv run python arxiv_digest.py --top 10   # CLI sanity check
 uv run streamlit run arxiv_gui.py        # GUI in browser at localhost:8501
+./launch_gui.sh                          # optional: auto-syncs gui group, then runs
 ```
 
-The GUI also ships an optional convenience launcher:
-
-```bash
-./launch_gui.sh                          # auto-syncs gui group, then runs
-```
-
-## Path 2: install as a tool (recommended for daily CLI use)
-
-```bash
-uv tool install '.[gui]'                 # from inside a clone
-arxiv-digest --top 10                    # CLI command on PATH
-arxiv-gui                                # GUI command on PATH
-```
-
-`uv tool install` puts the executables on your PATH in their own isolated environment, so they survive across clones and venvs. To upgrade after a `git pull`:
-
-```bash
-uv tool install '.[gui]' --reinstall
-```
-
-To uninstall:
-
-```bash
-uv tool uninstall arxiv-digest
-```
-
-### Path 2b: run without installing (uvx)
-
-Don't want a persistent tool on your PATH? `uvx` builds and runs the package
-from your clone on the fly, with nothing to install or uninstall:
-
-```bash
-uvx --from '.[gui]' arxiv-digest --top 10   # CLI
-uvx --from '.[gui]' arxiv-gui               # GUI — opens your browser
-```
-
-Because `uvx` rebuilds from the current directory each run, it always picks up
-your latest edits (no `--reinstall`). Drop the `[gui]` extra for CLI-only runs.
-
-## Path 3: paste into ChatGPT
-
-`arxiv_digest.py` is intentionally a single file with only `requests` + `beautifulsoup4` as runtime deps. Paste the file into Code Interpreter / Advanced Data Analysis and run `python arxiv_digest.py --top 10`.
-
-## Prerequisites
-
-- [uv](https://docs.astral.sh/uv/): `curl -LsSf https://astral.sh/uv/install.sh | sh`
-- Python 3.12 or newer (uv installs it for you if missing)
+`uv run` always picks up your latest edits, no reinstall needed.
 
 ## Troubleshooting
 
