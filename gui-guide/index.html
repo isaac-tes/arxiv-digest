@@ -1073,6 +1073,10 @@ from a script.)</p>
 <p>Both filters are applied at display time, so toggling them re-ranks instantly
 with <strong>no re-fetch</strong>.</p>
 <h2 id="tabs">Tabs<a class="headerlink" href="#tabs" title="Permanent link">&para;</a></h2>
+<p>The GUI has eight tabs across the top, in this order: <strong>Papers</strong>, <strong>Score a
+paper</strong>, <strong>Keywords</strong>, <strong>Authors</strong>, <strong>Low priority</strong>, <strong>Feeds</strong>, <strong>Scoring</strong>,
+<strong>Profiles</strong> (plus the sidebar with Timeframe / Top N / Feeds / fetch controls
+and the Display + Zotero status sections).</p>
 <ul>
 <li><strong>Papers</strong>: ranked list, search box (filters by title / authors / abstract), MD + JSON download buttons. Per paper: rank, title, authors, subjects, section, summary, arXiv link, score badge, a <strong>Save to Zotero</strong> button, expandable score breakdown, expandable full abstract.</li>
 <li><strong>Score a paper</strong>: paste an arXiv link or ID to see how it would score under your current config, why it did (or didn't) appear in the digest, and save it to Zotero.</li>
@@ -1080,7 +1084,7 @@ with <strong>no re-fetch</strong>.</p>
 <li><strong>Authors</strong>: same pattern for <code>named_authors</code>. Default +6 per match. Whole-word match by default (configurable in Scoring, like keywords).</li>
 <li><strong>Low priority</strong>: penalty list. If <em>any</em> term matches, the paper takes the <em>Low-priority penalty</em> (default −5), once, not per hit.</li>
 <li><strong>Feeds</strong>: <code>name → URL</code> editor. Add custom arXiv lists (e.g. <code>hep-th=https://arxiv.org/list/hep-th/new</code>). The <code>/new</code> / <code>/pastweek</code> suffix is rewritten by the timeframe selector.</li>
-<li><strong>Scoring</strong>: number inputs for each weight: per-keyword bonus, per-author bonus, per-feed subject bonuses, low-priority penalty, long-abstract bonus, abstract-length threshold. <strong>Per-feed bonuses</strong>: every extra feed you add in the Feeds tab gets its own bonus field here (raise or lower how much a paper from that feed scores). Set to 0 to disable.</li>
+<li><strong>Scoring</strong>: a <strong>Whole-word matching</strong> toggle (default on; untick for legacy substring matching), then number inputs for each weight: per-keyword bonus, per-author bonus, per-feed subject bonuses, low-priority penalty, long-abstract bonus, abstract-length threshold. <strong>Per-feed bonuses</strong>: every extra feed you add in the Feeds tab gets its own bonus field here (raise or lower how much a paper from that feed scores). Set to 0 to disable.</li>
 <li><strong>Profiles</strong>: save / load / export / import named configs. Files live in <code>~/.arxiv_scraper/profiles/&lt;name&gt;.json</code> and persist across project clones. <strong>Write project config</strong> dumps the current config to <code>arxiv_config.json</code> in the project root, which is what the CLI picks up on the next run. Use this to push GUI tweaks into your daily CLI digest.</li>
 </ul>
 <h2 id="highlighting">Highlighting<a class="headerlink" href="#highlighting" title="Permanent link">&para;</a></h2>
@@ -1095,8 +1099,9 @@ paper ranked at a glance:</p>
 </ul>
 <p>Hover any highlight for a tooltip with its score weight (e.g. <code>core keyword
 (+6)</code>, <code>low-priority term (−5)</code>, <code>subject bonus (+4)</code>).</p>
-<p>Three checkboxes in the sidebar <strong>Display</strong> section toggle each surface
-independently: author highlight, keywords in titles, keywords in abstracts.
+<p>Four checkboxes in the sidebar <strong>Display</strong> section toggle each surface
+independently: author highlight, keywords in titles, keywords in abstracts, and
+keywords in the truncated <strong>summaries</strong> on the paper cards (off by default).
 They are part of the config, so profiles and the project config remember them.</p>
 <h3 id="highlight-colors">Highlight colors<a class="headerlink" href="#highlight-colors" title="Permanent link">&para;</a></h3>
 <p>Each aspect has its own color, chosen with a <strong>color picker</strong> in the sidebar
@@ -1243,7 +1248,7 @@ edits first, otherwise they won't be included.</p>
     <span class="md-icon" title="Last update">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M21 13.1c-.1 0-.3.1-.4.2l-1 1 2.1 2.1 1-1c.2-.2.2-.6 0-.8l-1.3-1.3c-.1-.1-.2-.2-.4-.2m-1.9 1.8-6.1 6V23h2.1l6.1-6.1zM12.5 7v5.2l4 2.4-1 1L11 13V7zM11 21.9c-5.1-.5-9-4.8-9-9.9C2 6.5 6.5 2 12 2c5.3 0 9.6 4.1 10 9.3-.3-.1-.6-.2-1-.2s-.7.1-1 .2C19.6 7.2 16.2 4 12 4c-4.4 0-8 3.6-8 8 0 4.1 3.1 7.5 7.1 7.9l-.1.2z"/></svg>
     </span>
-    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="September 10, 2026 14:04:04 UTC"><span class="timeago" datetime="2026-09-10T14:04:04+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="September 10, 2026 14:04:04 UTC">2026-09-10</span>
+    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="September 11, 2026 16:53:54 UTC"><span class="timeago" datetime="2026-09-11T16:53:54+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="September 11, 2026 16:53:54 UTC">2026-09-11</span>
   </span>
 
     
