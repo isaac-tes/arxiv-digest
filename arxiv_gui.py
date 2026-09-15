@@ -225,7 +225,9 @@ def _pastweek_feeds_to_fetch(feeds_key: Tuple[Tuple[str, str], ...]) -> list[str
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
-def fetch_papers_cached(timeframe: str, feeds_key: Tuple[Tuple[str, str], ...]) -> list[dict]:
+def fetch_papers_cached(
+    timeframe: str, feeds_key: Tuple[Tuple[str, str], ...]
+) -> tuple[list[dict], list[str]]:
     """Cached fetch keyed on (timeframe, sorted feed URLs).
 
     feeds_key is a tuple of (name, url) pairs because lists/dicts aren't hashable.
@@ -234,17 +236,32 @@ def fetch_papers_cached(timeframe: str, feeds_key: Tuple[Tuple[str, str], ...]) 
     API with a true 7-day date-range window, because arXiv's /pastweek HTML
     listing is unreliable (it returns 1–5 days, not a guaranteed week).
     """
+    # Persistent disk cache (survives restarts, keyed on the UTC day) sits under
+    # the in-memory st.cache_data layer, so re-selecting the same feeds — even
+    # after restarting the app — reuses saved papers instead of re-hitting arXiv
+    # and tripping the rate limiter.
+    feed_names = [name for name, _ in feeds_key]
+    cache_key = ad._fetch_cache_key(timeframe, feed_names)
+    cached = ad.load_fetch_cache(cache_key)
+    if cached is not None:
+        return cached, []
+
     if timeframe == "pastweek":
         end = datetime.now(UTC)
         start = end - timedelta(days=7)
         to_fetch = _pastweek_feeds_to_fetch(feeds_key)
-        return ad.fetch_pastweek(to_fetch, start, end)
+        notices: list[str] = []
+        papers = ad.fetch_pastweek(to_fetch, start, end, notices=notices)
+        ad.save_fetch_cache(cache_key, papers)
+        return papers, notices
 
     # today: HTML /new feed
     urls = []
     for _, base_url in feeds_key:
         urls.append(ad.feed_url(base_url, "today"))
-    return ad.fetch_feeds(urls)
+    papers = ad.fetch_feeds(urls)
+    ad.save_fetch_cache(cache_key, papers)
+    return papers, []
 
 
 # ────────────────────────── Session state init ──────────────────────────
@@ -388,15 +405,26 @@ def render_sidebar():
         ):
             with st.spinner("Fetching from arXiv..."):
                 feeds_key = tuple(sorted((f, cfg().feeds[f]) for f in selected_feeds))
-                st.session_state.papers = fetch_papers_cached(timeframe, feeds_key)
-                st.session_state.last_fetch = datetime.now()
-            st.success(f"Fetched {len(st.session_state.papers)} papers.")
+                try:
+                    papers, notices = fetch_papers_cached(timeframe, feeds_key)
+                    st.session_state.papers = papers
+                    st.session_state.last_fetch = datetime.now()
+                except ad.requests.RequestException as exc:
+                    st.error(
+                        f"arXiv fetch failed ({type(exc).__name__}). "
+                        "arXiv may be slow or down — try again in a moment."
+                    )
+                else:
+                    for note in notices:
+                        st.warning(note)
+                    st.success(f"Fetched {len(st.session_state.papers)} papers.")
 
         if st.session_state.last_fetch:
             st.caption(f"Last fetched: {st.session_state.last_fetch:%Y-%m-%d %H:%M:%S}")
 
         if st.button("Clear fetch cache", width="stretch"):
             fetch_papers_cached.clear()
+            ad.clear_fetch_cache()
             st.session_state.papers = []
             st.session_state.last_fetch = None
             st.rerun()

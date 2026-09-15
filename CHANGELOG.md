@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.1] - 2026-09-15
+
+### Added
+- **Persistent fetch cache.** Fetch results are now cached on disk under
+  `~/.arxiv_scraper/cache/`, keyed on `(timeframe, feeds, UTC day)`. Unlike the
+  previous in-memory-only cache, this survives app restarts and reuses the same
+  day's results with no network call, so a routine re-open never re-triggers
+  arXiv's rate limiter. A new UTC day misses and refetches; files older than
+  3 days are pruned and empty/failed fetches are never cached. **Clear fetch
+  cache** now clears both the in-memory and disk layers.
+- **HTML `/pastweek` fallback.** When the export API is rate-limited or timing
+  out, `pastweek` falls back to arXiv's HTML listing (a more tolerant host)
+  instead of failing, and reports the fallback in the CLI (stderr) and GUI
+  (warning).
+
+### Fixed
+- **`pastweek` no longer hangs for minutes when arXiv rate-limits the export
+  API.** Retry backoff is capped and bounded by a ~30s wall-clock budget, a
+  blocked API is detected once and skipped for the remaining feeds, and the
+  GUI surfaces a clear error instead of crashing. Read timeout raised to
+  `(10, 60)s` and request pacing set to arXiv's recommended ~3s.
+
 ## [0.6.0] - 2026-09-11
 
 ### Added

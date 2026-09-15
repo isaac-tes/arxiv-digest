@@ -37,6 +37,34 @@ sessions, or **Write project config** to feed the CLI.
   at an arXiv listing page, e.g. `https://arxiv.org/list/cond-mat/new`.
 - arXiv may be rate-limiting; click **Clear fetch cache** and retry.
 
+### arXiv is rate-limiting or blocking you
+
+Symptom: a `pastweek` fetch hangs for a long time, or the log shows repeated
+`API 429; retrying...` / `Rate exceeded` / `ReadTimeout`.
+
+What's happening: the `pastweek` timeframe uses arXiv's **export API**
+(`export.arxiv.org`), which throttles bursts by returning HTTP `429` — sometimes
+blocking your IP for **minutes up to ~1 hour**. It trips on paginating a big
+feed (e.g. `cond-mat`), fetching many feeds back-to-back, or refetching often.
+
+What the app does about it:
+
+- Paces requests ~3s apart, retries a `429`/timeout a few times with capped
+  backoff, and gives up within a ~30s budget instead of grinding for minutes.
+- Falls back to arXiv's HTML `/pastweek` listing (a different, more tolerant
+  host) when the API stays blocked, and shows a warning saying so. Results may
+  then cover fewer than seven days.
+- **Caches results per day** so a normal re-open doesn't re-hit arXiv at all
+  (see [Caching](gui-guide.md#caching)).
+
+What you can do:
+
+- **Wait a few minutes to ~1 hour** without fetching; the block clears on its
+  own once you stop hitting the API.
+- Rely on the cache: re-selecting the same feeds the same day is served from
+  disk with no network call.
+- Fetch fewer feeds at once, and avoid clicking **Fetch papers** repeatedly.
+
 ## CLI
 
 ### Flag names

@@ -21,7 +21,7 @@ from a script.)
 
 ## The daily flow
 
-1. **Sidebar**: pick **Timeframe** (`today` / `pastweek`), **Top N**, and which **Feeds** to fetch from. Click **Fetch papers**. Cached for 1 hour per `(timeframe, feeds)` combo; click **Clear fetch cache** to force a refresh.
+1. **Sidebar**: pick **Timeframe** (`today` / `pastweek`), **Top N**, and which **Feeds** to fetch from. Click **Fetch papers**. Results are cached per `(timeframe, feeds)` and reused automatically — even across app restarts — until the next UTC day (see [Caching](#caching)); click **Clear fetch cache** to force a fresh fetch.
 2. **Papers tab**: papers appear ranked. Open *Why this score?* to see exactly which keywords / authors / subjects contributed. Open *Full abstract* without leaving the page.
 3. **Tweak preferences** in the **Keywords**, **Authors**, **Low priority**, **Scoring** tabs. The Papers tab re-ranks live on the cached fetch, with no re-fetch needed.
 4. **Download** the current ranked list as Markdown or JSON. The Markdown is `--output-markdown`'s format; the JSON holds the same ranked `entries` as `--output-json` (it omits the CLI-only `feed_urls`/`sections` header fields).
@@ -45,6 +45,50 @@ from a script.)
 
 Both filters are applied at display time, so toggling them re-ranks instantly
 with **no re-fetch**.
+
+## Caching
+
+Fetching from arXiv is the slow, rate-limited step (the `pastweek` export API
+will temporarily **block your IP** if hit too often — see
+[Troubleshooting](troubleshooting.md#arxiv-is-rate-limiting-or-blocking-you)).
+To avoid needless refetches the GUI caches results in **two layers**, both keyed
+on the `(timeframe, feeds)` you selected:
+
+| Layer | Where | Survives restart? | Expires |
+|---|---|---|---|
+| In-memory (`st.cache_data`) | RAM, current app process | No | 1 hour, or on **Clear fetch cache** |
+| Persistent (disk) | `~/.arxiv_scraper/cache/*.json` | **Yes** | Next **UTC day**, or on **Clear fetch cache** |
+
+On a fetch the GUI checks the in-memory layer, then the disk layer, and only
+hits arXiv on a miss. Because arXiv announces once per day, the disk key
+includes the **UTC date**: re-selecting the same feeds later the same day (or
+after restarting the app) is served instantly from disk with **no network
+call**, so a routine re-open never re-triggers the rate limiter. A new UTC day
+misses naturally and refetches the fresh announcements.
+
+The disk cache is intentionally small: results are stored as JSON on disk (not
+held in memory), files older than **3 days** are pruned on each save, and an
+empty/failed fetch is **never** cached (so a fetch that got rate-limited retries
+next time instead of pinning zero papers for the day).
+
+### How this differs from the previous cache
+
+Before, the GUI had **only** the in-memory `st.cache_data` layer: it was lost
+whenever the Streamlit process restarted and expired after one hour, so a
+restart (or an hour later) forced a full refetch — exactly the burst that trips
+arXiv's rate limiter. The **persistent disk layer is new**: it makes the cache
+survive restarts, key on the UTC day instead of a rolling hour, and prune
+itself. The in-memory layer is unchanged and still sits on top for zero-latency
+re-ranking within a session.
+
+### Clearing the cache
+
+- **GUI:** click **Clear fetch cache** in the sidebar. This now clears **both**
+  layers (in-memory *and* the disk files), then the next **Fetch papers** does a
+  fresh fetch.
+- **Manually / scripts:** delete the disk cache directory, e.g.
+  `rm -rf ~/.arxiv_scraper/cache`, or from Python call
+  `arxiv_digest.clear_fetch_cache()`.
 
 ## Tabs
 

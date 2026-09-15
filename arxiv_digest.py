@@ -620,7 +620,49 @@ def fetch_abstract(arxiv_id: str, verbose: bool = False, retries: int = 2) -> st
     return ""
 
 
-def fetch_feed(url: str, sections: List[str] | None = None, verbose: bool = False) -> List[dict]:
+def _backfill_missing_abstracts(papers: List[dict], verbose: bool = False) -> None:
+    """Fetch abstracts in parallel for papers whose ``abstract`` is empty.
+
+    Mutates ``papers`` in place. arXiv's /pastweek listing omits abstracts, so
+    they are back-filled from each paper's /abs/ page. Deduplicate the paper set
+    *before* calling this so an id shared across feeds is fetched only once.
+    """
+    missing = [p for p in papers if not p["abstract"]]
+    if not missing:
+        return
+    if verbose:
+        print(f"  Fetching {len(missing)} abstracts in parallel...")
+    # Limit concurrency to be respectful to arXiv servers.
+    with ThreadPoolExecutor(max_workers=10) as executor:
+        future_to_paper = {
+            executor.submit(fetch_abstract, p["id"], verbose): p for p in missing
+        }
+        for future in as_completed(future_to_paper):
+            paper = future_to_paper[future]
+            try:
+                paper["abstract"] = future.result()
+            except Exception as e:
+                if verbose:
+                    print(f"  Warning: Failed to fetch abstract for {paper['id']}: {e}")
+
+    # A systemic failure (bad ids, arXiv blocking us, network down) shows up as
+    # *every* fetch coming back empty. That used to be silent, which is how the
+    # "arXiv:" id-prefix bug hid for so long — warn unconditionally.
+    still_missing = sum(1 for p in missing if not p["abstract"])
+    if still_missing and still_missing >= len(missing) // 2:
+        print(
+            f"  Warning: {still_missing}/{len(missing)} abstracts "
+            f"could not be retrieved from arxiv.org.",
+            file=sys.stderr,
+        )
+
+
+def fetch_feed(
+    url: str,
+    sections: List[str] | None = None,
+    verbose: bool = False,
+    backfill: bool = True,
+) -> List[dict]:
     resp = requests.get(url, timeout=30)
     resp.raise_for_status()
     soup = BeautifulSoup(resp.text, "html.parser")
@@ -708,36 +750,11 @@ def fetch_feed(url: str, sections: List[str] | None = None, verbose: bool = Fals
                 }
             )
     
-    # Batch fetch missing abstracts in parallel for speed
-    papers_missing_abstract = [p for p in papers if not p["abstract"]]
-    if papers_missing_abstract:
-        if verbose:
-            print(f"  Fetching {len(papers_missing_abstract)} abstracts in parallel...")
-        
-        # Use ThreadPoolExecutor to fetch abstracts concurrently
-        # Limit to 10 concurrent requests to be respectful to arXiv servers
-        with ThreadPoolExecutor(max_workers=10) as executor:
-            future_to_paper = {executor.submit(fetch_abstract, p["id"], verbose): p for p in papers_missing_abstract}
-            
-            for future in as_completed(future_to_paper):
-                paper = future_to_paper[future]
-                try:
-                    paper["abstract"] = future.result()
-                except Exception as e:
-                    if verbose:
-                        print(f"  Warning: Failed to fetch abstract for {paper['id']}: {e}")
+    # Batch fetch missing abstracts in parallel for speed. Skipped when the
+    # caller (fetch_pastweek fallback) will back-fill the deduplicated set.
+    if backfill:
+        _backfill_missing_abstracts(papers, verbose=verbose)
 
-        # A systemic failure (bad ids, arXiv blocking us, network down) shows up
-        # as *every* fetch coming back empty. That used to be silent, which is
-        # how the "arXiv:" id-prefix bug hid for so long — warn unconditionally.
-        still_missing = sum(1 for p in papers_missing_abstract if not p["abstract"])
-        if still_missing and still_missing >= len(papers_missing_abstract) // 2:
-            print(
-                f"  Warning: {still_missing}/{len(papers_missing_abstract)} abstracts "
-                f"could not be retrieved from arxiv.org.",
-                file=sys.stderr,
-            )
-    
     if verbose:
         print(f"  Found {len(papers)} papers")
     
@@ -761,6 +778,66 @@ def fetch_feeds(urls: List[str], sections: List[str] | None = None, verbose: boo
     return all_papers
 
 
+# ── Persistent fetch cache ─────────────────────────────────────────────
+#
+# arXiv announces once per day, so a (timeframe, feeds) fetch is stable within a
+# UTC day. Cache results on disk keyed on that, so restarting the app or
+# re-selecting the same feeds reuses the saved papers instead of re-hitting
+# arXiv — which is what trips the export-API rate limiter. The key includes the
+# UTC date, so a new day naturally misses and refetches. Disk-backed (not held
+# in memory) and self-pruning, so it stays small.
+
+_FETCH_CACHE_DIR = Path.home() / ".arxiv_scraper" / "cache"
+_FETCH_CACHE_MAX_AGE_DAYS = 3
+
+
+def _fetch_cache_key(timeframe: str, feed_names: Sequence[str], day: str | None = None) -> str:
+    """Stable short key for a (timeframe, feeds, UTC-day) fetch."""
+    import hashlib
+
+    day = day or datetime.now(UTC).strftime("%Y-%m-%d")
+    raw = f"{timeframe}|{','.join(sorted(feed_names))}|{day}"
+    return hashlib.sha256(raw.encode()).hexdigest()[:16]
+
+
+def load_fetch_cache(key: str) -> List[dict] | None:
+    """Return cached papers for ``key``, or None on miss / unreadable file."""
+    f = _FETCH_CACHE_DIR / f"{key}.json"
+    try:
+        return json.loads(f.read_text())
+    except (OSError, json.JSONDecodeError):
+        return None
+
+
+def save_fetch_cache(key: str, papers: List[dict]) -> None:
+    """Persist ``papers`` under ``key`` and prune stale cache files.
+
+    Empty results are not cached, so a failed/blocked fetch retries next time
+    rather than pinning zero papers for the day. Best-effort: disk errors are
+    swallowed (the cache is an optimization, never a correctness dependency).
+    """
+    if not papers:
+        return
+    try:
+        _FETCH_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        cutoff = time.time() - _FETCH_CACHE_MAX_AGE_DAYS * 86400
+        for old in _FETCH_CACHE_DIR.glob("*.json"):
+            if old.stat().st_mtime < cutoff:
+                old.unlink(missing_ok=True)
+        (_FETCH_CACHE_DIR / f"{key}.json").write_text(json.dumps(papers))
+    except OSError:
+        pass
+
+
+def clear_fetch_cache() -> None:
+    """Delete every persisted fetch-cache file (best-effort)."""
+    try:
+        for f in _FETCH_CACHE_DIR.glob("*.json"):
+            f.unlink(missing_ok=True)
+    except OSError:
+        pass
+
+
 # ── arXiv export API fetch (true date-range window) ─────────────────────────
 #
 # arXiv's /pastweek HTML listing is unreliable — it returns whatever days arXiv
@@ -779,10 +856,26 @@ _API_OPENSEARCH = "{http://a9.com/-/spec/opensearch/1.1/}"
 # User-Agent (arXiv asks for this so it can identify/contact the tool rather
 # than hard-block it), and (c) retrying transient 429 / 5xx responses with backoff
 # that honors the server's Retry-After header. arXiv recommends ~3s between
-# requests for bulk use; 1s is a practical middle ground for the GUI, with the
-# retry/backoff as the safety net for any residual rate limiting.
-_ARXIV_RATE_LIMIT_SECONDS = 1.0
-_MAX_API_RETRIES = 5
+# requests for bulk use; we honor that here (a 1s pace trips 429s on big
+# multi-page feeds like cond-mat), with the retry/backoff as the safety net for
+# any residual rate limiting.
+_ARXIV_RATE_LIMIT_SECONDS = 3.0
+# With the HTML /pastweek fallback (see fetch_pastweek) as the safety net, the
+# API no longer needs a long retry tail: a sustained 429 (arXiv's App Engine
+# hard-blocks an IP with no Retry-After) would otherwise sleep 3+6+12+24+48+96
+# ≈ 189s per feed before failing over. Cap both the count and the per-wait so a
+# blocked feed fails over in ~15s instead.
+_MAX_API_RETRIES = 3
+_MAX_BACKOFF_SECONDS = 8.0
+# Hard wall-clock budget for the whole retry loop. A blocked arXiv can return
+# 429 *slowly* (~16s per response), so a count-only cap still adds up; this
+# bounds the total time before we fail over to the HTML fallback, whatever the
+# per-request latency.
+_MAX_RETRY_BUDGET_SECONDS = 30.0
+# (connect, read) timeout. A single 30s read is tight when the API folds 500
+# results into one response and arXiv is under load; give the read 60s. The
+# retry/backoff above is the safety net once even that is exceeded.
+_API_TIMEOUT = (10, 60)
 # Page size is a speed/request-count tradeoff. 100 strings 20 requests together
 # (slow, and the burst trips anonymous 429s). 2000 folds a big query into one
 # request that can exceed the read timeout (crashing on ReadTimeout). 500 returns
@@ -820,34 +913,44 @@ def _api_get_with_retry(params: dict, verbose: bool = False) -> requests.Respons
     ``raise_for_status``; once retries are exhausted the last error is re-raised.
     """
     last_err: Exception | None = None
+    last_attempt = _MAX_API_RETRIES
+    deadline = time.monotonic() + _MAX_RETRY_BUDGET_SECONDS
     for attempt in range(_MAX_API_RETRIES + 1):
         try:
             resp = requests.get(
                 _ARXIV_API,
                 params=params,
-                timeout=30,
+                timeout=_API_TIMEOUT,
                 headers={"User-Agent": _API_USER_AGENT},
             )
         except _RETRYABLE_EXCEPTIONS as exc:
-            delay = _ARXIV_RATE_LIMIT_SECONDS * (2**attempt)
+            delay = min(_ARXIV_RATE_LIMIT_SECONDS * (2**attempt), _MAX_BACKOFF_SECONDS)
             if verbose:
                 print(
                     f"  API {type(exc).__name__}; retrying in {delay:.0f}s "
                     f"(attempt {attempt + 1}/{_MAX_API_RETRIES + 1})"
                 )
             last_err = exc
+            if attempt == last_attempt or time.monotonic() + delay >= deadline:
+                break  # out of attempts or time budget; fail over now
             time.sleep(delay)
             continue
 
         if resp.status_code in _RETRYABLE_STATUS:
             wait = _retry_after_seconds(resp)
-            delay = wait if wait is not None else _ARXIV_RATE_LIMIT_SECONDS * (2**attempt)
+            delay = (
+                wait
+                if wait is not None
+                else min(_ARXIV_RATE_LIMIT_SECONDS * (2**attempt), _MAX_BACKOFF_SECONDS)
+            )
             if verbose:
                 print(
                     f"  API {resp.status_code}; retrying in {delay:.0f}s "
                     f"(attempt {attempt + 1}/{_MAX_API_RETRIES + 1})"
                 )
             last_err = requests.HTTPError(f"{resp.status_code} Server Error", response=resp)
+            if attempt == last_attempt or time.monotonic() + delay >= deadline:
+                break  # out of attempts or time budget; fail over now
             time.sleep(delay)
             continue
 
@@ -917,7 +1020,7 @@ def _fetch_listing_day_labels(category: str, verbose: bool = False) -> Dict[str,
     from urllib.parse import quote
 
     url = f"https://arxiv.org/list/{quote(category, safe='.')}/pastweek?show=2000"
-    resp = requests.get(url, timeout=30, headers={"User-Agent": _API_USER_AGENT})
+    resp = requests.get(url, timeout=_API_TIMEOUT, headers={"User-Agent": _API_USER_AGENT})
     resp.raise_for_status()
     labels = _parse_listing_day_labels(resp.content)
     if verbose:
@@ -1020,11 +1123,30 @@ def _paper_from_api_entry(entry: ET.Element) -> dict:
     }
 
 
+def _fetch_pastweek_html(category: str, verbose: bool = False) -> List[dict]:
+    """Fallback fetch: arXiv's HTML /pastweek listing for one category.
+
+    Used when the export API is unavailable (rate-limited / timing out). The
+    HTML host (arxiv.org) is a separate service from the export API
+    (export.arxiv.org, behind Google App Engine), so it often still responds
+    when the API is throttling. Caveat: /pastweek returns whatever days arXiv
+    currently lists (often fewer than 7), so this is best-effort, not a true
+    7-day window.
+    """
+    from urllib.parse import quote
+
+    url = f"https://arxiv.org/list/{quote(category, safe='.')}/pastweek?show=2000"
+    # Defer abstract back-fill: fetch_pastweek back-fills the deduplicated set
+    # once, so a paper shared by a parent feed and its sub-feed is fetched once.
+    return fetch_feed(url, verbose=verbose, backfill=False)
+
+
 def fetch_pastweek(
     feed_names: Sequence[str],
     start: datetime,
     end: datetime,
     verbose: bool = False,
+    notices: list[str] | None = None,
 ) -> List[dict]:
     """Fetch several feeds across a date window, deduplicating by arXiv id.
 
@@ -1035,25 +1157,77 @@ def fetch_pastweek(
     sub-categories) contribute each paper once. API-derived sections are
     reconciled with arXiv's HTML announcement-day sections. Calls are spaced
     apart so the arXiv export API doesn't rate-limit.
+
+    If the export API fails for a category (rate limit / timeout, after retries),
+    that category falls back to the HTML /pastweek listing instead of aborting
+    the whole fetch. When any fallback happens a human-readable explanation is
+    appended to ``notices`` (if a list is passed) so the caller can surface the
+    cause; the reason is also printed under ``verbose``.
     """
     papers: List[dict] = []
     seen: set[str] = set()
+    fell_back: list[str] = []
+    # Once the API proves it is down for one feed, it is down for all of them
+    # (same host, same IP block). Skip it for the rest and go straight to HTML,
+    # so the retry-backoff cost is paid once, not once per feed.
+    api_down = False
     for idx, name in enumerate(feed_names):
-        for p in fetch_feed_api(name, start, end, verbose=verbose):
+        feed_papers: List[dict] = []
+        if not api_down:
+            try:
+                feed_papers = fetch_feed_api(name, start, end, verbose=verbose)
+            except requests.RequestException as exc:
+                api_down = True
+                if verbose:
+                    print(
+                        f"  Export API failed for {name} ({type(exc).__name__}); "
+                        "using HTML /pastweek for this and remaining feeds"
+                    )
+        if api_down:
+            fell_back.append(name)
+            try:
+                feed_papers = _fetch_pastweek_html(name, verbose=verbose)
+            except requests.RequestException as exc2:
+                if verbose:
+                    print(f"  HTML fallback also failed for {name}: {exc2}")
+                feed_papers = []
+        for p in feed_papers:
             if p["id"] in seen:
                 continue
             seen.add(p["id"])
             papers.append(p)
-        if idx < len(feed_names) - 1:
+        # Only the API path needs inter-feed pacing; HTML fallback hits a
+        # different host that is not rate-limiting us.
+        if idx < len(feed_names) - 1 and not api_down:
             time.sleep(_ARXIV_RATE_LIMIT_SECONDS)
+
+    # Back-fill abstracts once over the deduplicated set (fallback feeds deferred
+    # theirs). Papers from the API already carry abstracts, so only HTML-fallback
+    # papers are fetched here, each exactly once.
+    if fell_back:
+        _backfill_missing_abstracts(papers, verbose=verbose)
+
+    if fell_back and notices is not None:
+        notices.append(
+            "arXiv export API was rate-limited or timed out; used the HTML "
+            "/pastweek fallback for: "
+            + ", ".join(fell_back)
+            + ". Results may cover fewer than 7 days."
+        )
 
     # The API's ``published`` field is the submission timestamp.  It cannot
     # reproduce arXiv's announcement-day grouping (for example, 2609.10541 is
     # submitted on Wed 09 Sep UTC but appears in arXiv's Thu 10 Sep listing).
     # Reconcile sections against the official HTML listing; retain the API
     # section as a fallback when a category page is unavailable or truncated.
+    # Feeds that already fell back to HTML carry authoritative day labels from
+    # the same /pastweek listing, so re-fetching them here is pure waste (and
+    # for a big category like cond-mat that is a large HTML round-trip).
     listing_labels: Dict[str, str] = {}
+    fell_back_set = set(fell_back)
     for name in feed_names:
+        if name in fell_back_set:
+            continue
         try:
             listing_labels.update(_fetch_listing_day_labels(name, verbose=verbose))
         except requests.RequestException as exc:
@@ -1606,7 +1780,12 @@ def main(argv: Sequence[str] | None = None) -> int:
             # The export API queries by category, so explicit URL feeds (only
             # usable on the HTML path) are excluded here.
             api_names = [n for n in feed_names if not n.startswith("http")]
-            papers = fetch_pastweek(api_names, start, end, verbose=args.verbose)
+            notices: List[str] = []
+            papers = fetch_pastweek(
+                api_names, start, end, verbose=args.verbose, notices=notices
+            )
+            for note in notices:
+                print(f"Warning: {note}", file=sys.stderr)
         else:
             papers = fetch_feeds(feed_urls, sections=args.sections, verbose=args.verbose)
     except requests.RequestException as exc:
