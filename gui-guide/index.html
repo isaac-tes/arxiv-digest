@@ -484,6 +484,45 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#caching" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Caching
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Caching">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#how-this-differs-from-the-previous-cache" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How this differs from the previous cache
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#clearing-the-cache" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Clearing the cache
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#tabs" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -864,6 +903,45 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#caching" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Caching
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Caching">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#how-this-differs-from-the-previous-cache" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How this differs from the previous cache
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#clearing-the-cache" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Clearing the cache
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#tabs" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1048,7 +1126,7 @@ you don't have to copy-paste the localhost URL. (The bundled
 from a script.)</p>
 <h2 id="the-daily-flow">The daily flow<a class="headerlink" href="#the-daily-flow" title="Permanent link">&para;</a></h2>
 <ol>
-<li><strong>Sidebar</strong>: pick <strong>Timeframe</strong> (<code>today</code> / <code>pastweek</code>), <strong>Top N</strong>, and which <strong>Feeds</strong> to fetch from. Click <strong>Fetch papers</strong>. Cached for 1 hour per <code>(timeframe, feeds)</code> combo; click <strong>Clear fetch cache</strong> to force a refresh.</li>
+<li><strong>Sidebar</strong>: pick <strong>Timeframe</strong> (<code>today</code> / <code>pastweek</code>), <strong>Top N</strong>, and which <strong>Feeds</strong> to fetch from. Click <strong>Fetch papers</strong>. Results are cached per <code>(timeframe, feeds)</code> and reused automatically — even across app restarts — until the next UTC day (see <a href="#caching">Caching</a>); click <strong>Clear fetch cache</strong> to force a fresh fetch.</li>
 <li><strong>Papers tab</strong>: papers appear ranked. Open <em>Why this score?</em> to see exactly which keywords / authors / subjects contributed. Open <em>Full abstract</em> without leaving the page.</li>
 <li><strong>Tweak preferences</strong> in the <strong>Keywords</strong>, <strong>Authors</strong>, <strong>Low priority</strong>, <strong>Scoring</strong> tabs. The Papers tab re-ranks live on the cached fetch, with no re-fetch needed.</li>
 <li><strong>Download</strong> the current ranked list as Markdown or JSON. The Markdown is <code>--output-markdown</code>'s format; the JSON holds the same ranked <code>entries</code> as <code>--output-json</code> (it omits the CLI-only <code>feed_urls</code>/<code>sections</code> header fields).</li>
@@ -1072,6 +1150,63 @@ from a script.)</p>
 </ul>
 <p>Both filters are applied at display time, so toggling them re-ranks instantly
 with <strong>no re-fetch</strong>.</p>
+<h2 id="caching">Caching<a class="headerlink" href="#caching" title="Permanent link">&para;</a></h2>
+<p>Fetching from arXiv is the slow, rate-limited step (the <code>pastweek</code> export API
+will temporarily <strong>block your IP</strong> if hit too often — see
+<a href="../troubleshooting/#arxiv-is-rate-limiting-or-blocking-you">Troubleshooting</a>).
+To avoid needless refetches the GUI caches results in <strong>two layers</strong>, both keyed
+on the <code>(timeframe, feeds)</code> you selected:</p>
+<table>
+<thead>
+<tr>
+<th>Layer</th>
+<th>Where</th>
+<th>Survives restart?</th>
+<th>Expires</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>In-memory (<code>st.cache_data</code>)</td>
+<td>RAM, current app process</td>
+<td>No</td>
+<td>1 hour, or on <strong>Clear fetch cache</strong></td>
+</tr>
+<tr>
+<td>Persistent (disk)</td>
+<td><code>~/.arxiv_scraper/cache/*.json</code></td>
+<td><strong>Yes</strong></td>
+<td>Next <strong>UTC day</strong>, or on <strong>Clear fetch cache</strong></td>
+</tr>
+</tbody>
+</table>
+<p>On a fetch the GUI checks the in-memory layer, then the disk layer, and only
+hits arXiv on a miss. Because arXiv announces once per day, the disk key
+includes the <strong>UTC date</strong>: re-selecting the same feeds later the same day (or
+after restarting the app) is served instantly from disk with <strong>no network
+call</strong>, so a routine re-open never re-triggers the rate limiter. A new UTC day
+misses naturally and refetches the fresh announcements.</p>
+<p>The disk cache is intentionally small: results are stored as JSON on disk (not
+held in memory), files older than <strong>3 days</strong> are pruned on each save, and an
+empty/failed fetch is <strong>never</strong> cached (so a fetch that got rate-limited retries
+next time instead of pinning zero papers for the day).</p>
+<h3 id="how-this-differs-from-the-previous-cache">How this differs from the previous cache<a class="headerlink" href="#how-this-differs-from-the-previous-cache" title="Permanent link">&para;</a></h3>
+<p>Before, the GUI had <strong>only</strong> the in-memory <code>st.cache_data</code> layer: it was lost
+whenever the Streamlit process restarted and expired after one hour, so a
+restart (or an hour later) forced a full refetch — exactly the burst that trips
+arXiv's rate limiter. The <strong>persistent disk layer is new</strong>: it makes the cache
+survive restarts, key on the UTC day instead of a rolling hour, and prune
+itself. The in-memory layer is unchanged and still sits on top for zero-latency
+re-ranking within a session.</p>
+<h3 id="clearing-the-cache">Clearing the cache<a class="headerlink" href="#clearing-the-cache" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>GUI:</strong> click <strong>Clear fetch cache</strong> in the sidebar. This now clears <strong>both</strong>
+  layers (in-memory <em>and</em> the disk files), then the next <strong>Fetch papers</strong> does a
+  fresh fetch.</li>
+<li><strong>Manually / scripts:</strong> delete the disk cache directory, e.g.
+  <code>rm -rf ~/.arxiv_scraper/cache</code>, or from Python call
+  <code>arxiv_digest.clear_fetch_cache()</code>.</li>
+</ul>
 <h2 id="tabs">Tabs<a class="headerlink" href="#tabs" title="Permanent link">&para;</a></h2>
 <p>The GUI has eight tabs across the top, in this order: <strong>Papers</strong>, <strong>Score a
 paper</strong>, <strong>Keywords</strong>, <strong>Authors</strong>, <strong>Low priority</strong>, <strong>Feeds</strong>, <strong>Scoring</strong>,
@@ -1248,7 +1383,7 @@ edits first, otherwise they won't be included.</p>
     <span class="md-icon" title="Last update">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M21 13.1c-.1 0-.3.1-.4.2l-1 1 2.1 2.1 1-1c.2-.2.2-.6 0-.8l-1.3-1.3c-.1-.1-.2-.2-.4-.2m-1.9 1.8-6.1 6V23h2.1l6.1-6.1zM12.5 7v5.2l4 2.4-1 1L11 13V7zM11 21.9c-5.1-.5-9-4.8-9-9.9C2 6.5 6.5 2 12 2c5.3 0 9.6 4.1 10 9.3-.3-.1-.6-.2-1-.2s-.7.1-1 .2C19.6 7.2 16.2 4 12 4c-4.4 0-8 3.6-8 8 0 4.1 3.1 7.5 7.1 7.9l-.1.2z"/></svg>
     </span>
-    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="September 11, 2026 16:53:54 UTC"><span class="timeago" datetime="2026-09-11T16:53:54+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="September 11, 2026 16:53:54 UTC">2026-09-11</span>
+    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="September 15, 2026 12:19:34 UTC"><span class="timeago" datetime="2026-09-15T12:19:34+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="September 15, 2026 12:19:34 UTC">2026-09-15</span>
   </span>
 
     
