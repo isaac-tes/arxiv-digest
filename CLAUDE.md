@@ -98,9 +98,20 @@ GUI display: `arxiv_gui.py` hover-highlights authors (in the author list), and m
 
 Tests live in `tests/`; run with `uv run pytest` (217 tests). `requests.get` is monkey-patched, so no network calls hit arXiv during the suite. GUI tests use `streamlit.testing.v1.AppTest` (headless).
 
+## Contributing & git conventions
+
+**`CONTRIBUTING.md` (repo root) is the source of truth for workflow, commits, and releases — read it before committing or cutting a release.** Key rules I must follow:
+
+- **Conventional Commits are mandatory.** Every commit subject starts with a type prefix (`fix:`, `feat:`, `docs:`, `chore:`, `ci:`, `refactor:`, `test:`, `perf:`, `style:`, `build:`, `release:`), imperative mood, ≤~72 chars, no trailing period, capital only where a proper noun needs it. Bodies use trailers (`BREAKING CHANGE:`, `Closes #N`, `Co-authored-by:`) when relevant. The prefix drives auto-generated release-notes grouping — do not skip it.
+- **Branch naming:** `<kind>/<short-summary>` off `main`, e.g. `fix/pastweek-timeout` (not `fix_timeout`).
+- **Tests + CHANGELOG are part of every change:** add/update tests under `tests/` (suite stays green and network-free), and add curated notes to `CHANGELOG.md` (see below).
+- This repo uses **worktrunk (`wt`)**: each branch is its own worktree and `main` is checked out in a separate worktree, so `git checkout main` here fails. Land a branch with `wt merge <target>` (squash+rebase+ff+remove); it updates local `main` but does **not** push — the release only fires after `git push origin main`.
+
 ## Public-release state
 
 - The GitHub repository is public. The remote release surface is `main` plus version tags; WIP branches remain local unless explicitly approved for publication.
 - Beads' Dolt data is intentionally local-only. Do not restore `refs/dolt/data` on the public remote without an explicit privacy review.
-- Release automation expects a version bump in `pyproject.toml`, a matching `uv.lock`, and curated notes under `## [Unreleased]` in `CHANGELOG.md`. A push to `main` then creates `v<version>` and publishes the GitHub Release.
+- Release automation expects a version bump in `pyproject.toml`, a matching `uv.lock`, and curated `CHANGELOG.md` notes. A push to `main` creates `v<version>` (`.github/workflows/tag-on-version-bump.yml`) and publishes the GitHub Release (`.github/workflows/release.yml`).
+- **CHANGELOG.md curated notes are required and read by the release workflow**, which extracts `section(version) or section("Unreleased")` — i.e. it prefers `## [X.Y.Z] - <date>`, falling back to `## [Unreleased]`. On a version bump, rename `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD` (matches existing entries). These curated notes are **prepended** to GitHub's `--generate-notes` commit/PR list; without them the release has only the raw commit list.
+- **`docs/changelog.md` is a hand-written stub** (links to the root CHANGELOG, shows a "Latest" line) — it is NOT synced from `CHANGELOG.md`, so the root changelog is not rendered on the MkDocs site. Update the stub's "Latest" line by hand if it matters for a release.
 - `README.md` is the source for the MkDocs landing page. Run `uv run python scripts/generate_readme.py` after README edits, then `uv run mkdocs build --strict`.
