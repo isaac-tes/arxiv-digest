@@ -262,3 +262,76 @@ def test_fetch_feed_api_backs_off_exponentially_without_retry_after(monkeypatch)
     ad.fetch_feed_api("quant-ph", datetime(2026, 8, 14), datetime(2026, 8, 20))
     # attempt 0 -> 1s, attempt 1 -> 2s (exponential), then success on attempt 2.
     assert sleeps == [ad._ARXIV_RATE_LIMIT_SECONDS * 1, ad._ARXIV_RATE_LIMIT_SECONDS * 2]
+
+
+def test_api_backoff_is_capped_and_skips_final_sleep(monkeypatch):
+    """A sustained 429 must not sleep 3+6+12+24+48+96s; backoff is capped and
+    the useless sleep before giving up is skipped (regression: 765s grind)."""
+    sleeps: list[float] = []
+    monkeypatch.setattr(ad.requests, "get", lambda *a, **k: _MockResponse(status_code=429))
+    monkeypatch.setattr(ad.time, "sleep", lambda s: sleeps.append(s))
+    with pytest.raises(Exception):
+        ad.fetch_feed_api("quant-ph", datetime(2026, 8, 14), datetime(2026, 8, 20))
+    # One fewer sleep than attempts (no sleep before giving up).
+    assert len(sleeps) == ad._MAX_API_RETRIES
+    # Every wait is capped, so the tail never balloons.
+    assert all(s <= ad._MAX_BACKOFF_SECONDS for s in sleeps)
+
+
+def test_api_retry_respects_wall_clock_budget(monkeypatch):
+    """A slow-responding blocked API (429 after a long delay) must still fail
+    over within the time budget instead of running the full retry count."""
+    start = 1000.0
+    fake = {"t": start}
+    requests_made = {"n": 0}
+
+    def _slow_get(*a, **k):
+        requests_made["n"] += 1
+        fake["t"] += 16.0  # each 429 response takes ~16s to arrive
+        return _MockResponse(status_code=429)
+
+    monkeypatch.setattr(ad.requests, "get", _slow_get)
+    monkeypatch.setattr(ad.time, "monotonic", lambda: fake["t"])
+    monkeypatch.setattr(ad.time, "sleep", lambda s: fake.__setitem__("t", fake["t"] + s))
+
+    with pytest.raises(Exception):
+        ad.fetch_feed_api("quant-ph", datetime(2026, 8, 14), datetime(2026, 8, 20))
+    # 16s + sleep 3 + 16s = 35s > 30s budget -> bails after 2 requests, not the
+    # full 4 (which would be 4*16 + sleeps).
+    assert requests_made["n"] < ad._MAX_API_RETRIES + 1
+    assert (fake["t"] - start) <= _MAX_RETRY_BUDGET_CEILING
+
+
+_MAX_RETRY_BUDGET_CEILING = 40.0  # budget (30s) + one in-flight slow response
+
+
+def test_fetch_pastweek_hits_api_once_when_blocked_then_uses_html(monkeypatch):
+    """When the API is down, only the first feed pays the retry cost; the rest
+    skip straight to the HTML fallback (regression: retry grind paid per feed)."""
+    api_calls = {"n": 0}
+    html_calls: list[str] = []
+
+    def _api_fail(*a, **k):
+        api_calls["n"] += 1
+        raise ad.requests.ConnectionError("blocked")
+
+    def _html(category, verbose=False):
+        html_calls.append(category)
+        return [{"id": f"id-{category}", "title": "t", "authors": "",
+                 "link": "", "subjects": category, "abstract": "",
+                 "section": "Fri, 12 Sep 2026"}]
+
+    monkeypatch.setattr(ad, "fetch_feed_api", _api_fail)
+    monkeypatch.setattr(ad, "_fetch_pastweek_html", _html)
+    monkeypatch.setattr(ad.time, "sleep", lambda s: None)
+
+    feeds = ["cond-mat.quant-gas", "cond-mat.mes-hall", "quant-ph", "cond-mat"]
+    notices: list[str] = []
+    papers = ad.fetch_pastweek(
+        feeds, datetime(2026, 9, 5), datetime(2026, 9, 12), notices=notices
+    )
+
+    assert api_calls["n"] == 1              # API tried once, not once per feed
+    assert html_calls == feeds             # every feed served from HTML
+    assert len(papers) == len(feeds)
+    assert notices and "HTML" in notices[0]
