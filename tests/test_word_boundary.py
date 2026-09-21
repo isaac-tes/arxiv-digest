@@ -62,6 +62,41 @@ def test_author_true_positive_whole_token(make_paper):
     assert score_paper(p, cfg) == cfg.weights.named_author
 
 
+def test_author_middle_initial_matches_full_name(make_paper):
+    """'Hannah Price' must match the same person listed as 'Hannah M. Price'
+    (arxiv_scraper_cli-fix_name_not_firing)."""
+    cfg = Config(core_keywords=[], named_authors=["Hannah Price"], low_priority_kw=[], feed_weights={})
+    p = make_paper(authors="Hannah M. Price, Alice Smith")
+    assert score_paper(p, cfg) == cfg.weights.named_author
+    assert explain_score(p, cfg)["authors"] == [("Hannah Price", cfg.weights.named_author)]
+
+
+def test_author_middle_name_matches_full_name(make_paper):
+    cfg = Config(core_keywords=[], named_authors=["Hannah Price"], low_priority_kw=[], feed_weights={})
+    p = make_paper(authors="Hannah Rose Price")
+    assert score_paper(p, cfg) == cfg.weights.named_author
+
+
+def test_author_full_name_reverse_initial(make_paper):
+    """Config carrying the middle initial still matches the bare-name listing."""
+    cfg = Config(core_keywords=[], named_authors=["Hannah M. Price"], low_priority_kw=[], feed_weights={})
+    p = make_paper(authors="Hannah Price")
+    assert score_paper(p, cfg) == cfg.weights.named_author
+
+
+def test_author_multi_token_no_cross_author_match(make_paper):
+    """A two-token name must match within ONE author, not across the list."""
+    cfg = Config(core_keywords=[], named_authors=["Hannah Price"], low_priority_kw=[], feed_weights={})
+    p = make_paper(authors="Bob Hannah, Charlie Price")
+    assert score_paper(p, cfg) == 0
+
+
+def test_author_single_token_still_no_substring_bleed(make_paper):
+    cfg = Config(core_keywords=[], named_authors=["ma", "bloch"], low_priority_kw=[], feed_weights={})
+    assert score_paper(make_paper(authors="Yun Mao, Anna Blochwitz"), cfg) == 0
+    assert score_paper(make_paper(authors="H. Ma, Immanuel Bloch"), cfg) == 2 * cfg.weights.named_author
+
+
 # --- scoring: low priority --------------------------------------------------
 
 def test_low_priority_whole_word_only(make_paper):

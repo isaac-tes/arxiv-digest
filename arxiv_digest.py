@@ -1335,6 +1335,38 @@ def term_matches(term: str, text: str, *, word_boundary: bool = True) -> bool:
     return bool(pat and pat.search(text))
 
 
+def _name_tokens(text: str) -> list[str]:
+    """Lowercased word tokens of a name, punctuation ('.', ',', '-') dropped."""
+    return [t for t in re.split(r"[^\w]+", text.lower()) if t]
+
+
+def author_matches(term: str, authors_txt: str, *, word_boundary: bool = True) -> bool:
+    """True if a named-author `term` names a person listed in `authors_txt`.
+
+    Single-token terms (surnames like 'bloch' or 'ma') keep the whole-token
+    word-boundary check, so 'ma' never matches 'Mao' nor 'bloch' 'Blochwitz'.
+    Multi-token terms (full names like 'Hannah Price') instead require the same
+    given name and same surname within ONE comma-separated author; middle
+    names/initials on either side are ignored, so 'Hannah Price' still matches
+    'Hannah M. Price' (and a config carrying the initial matches the bare name).
+    A name split across two authors ('Bob Hannah, Charlie Price') does not match.
+    """
+    term_tokens = _name_tokens(term)
+    if not term_tokens:
+        return False
+    if len(term_tokens) == 1:
+        return term_matches(term_tokens[0], authors_txt, word_boundary=word_boundary)
+    for author in authors_txt.split(","):
+        author_tokens = _name_tokens(author)
+        if (
+            len(author_tokens) >= 2
+            and author_tokens[0] == term_tokens[0]
+            and author_tokens[-1] == term_tokens[-1]
+        ):
+            return True
+    return False
+
+
 def explain_score(paper: dict, cfg: Config) -> dict:
     """Return a per-rule breakdown of how `score_paper` arrived at its total.
 
@@ -1366,7 +1398,7 @@ def explain_score(paper: dict, cfg: Config) -> dict:
 
     wb = cfg.word_boundary_matching
     matched_keywords = [kw for kw in cfg.core_keywords if term_matches(kw, txt, word_boundary=wb)]
-    matched_authors = [a for a in cfg.named_authors if term_matches(a, authors_txt, word_boundary=wb)]
+    matched_authors = [a for a in cfg.named_authors if author_matches(a, authors_txt, word_boundary=wb)]
     matched_low = [k for k in cfg.low_priority_kw if term_matches(k, txt, word_boundary=wb)]
 
     # Subject scoring is fully driven by per-feed bonuses: each feed whose name

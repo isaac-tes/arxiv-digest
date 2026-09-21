@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.2] - 2026-09-21
+
+### Fixed
+- **Full author names with middle initials now match.** A named author like
+  `Hannah Price` now scores and highlights a paper whose author list renders
+  the same person as `Hannah M. Price` (and vice versa: a config entry
+  carrying the initial matches the bare name). Multi-token names match on
+  given + surname within a single author, ignoring middle names/initials on
+  either side, while single-token surnames keep the whole-token word-boundary
+  check (so `ma` still never matches `Mao`).
+
 ## [0.6.1] - 2026-09-15
 
 ### Added

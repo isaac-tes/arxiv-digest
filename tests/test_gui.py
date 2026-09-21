@@ -745,6 +745,17 @@ def test_authors_html_word_boundary_no_substring_bleed():
     assert "hl-author" in hit
 
 
+def test_authors_html_highlights_middle_initial_variant():
+    import arxiv_gui
+
+    # highlight must stay in sync with the scorer: 'Hannah Price' fires on
+    # 'Hannah M. Price' (arxiv_scraper_cli-fix_name_not_firing)
+    out = arxiv_gui._authors_html("Hannah M. Price, Alice Smith", ["Hannah Price"], 6)
+    assert out.count("hl-author") == 1
+    assert "Hannah M. Price" in out
+    assert "Alice Smith" in out
+
+
 # --- starter presets in the Profiles tab (arxiv_scraper_cli-7f2) -------------
 
 def test_gui_starter_preset_selectbox_present():

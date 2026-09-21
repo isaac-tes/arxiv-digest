@@ -657,7 +657,7 @@ def _authors_html(
     out = []
     for a in parts:
         esc = html.escape(a)
-        if any(ad.term_matches(n, a, word_boundary=word_boundary) for n in named):
+        if any(ad.author_matches(n, a, word_boundary=word_boundary) for n in named):
             style = f"border-bottom-color:{color};"
             if font:
                 style += f"color:{color};"
