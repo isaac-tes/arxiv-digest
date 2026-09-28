@@ -90,6 +90,7 @@ _ARXIV_CATEGORIES = {
 # Full URL / bare ID / arXiv:xxxx forms.
 _ARXIV_URL_RE = re.compile(r"arxiv\.org/(?:abs|pdf)/([^?#]+?)(?:\.pdf)?(?:v\d+)?$", re.IGNORECASE)
 _ARXIV_PREFIX_RE = re.compile(r"^\s*arxiv\s*:\s*", re.IGNORECASE)
+_ARXIV_VERSION_RE = re.compile(r"v\d+$", re.IGNORECASE)
 
 
 def arxiv_id_from_input(raw: str) -> str:
@@ -104,7 +105,7 @@ def arxiv_id_from_input(raw: str) -> str:
     if m:
         return m.group(1).strip()
     # Bare id or arXiv:xxxx — strip any version suffix and the prefix.
-    return _ARXIV_PREFIX_RE.sub("", text).strip()
+    return _ARXIV_VERSION_RE.sub("", _ARXIV_PREFIX_RE.sub("", text).strip())
 
 
 def zotero_available(timeout: float = 1.0) -> bool:

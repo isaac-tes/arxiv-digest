@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+- **Score a paper matches a bare arXiv ID with a version.** Pasting `2607.21663v2` kept the `v2`, so a paper that was in the digest was reported as never fetched. The version is now stripped, as it already was for pasted URLs.
+
 ## [0.6.2] - 2026-09-21
 
 ### Fixed
