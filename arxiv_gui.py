@@ -24,6 +24,8 @@ import arxiv_digest as ad
 import zotero_bridge as zb
 
 PROFILES_DIR = Path.home() / ".arxiv_scraper" / "profiles"
+REMOVED_PAPERS_PATH = Path.home() / ".arxiv_scraper" / "removed_papers.json"
+REMOVED_DIR = Path.home() / ".arxiv_scraper" / "removed"
 PROJECT_CONFIG = ad.DEFAULT_CONFIG_PATH
 
 
@@ -47,6 +49,36 @@ def load_profile(name: str) -> ad.Config:
 
 def delete_profile(name: str) -> None:
     (PROFILES_DIR / f"{name}.json").unlink(missing_ok=True)
+    removed_papers_path(name).unlink(missing_ok=True)
+
+
+# ────────────────────────── Removed papers ──────────────────────────
+
+def removed_papers_path(profile: str | None) -> Path:
+    """Each profile has its own removal list; with no profile loaded, a shared one."""
+    return REMOVED_DIR / f"{profile}.json" if profile else REMOVED_PAPERS_PATH
+
+
+def load_removed_ids(profile: str | None) -> set[str]:
+    """IDs of papers the user removed from the digest under `profile`.
+
+    Kept on disk so a removal survives page reloads, app restarts, and later
+    fetches (a paper removed from a daily ranking stays out of the weekly one).
+    A missing or unreadable file means nothing has been removed.
+    """
+    try:
+        return set(json.loads(removed_papers_path(profile).read_text()))
+    except (OSError, ValueError, TypeError):
+        return set()
+
+
+def save_removed_ids(profile: str | None, ids: set[str]) -> None:
+    # Write-then-rename so an interrupted save never truncates the only copy.
+    path = removed_papers_path(profile)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(json.dumps(sorted(ids), indent=2))
+    tmp.replace(path)
 
 
 # ────────────────────────── Zotero bridge ──────────────────────────
@@ -292,6 +324,8 @@ def init_state():
         st.session_state.papers = []
     if "last_fetch" not in st.session_state:
         st.session_state.last_fetch = None
+    if "loaded_profile" not in st.session_state:
+        st.session_state.loaded_profile = None
     if "zotero_saved_at" not in st.session_state:
         st.session_state.zotero_saved_at = {}
     if "zotero_saving" not in st.session_state:
@@ -300,6 +334,11 @@ def init_state():
 
 def cfg() -> ad.Config:
     return st.session_state.cfg
+
+
+def loaded_profile() -> str | None:
+    """Name of the profile cfg() was last loaded from or saved to, if any."""
+    return st.session_state.get("loaded_profile")
 
 
 # Keyed widgets cache their value in st.session_state[key] and IGNORE the
@@ -355,9 +394,13 @@ def render_sidebar():
         )
         if active != "(unsaved)" and st.button("Load profile", width="stretch"):
             st.session_state.cfg = load_profile(active)
+            st.session_state.loaded_profile = active
             _reset_widget_state()
             st.success(f"Loaded {active}")
             st.rerun()
+        st.caption(
+            f"Loaded profile: **{loaded_profile()}**" if loaded_profile() else "No profile loaded."
+        )
 
         st.divider()
 
@@ -747,6 +790,50 @@ def _render_breakdown(breakdown: dict):
         )
 
 
+def _remove_paper(arxiv_id: str) -> None:
+    """Callback for a card's ✕ button: hide the paper from every later ranking.
+
+    Removed papers are dropped before ranking, so every paper below moves up one
+    place and the first one past the top-N cutoff takes the freed slot. Reads
+    the file fresh so removals made in another browser tab aren't overwritten.
+    """
+    save_removed_ids(loaded_profile(), load_removed_ids(loaded_profile()) | {arxiv_id})
+
+
+def _restore_papers(arxiv_ids: list[str]) -> None:
+    save_removed_ids(loaded_profile(), load_removed_ids(loaded_profile()) - set(arxiv_ids))
+
+
+def _render_removed_papers(removed: list[dict]) -> None:
+    """Expander listing removed papers that would otherwise be in the ranking shown."""
+    if not removed:
+        return
+    with st.expander(f"Removed papers ({len(removed)})"):
+        owner = f"profile **{loaded_profile()}**" if loaded_profile() else "no loaded profile"
+        st.caption(
+            "Only papers that would otherwise appear in this ranking are listed. "
+            f"The removal list belongs to {owner}; other profiles keep their own. "
+            "Removed papers stay hidden across reloads and later fetches "
+            f"(saved in `{removed_papers_path(loaded_profile())}`)."
+        )
+        for p in removed:
+            title_col, restore_col = st.columns([5, 1])
+            title_col.write(p.get("title", "") or "(Untitled)")
+            restore_col.button(
+                "Restore",
+                key=f"restore_{p['id']}",
+                on_click=_restore_papers,
+                args=([p["id"]],),
+                width="stretch",
+            )
+        st.button(
+            "Restore all",
+            key="restore_all",
+            on_click=_restore_papers,
+            args=([p["id"] for p in removed],),
+        )
+
+
 def render_papers_tab():
     fetched = st.session_state.papers
     if not fetched:
@@ -775,11 +862,29 @@ def render_papers_tab():
         days=selected_days,
     )
     hidden = len(fetched) - len(papers)
+    removed_ids = load_removed_ids(loaded_profile())
+    # Walk the full ranking, removed papers included: a removed paper met before
+    # the top N fills up would be showing had it not been removed, so only those
+    # are offered for restore (not, say, one removed from yesterday's digest).
+    ranked = ad.build_ranked_entries(papers, cfg(), top_n=len(papers))
+    entries: list[dict] = []
+    removed: list[dict] = []
+    for e in ranked:
+        if len(entries) == cfg().top_n:
+            break
+        if e["id"] in removed_ids:
+            removed.append(e)
+        else:
+            entries.append({**e, "rank": len(entries) + 1})
+    papers = [p for p in papers if p["id"] not in removed_ids]
+    _render_removed_papers(removed)
     if not papers:
-        st.warning("No papers left after filtering. Adjust the day or replacement filter.")
+        st.warning(
+            "No papers left after filtering. Adjust the day or replacement filter"
+            + (", or restore removed papers." if removed else ".")
+        )
         return
 
-    entries = ad.build_ranked_entries(papers, cfg(), top_n=cfg().top_n)
     paper_by_id = {p["id"]: p for p in papers}
 
     col_search, col_export_md, col_export_json = st.columns([3, 1, 1])
@@ -826,12 +931,14 @@ def render_papers_tab():
     )
     if hidden:
         caption += f" {hidden} hidden by replacement/day filters."
+    if removed:
+        caption += f" {len(removed)} removed by you."
     st.caption(caption)
     st.markdown(_PAPER_CSS, unsafe_allow_html=True)
 
     for e in filtered:
         with st.container(border=True):
-            head, score_col = st.columns([5, 1])
+            head, score_col, remove_col = st.columns([5, 1, 0.3])
 
             def _hl(t: str) -> str:
                 return _highlight_terms(
@@ -887,6 +994,14 @@ def render_papers_tab():
             with score_col:
                 st.metric("Score", e["score"])
                 _render_zotero_save_button(e["id"], e["title"])
+            with remove_col:
+                st.button(
+                    "✕",
+                    key=f"remove_{e['id']}",
+                    help="Remove from this and later rankings; the papers below move up one place.",
+                    on_click=_remove_paper,
+                    args=(e["id"],),
+                )
 
             with st.expander("Why this score?"):
                 full_paper = paper_by_id.get(e["id"], {})
@@ -1073,6 +1188,7 @@ def render_profiles_tab():
     pc_load, pc_add = st.columns(2)
     if pc_load.button("Load preset", key="preset_load", width="stretch"):
         st.session_state.cfg = ad.preset_config(preset_choice)
+        st.session_state.loaded_profile = None
         _reset_widget_state()
         st.success(f"Loaded preset '{preset_choice}' (replaced working config).")
         st.rerun()
@@ -1086,8 +1202,14 @@ def render_profiles_tab():
 
     name = st.text_input("Save current config as", placeholder="e.g. topology-mode")
     if st.button("Save", disabled=not name.strip()):
-        save_profile(cfg(), name.strip())
-        st.success(f"Saved profile '{name.strip()}'.")
+        target = name.strip()
+        save_profile(cfg(), target)
+        # The saved profile inherits what is hidden now, so nothing reappears.
+        carried = load_removed_ids(loaded_profile())
+        if carried:
+            save_removed_ids(target, load_removed_ids(target) | carried)
+        st.session_state.loaded_profile = target
+        st.success(f"Saved profile '{target}'.")
         st.rerun()
 
     profiles = list_profiles()
@@ -1098,6 +1220,7 @@ def render_profiles_tab():
             cols[0].write(p)
             if cols[1].button("Load", key=f"load_{p}"):
                 st.session_state.cfg = load_profile(p)
+                st.session_state.loaded_profile = p
                 _reset_widget_state()
                 st.success(f"Loaded {p}")
                 st.rerun()
@@ -1110,6 +1233,8 @@ def render_profiles_tab():
             )
             if cols[3].button("Delete", key=f"del_{p}"):
                 delete_profile(p)
+                if loaded_profile() == p:
+                    st.session_state.loaded_profile = None
                 st.rerun()
 
     st.divider()
@@ -1124,6 +1249,7 @@ def render_profiles_tab():
         try:
             raw = json.load(uploaded)
             st.session_state.cfg = ad.Config.from_json(raw)
+            st.session_state.loaded_profile = None
             _reset_widget_state()
             st.success("Profile imported into current session.")
             st.rerun()
@@ -1285,8 +1411,16 @@ def render_score_tab():
         if fetched:
             st.divider()
             st.markdown("**Why it did / didn't appear in the digest**")
-            if paper_id in {p.get("id") for p in fetched}:
-                entries = ad.build_ranked_entries(fetched, cfg(), top_n=cfg().top_n)
+            fetched_ids = {p.get("id") for p in fetched}
+            removed_ids = load_removed_ids(loaded_profile())
+            if paper_id in fetched_ids and paper_id in removed_ids:
+                st.info(
+                    "You **removed** this paper from the digest, so it is not ranked. "
+                    "Restore it from *Removed papers* in the **Papers** tab."
+                )
+            elif paper_id in fetched_ids:
+                kept = [p for p in fetched if p.get("id") not in removed_ids]
+                entries = ad.build_ranked_entries(kept, cfg(), top_n=cfg().top_n)
                 rank = next(
                     (e["rank"] for e in entries if e["id"] == paper_id), None
                 )

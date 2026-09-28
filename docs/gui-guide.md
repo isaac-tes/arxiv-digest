@@ -97,14 +97,14 @@ paper**, **Keywords**, **Authors**, **Low priority**, **Feeds**, **Scoring**,
 **Profiles** (plus the sidebar with Timeframe / Top N / Feeds / fetch controls
 and the Display + Zotero status sections).
 
-- **Papers**: ranked list, search box (filters by title / authors / abstract), MD + JSON download buttons. Per paper: rank, title, authors, subjects, section, summary, arXiv link, score badge, a **Save to Zotero** button, expandable score breakdown, expandable full abstract.
+- **Papers**: ranked list, search box (filters by title / authors / abstract), MD + JSON download buttons. Per paper: rank, title, authors, subjects, section, summary, arXiv link, score badge, a **Save to Zotero** button, a **✕** button to remove it from the list (the papers below move up and the next one fills the top N; removals are remembered per profile across reloads and later fetches, and can be restored from *Removed papers*), expandable score breakdown, expandable full abstract.
 - **Score a paper**: paste an arXiv link or ID to see how it would score under your current config, why it did (or didn't) appear in the digest, and save it to Zotero.
 - **Keywords**: spreadsheet-style editor for `core_keywords`. Each match adds the *Per-keyword bonus* (default +6).
 - **Authors**: same pattern for `named_authors`. Default +6 per match. Whole-word match by default (configurable in Scoring, like keywords).
 - **Low priority**: penalty list. If *any* term matches, the paper takes the *Low-priority penalty* (default −5), once, not per hit.
 - **Feeds**: `name → URL` editor. Add custom arXiv lists (e.g. `hep-th=https://arxiv.org/list/hep-th/new`). The `/new` / `/pastweek` suffix is rewritten by the timeframe selector.
 - **Scoring**: a **Whole-word matching** toggle (default on; untick for legacy substring matching), then number inputs for each weight: per-keyword bonus, per-author bonus, per-feed subject bonuses, low-priority penalty, long-abstract bonus, abstract-length threshold. **Per-feed bonuses**: every extra feed you add in the Feeds tab gets its own bonus field here (raise or lower how much a paper from that feed scores). Set to 0 to disable.
-- **Profiles**: save / load / export / import named configs. Files live in `~/.arxiv_scraper/profiles/<name>.json` and persist across project clones. **Write project config** dumps the current config to `arxiv_config.json` in the project root, which is what the CLI picks up on the next run. Use this to push GUI tweaks into your daily CLI digest.
+- **Profiles**: save / load / export / import named configs. Each profile keeps its own list of removed papers (under `~/.arxiv_scraper/removed/`). Files live in `~/.arxiv_scraper/profiles/<name>.json` and persist across project clones. **Write project config** dumps the current config to `arxiv_config.json` in the project root, which is what the CLI picks up on the next run. Use this to push GUI tweaks into your daily CLI digest.
 
 ## Highlighting
 

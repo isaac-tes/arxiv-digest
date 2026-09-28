@@ -371,14 +371,14 @@ def test_absence_reason_fetched_but_below_topn():
     assert "top-5" in out
 
 
-def _atom_entry(published: str, cats: list[str]) -> "object":
+def _atom_entry(published: str, cats: list[str], arxiv_id: str = "2608.16520") -> "object":
     import xml.etree.ElementTree as ET
 
     cats_xml = "".join(f'<category term="{c}"/>' for c in cats)
     atom = f"""<?xml version="1.0"?>
     <feed xmlns="http://www.w3.org/2005/Atom">
       <entry>
-        <id>http://arxiv.org/abs/2608.16520</id>
+        <id>http://arxiv.org/abs/{arxiv_id}v1</id>
         <published>{published}</published>
         <title>Test</title>
         <summary>Abstract</summary>
@@ -562,6 +562,264 @@ def test_gui_renders_after_loading_synthetic_papers(monkeypatch):
         }
     ]
     at.run(timeout=15)
+    assert not list(at.exception)
+
+
+def _card_paper(pid, title, section="New submissions (showing 3 of 3 entries)"):
+    return {"id": pid, "title": title, "authors": "A", "subjects": "physics.optics",
+            "abstract": "x" * 50, "link": "", "section": section}
+
+
+def _tmp_home(monkeypatch, tmp_path):
+    """Point REMOVED_PAPERS_PATH at tmp_path (AppTest re-runs the module top level)."""
+    from pathlib import Path
+
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    return tmp_path / ".arxiv_scraper" / "removed_papers.json"
+
+
+def _ranked_titles(at):
+    import re
+
+    blob = " ".join(m.value for m in at.markdown)
+    return re.findall(r'class="paper-title">(.*?)</div>', blob)
+
+
+def test_remove_paper_reranks_and_promotes_next_paper(monkeypatch, tmp_path):
+    """✕ on a card drops it, shifts the rest up, and pulls paper N+1 into the top N."""
+    from streamlit.testing.v1 import AppTest
+    import arxiv_digest as ad
+
+    _tmp_home(monkeypatch, tmp_path)
+    at = AppTest.from_file("arxiv_gui.py")
+    cfg = ad.Config.load(None)
+    cfg.top_n = 2
+    at.session_state["cfg"] = cfg
+    # Identical scores, so ranking falls back to the alphabetical title tiebreak.
+    at.session_state["papers"] = [
+        _card_paper("p3", "Paper C"), _card_paper("p1", "Paper A"), _card_paper("p2", "Paper B"),
+    ]
+    at.run(timeout=15)
+    assert _ranked_titles(at) == ["1. Paper A", "2. Paper B"]
+
+    at.button(key="remove_p1").click().run(timeout=15)
+    assert not list(at.exception)
+    assert _ranked_titles(at) == ["1. Paper B", "2. Paper C"]
+    assert any("1 removed by you" in c.value for c in at.caption)
+
+    at.button(key="restore_p1").click().run(timeout=15)
+    assert _ranked_titles(at) == ["1. Paper A", "2. Paper B"]
+
+
+def test_removing_every_paper_keeps_restore_available(monkeypatch, tmp_path):
+    from streamlit.testing.v1 import AppTest
+
+    _tmp_home(monkeypatch, tmp_path)
+    at = AppTest.from_file("arxiv_gui.py")
+    at.session_state["papers"] = [_card_paper("p1", "Paper A")]
+    at.run(timeout=15)
+    at.button(key="remove_p1").click().run(timeout=15)
+    assert not list(at.exception)
+    assert _ranked_titles(at) == []
+    assert any("restore removed papers" in w.value for w in at.warning)
+
+    at.button(key="restore_all").click().run(timeout=15)
+    assert _ranked_titles(at) == ["1. Paper A"]
+
+
+def _removed_expanders(at):
+    return [x.label for x in at.expander if x.label.startswith("Removed papers")]
+
+
+def test_removed_list_only_offers_papers_that_would_be_ranked(monkeypatch, tmp_path):
+    """A removed paper that would rank below the visible top N isn't listed."""
+    import json
+
+    from streamlit.testing.v1 import AppTest
+    import arxiv_digest as ad
+
+    removed_file = _tmp_home(monkeypatch, tmp_path)
+    removed_file.parent.mkdir(parents=True)
+    removed_file.write_text(json.dumps(["p1", "p4"]))
+    at = AppTest.from_file("arxiv_gui.py")
+    cfg = ad.Config.load(None)
+    cfg.top_n = 2
+    at.session_state["cfg"] = cfg
+    at.session_state["papers"] = [_card_paper(f"p{i}", f"Paper {c}") for i, c in enumerate("ABCD", 1)]
+    at.run(timeout=15)
+
+    assert _ranked_titles(at) == ["1. Paper B", "2. Paper C"]
+    assert _removed_expanders(at) == ["Removed papers (1)"]
+    keys = {b.key for b in at.button}
+    assert "restore_p1" in keys and "restore_p4" not in keys
+    assert not list(at.exception)
+
+
+def test_yesterdays_removal_resurfaces_only_as_a_ranked_replacement(monkeypatch, tmp_path):
+    """In today's digest a paper removed yesterday is listed only if it came back
+    as a replacement (and replacements are shown) that would make the top N."""
+    import json
+
+    from streamlit.testing.v1 import AppTest
+    import arxiv_digest as ad
+
+    removed_file = _tmp_home(monkeypatch, tmp_path)
+    removed_file.parent.mkdir(parents=True)
+    removed_file.write_text(json.dumps(["2609.00009"]))
+    at = AppTest.from_file("arxiv_gui.py")
+    cfg = ad.Config.load(None)
+    cfg.top_n = 2
+    at.session_state["cfg"] = cfg
+    at.session_state["papers"] = [
+        _card_paper("2609.00001", "Paper B"),
+        _card_paper("2609.00002", "Paper C"),
+        _card_paper("2609.00009", "Paper A", "Replacement submissions (showing 1 of 1 entries)"),
+    ]
+    at.run(timeout=15)
+    assert _ranked_titles(at) == ["1. Paper B", "2. Paper C"]
+    assert _removed_expanders(at) == []
+
+    next(c for c in at.checkbox if c.label == "Include replacement submissions").set_value(True)
+    at.run(timeout=15)
+    assert _ranked_titles(at) == ["1. Paper B", "2. Paper C"]
+    assert _removed_expanders(at) == ["Removed papers (1)"]
+    assert not list(at.exception)
+
+
+def test_removal_persists_into_a_new_session_and_weekly_fetch(monkeypatch, tmp_path):
+    """A paper removed from the daily ranking stays out after a reload, including
+    in a pastweek fetch where the same paper sits under a day-label section."""
+    import json
+
+    from streamlit.testing.v1 import AppTest
+
+    removed_file = _tmp_home(monkeypatch, tmp_path)
+    daily = AppTest.from_file("arxiv_gui.py")
+    daily.session_state["papers"] = [_card_paper("2609.00001", "Paper A")]
+    daily.run(timeout=15)
+    daily.button(key="remove_2609.00001").click().run(timeout=15)
+    assert json.loads(removed_file.read_text()) == ["2609.00001"]
+
+    day = "Mon, 28 Sep 2026 (showing 2 of 2 entries )"
+    weekly = AppTest.from_file("arxiv_gui.py")
+    weekly.session_state["papers"] = [
+        _card_paper("2609.00001", "Paper A", day), _card_paper("2609.00002", "Paper B", day),
+    ]
+    weekly.run(timeout=15)
+    assert not list(weekly.exception)
+    assert _ranked_titles(weekly) == ["1. Paper B"]
+
+
+def test_load_removed_ids_tolerates_missing_or_corrupt_file(monkeypatch, tmp_path):
+    import arxiv_gui
+
+    path = tmp_path / "removed_papers.json"
+    monkeypatch.setattr(arxiv_gui, "REMOVED_PAPERS_PATH", path)
+    monkeypatch.setattr(arxiv_gui, "REMOVED_DIR", tmp_path / "removed")
+    assert arxiv_gui.load_removed_ids(None) == set()
+    path.write_text("{not json")
+    assert arxiv_gui.load_removed_ids(None) == set()
+    arxiv_gui.save_removed_ids(None, {"b", "a"})
+    assert arxiv_gui.load_removed_ids(None) == {"a", "b"}
+    arxiv_gui.save_removed_ids("topo", {"c"})
+    assert (tmp_path / "removed" / "topo.json").exists()
+    assert arxiv_gui.load_removed_ids("topo") == {"c"}
+    assert arxiv_gui.load_removed_ids(None) == {"a", "b"}
+
+
+def _profiles_dir(tmp_path, *names):
+    import arxiv_digest as ad
+
+    d = tmp_path / ".arxiv_scraper" / "profiles"
+    d.mkdir(parents=True)
+    for n in names:
+        ad.Config().dump(d / f"{n}.json")
+
+
+def test_removals_are_kept_per_profile(monkeypatch, tmp_path):
+    import json
+
+    from streamlit.testing.v1 import AppTest
+
+    _tmp_home(monkeypatch, tmp_path)
+    _profiles_dir(tmp_path, "atoms", "topology")
+    at = AppTest.from_file("arxiv_gui.py")
+    at.session_state["papers"] = [_card_paper("p1", "Paper A"), _card_paper("p2", "Paper B")]
+    at.run(timeout=15)
+
+    def load(name):
+        at.sidebar.selectbox(key="active_profile").set_value(name).run(timeout=15)
+        _click_label(at, "Load profile")
+        at.run(timeout=15)
+
+    load("atoms")
+    assert any("Loaded profile: **atoms**" in c.value for c in at.sidebar.caption)
+    at.button(key="remove_p1").click().run(timeout=15)
+    assert _ranked_titles(at) == ["1. Paper B"]
+    atoms_file = tmp_path / ".arxiv_scraper" / "removed" / "atoms.json"
+    assert json.loads(atoms_file.read_text()) == ["p1"]
+
+    load("topology")
+    assert _ranked_titles(at) == ["1. Paper A", "2. Paper B"]
+    load("atoms")
+    assert _ranked_titles(at) == ["1. Paper B"]
+    assert not list(at.exception)
+
+
+def test_save_as_carries_removals_and_delete_drops_them(monkeypatch, tmp_path):
+    import json
+
+    from streamlit.testing.v1 import AppTest
+
+    _tmp_home(monkeypatch, tmp_path)
+    at = AppTest.from_file("arxiv_gui.py")
+    at.session_state["papers"] = [_card_paper("p1", "Paper A"), _card_paper("p2", "Paper B")]
+    at.run(timeout=15)
+    at.button(key="remove_p1").click().run(timeout=15)
+
+    name_box = next(t for t in at.text_input if t.label == "Save current config as")
+    name_box.set_value("fresh").run(timeout=15)
+    _click_label(at, "Save", keyless=True)
+    at.run(timeout=15)
+    fresh_file = tmp_path / ".arxiv_scraper" / "removed" / "fresh.json"
+    assert at.session_state["loaded_profile"] == "fresh"
+    assert json.loads(fresh_file.read_text()) == ["p1"]
+    assert _ranked_titles(at) == ["1. Paper B"]
+
+    at.button(key="del_fresh").click().run(timeout=15)
+    assert not fresh_file.exists()
+    assert at.session_state["loaded_profile"] is None
+    assert not list(at.exception)
+
+
+def test_score_tab_honors_removed_papers(monkeypatch, tmp_path):
+    """A removed paper is reported as removed, and ranks ignore removed papers."""
+    import json
+
+    import zotero_bridge as zb
+    from streamlit.testing.v1 import AppTest
+
+    removed_file = _tmp_home(monkeypatch, tmp_path)
+    removed_file.parent.mkdir(parents=True)
+    removed_file.write_text(json.dumps(["2608.00001"]))
+    monkeypatch.setattr(
+        zb, "fetch_arxiv_atom", lambda pid: _atom_entry("2026-09-28T00:00:00Z", ["quant-ph"], pid)
+    )
+    at = AppTest.from_file("arxiv_gui.py")
+    at.session_state["papers"] = [
+        _card_paper("2608.00001", "Paper A"), _card_paper("2608.00002", "Paper B"),
+    ]
+    at.run(timeout=15)
+
+    def score(raw):
+        next(t for t in at.text_input if t.label == "arXiv link or ID").set_value(raw).run(timeout=15)
+        _click_label(at, "Score this paper")
+        at.run(timeout=15)
+
+    score("2608.00002v2")  # bare id with a version still matches the digest
+    assert any("rank **#1**" in m.value for m in at.success)
+    score("https://arxiv.org/abs/2608.00001")
+    assert any("You **removed** this paper" in m.value for m in at.info)
     assert not list(at.exception)
 
 
