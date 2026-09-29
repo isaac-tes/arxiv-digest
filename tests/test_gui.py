@@ -757,6 +757,58 @@ def test_concurrent_removals_from_two_tabs_are_all_kept(monkeypatch, tmp_path):
     assert len(arxiv_gui.load_removed_ids("p")) == 198
 
 
+def test_unreadable_removal_list_is_never_overwritten(monkeypatch, tmp_path):
+    """A removal must not replace an existing list it can't read (truncated JSON,
+    wrong shape, I/O error) with just the new ID; the file is left untouched."""
+    import pytest
+
+    import arxiv_gui
+
+    monkeypatch.setattr(arxiv_gui, "REMOVED_DIR", tmp_path)
+    path = tmp_path / "p.json"
+    for broken in ('["a", "b", "c"', '{"a": 1}', '[1, 2]'):
+        path.write_text(broken)
+        with pytest.raises(ValueError):
+            arxiv_gui.update_removed_ids("p", add={"d"})
+        assert path.read_text() == broken
+        assert arxiv_gui.load_removed_ids("p") == set()  # display stays tolerant
+    assert [f.name for f in tmp_path.iterdir()] == ["p.json"]  # no temp files left
+
+
+def test_remove_with_unreadable_list_warns_and_keeps_file(monkeypatch, tmp_path):
+    from streamlit.testing.v1 import AppTest
+
+    removed_file = _tmp_home(monkeypatch, tmp_path)
+    removed_file.parent.mkdir(parents=True)
+    removed_file.write_text('["a", "b"')
+    at = AppTest.from_file("arxiv_gui.py")
+    at.session_state["papers"] = [_card_paper("p1", "Paper A")]
+    at.run(timeout=15)
+    at.button(key="remove_p1").click().run(timeout=15)
+    assert not list(at.exception)
+    assert removed_file.read_text() == '["a", "b"'
+    assert any("Nothing was changed" in t.value for t in at.toast)
+
+
+def test_delete_profile_takes_the_removal_lock(monkeypatch, tmp_path):
+    """Deleting waits for an in-flight update, so it can't be undone by one."""
+    import threading
+
+    import arxiv_gui
+
+    monkeypatch.setattr(arxiv_gui, "PROFILES_DIR", tmp_path / "profiles")
+    monkeypatch.setattr(arxiv_gui, "REMOVED_DIR", tmp_path / "removed")
+    arxiv_gui.update_removed_ids("p", add={"x"})
+    done = threading.Event()
+    with arxiv_gui._removed_ids_lock():
+        th = threading.Thread(target=lambda: (arxiv_gui.delete_profile("p"), done.set()))
+        th.start()
+        assert not done.wait(0.3)  # blocked while an update holds the lock
+    th.join(timeout=5)
+    assert done.is_set()
+    assert not (tmp_path / "removed" / "p.json").exists()
+
+
 def test_removed_ids_lock_survives_script_reruns():
     """Streamlit re-executes the script on each rerun; the lock must be the same
     object every time, which a plain module-level lock would not be."""

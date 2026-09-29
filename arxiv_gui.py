@@ -18,7 +18,7 @@ import time
 from dataclasses import asdict, fields
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Tuple
+from typing import Iterable, Tuple
 
 import pandas as pd
 import streamlit as st
@@ -52,7 +52,8 @@ def load_profile(name: str) -> ad.Config:
 
 def delete_profile(name: str) -> None:
     (PROFILES_DIR / f"{name}.json").unlink(missing_ok=True)
-    removed_papers_path(name).unlink(missing_ok=True)
+    with _removed_ids_lock():  # else an in-flight update could recreate the list
+        removed_papers_path(name).unlink(missing_ok=True)
 
 
 # ────────────────────────── Removed papers ──────────────────────────
@@ -73,17 +74,29 @@ def _removed_ids_lock() -> threading.RLock:
     return threading.RLock()
 
 
+def _read_removed_ids(profile: str | None) -> set[str]:
+    """Strict read: a missing file is an empty list, any other failure raises."""
+    try:
+        text = removed_papers_path(profile).read_text()
+    except FileNotFoundError:
+        return set()
+    ids = json.loads(text)
+    if not isinstance(ids, list) or not all(isinstance(i, str) for i in ids):
+        raise ValueError("expected a JSON list of arXiv IDs")
+    return set(ids)
+
+
 def load_removed_ids(profile: str | None) -> set[str]:
     """IDs of papers the user removed from the digest under `profile`.
 
     Kept on disk so a removal survives page reloads, app restarts, and later
     fetches (a paper removed from a daily ranking stays out of the weekly one).
-    A missing or unreadable file means nothing has been removed.
+    For display, an unreadable file means nothing has been removed.
     """
     with _removed_ids_lock():
         try:
-            return set(json.loads(removed_papers_path(profile).read_text()))
-        except (OSError, ValueError, TypeError):
+            return _read_removed_ids(profile)
+        except (OSError, ValueError):
             return set()
 
 
@@ -98,6 +111,8 @@ def save_removed_ids(profile: str | None, ids: set[str]) -> None:
         try:
             with os.fdopen(fd, "w") as fh:
                 fh.write(json.dumps(sorted(ids), indent=2))
+                fh.flush()
+                os.fsync(fh.fileno())  # data on disk before the rename, or a crash can leave it empty
             os.replace(tmp, path)
         except BaseException:
             Path(tmp).unlink(missing_ok=True)
@@ -105,12 +120,27 @@ def save_removed_ids(profile: str | None, ids: set[str]) -> None:
 
 
 def update_removed_ids(
-    profile: str | None, *, add: set[str] = frozenset(), discard: set[str] = frozenset()
+    profile: str | None, *, add: Iterable[str] = (), discard: Iterable[str] = ()
 ) -> None:
     """Add/discard IDs in `profile`'s list as one read-modify-write under the lock,
-    so removals made at the same moment in two browser tabs are both kept."""
+    so removals made at the same moment in two browser tabs are both kept.
+
+    Raises (leaving the file untouched) if the list exists but can't be read,
+    rather than overwriting every earlier removal with just this change.
+    """
     with _removed_ids_lock():
-        save_removed_ids(profile, (load_removed_ids(profile) | set(add)) - set(discard))
+        save_removed_ids(profile, _read_removed_ids(profile).union(add).difference(discard))
+
+
+def _update_removed_ids_or_warn(profile: str | None, **change: Iterable[str]) -> None:
+    try:
+        update_removed_ids(profile, **change)
+    except (OSError, ValueError) as exc:
+        st.toast(
+            f"Couldn't update `{removed_papers_path(profile)}` ({exc}). "
+            "Nothing was changed; fix or delete the file.",
+            icon="⚠️",
+        )
 
 
 # ────────────────────────── Zotero bridge ──────────────────────────
@@ -828,11 +858,11 @@ def _remove_paper(arxiv_id: str) -> None:
     Removed papers are dropped before ranking, so every paper below moves up one
     place and the first one past the top-N cutoff takes the freed slot.
     """
-    update_removed_ids(loaded_profile(), add={arxiv_id})
+    _update_removed_ids_or_warn(loaded_profile(), add={arxiv_id})
 
 
 def _restore_papers(arxiv_ids: list[str]) -> None:
-    update_removed_ids(loaded_profile(), discard=set(arxiv_ids))
+    _update_removed_ids_or_warn(loaded_profile(), discard=arxiv_ids)
 
 
 def _render_removed_papers(removed: list[dict]) -> None:
@@ -1238,7 +1268,7 @@ def render_profiles_tab():
         # The saved profile inherits what is hidden now, so nothing reappears.
         carried = load_removed_ids(loaded_profile())
         if carried:
-            update_removed_ids(target, add=carried)
+            _update_removed_ids_or_warn(target, add=carried)
         st.session_state.loaded_profile = target
         st.success(f"Saved profile '{target}'.")
         st.rerun()
