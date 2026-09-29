@@ -727,6 +727,48 @@ def test_load_removed_ids_tolerates_missing_or_corrupt_file(monkeypatch, tmp_pat
     assert arxiv_gui.load_removed_ids(None) == {"a", "b"}
 
 
+def test_concurrent_removals_from_two_tabs_are_all_kept(monkeypatch, tmp_path):
+    """Every browser tab is a thread of one server, so removal-list updates must
+    not overwrite each other or collide on a shared temp file."""
+    import threading
+
+    import arxiv_gui
+
+    monkeypatch.setattr(arxiv_gui, "REMOVED_DIR", tmp_path / "removed")
+    errors = []
+
+    def tab(t):
+        for i in range(25):
+            try:
+                arxiv_gui.update_removed_ids("p", add={f"{t}.{i}"})
+            except Exception as exc:  # noqa: BLE001 - collected and asserted below
+                errors.append(exc)
+
+    threads = [threading.Thread(target=tab, args=(t,)) for t in range(8)]
+    for th in threads:
+        th.start()
+    for th in threads:
+        th.join()
+    assert errors == []
+    assert len(arxiv_gui.load_removed_ids("p")) == 200
+    assert list((tmp_path / "removed").iterdir()) == [tmp_path / "removed" / "p.json"]
+
+    arxiv_gui.update_removed_ids("p", discard={"0.0", "7.24"})
+    assert len(arxiv_gui.load_removed_ids("p")) == 198
+
+
+def test_removed_ids_lock_survives_script_reruns():
+    """Streamlit re-executes the script on each rerun; the lock must be the same
+    object every time, which a plain module-level lock would not be."""
+    import runpy
+    from pathlib import Path
+
+    script = str(Path(__file__).resolve().parent.parent / "arxiv_gui.py")
+    first = runpy.run_path(script, run_name="__rerun__")
+    second = runpy.run_path(script, run_name="__rerun__")
+    assert first["_removed_ids_lock"]() is second["_removed_ids_lock"]()
+
+
 def _profiles_dir(tmp_path, *names):
     import arxiv_digest as ad
 

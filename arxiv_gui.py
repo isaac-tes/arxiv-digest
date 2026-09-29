@@ -10,7 +10,10 @@ from __future__ import annotations
 
 import html
 import json
+import os
 import re
+import tempfile
+import threading
 import time
 from dataclasses import asdict, fields
 from datetime import UTC, datetime, timedelta
@@ -59,6 +62,17 @@ def removed_papers_path(profile: str | None) -> Path:
     return REMOVED_DIR / f"{profile}.json" if profile else REMOVED_PAPERS_PATH
 
 
+@st.cache_resource
+def _removed_ids_lock() -> threading.RLock:
+    """One lock shared by every session of this server for the removal files.
+
+    Each browser tab is a session running in its own thread of the same
+    process. Streamlit re-executes this script on every rerun, so a plain
+    module-level lock would be a new object each time; cache_resource keeps one.
+    """
+    return threading.RLock()
+
+
 def load_removed_ids(profile: str | None) -> set[str]:
     """IDs of papers the user removed from the digest under `profile`.
 
@@ -66,19 +80,37 @@ def load_removed_ids(profile: str | None) -> set[str]:
     fetches (a paper removed from a daily ranking stays out of the weekly one).
     A missing or unreadable file means nothing has been removed.
     """
-    try:
-        return set(json.loads(removed_papers_path(profile).read_text()))
-    except (OSError, ValueError, TypeError):
-        return set()
+    with _removed_ids_lock():
+        try:
+            return set(json.loads(removed_papers_path(profile).read_text()))
+        except (OSError, ValueError, TypeError):
+            return set()
 
 
 def save_removed_ids(profile: str | None, ids: set[str]) -> None:
-    # Write-then-rename so an interrupted save never truncates the only copy.
+    # Write a uniquely named temp file, then rename it over the list: an
+    # interrupted save never truncates the only copy, and writers never share
+    # a temp file.
     path = removed_papers_path(profile)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(".tmp")
-    tmp.write_text(json.dumps(sorted(ids), indent=2))
-    tmp.replace(path)
+    with _removed_ids_lock():
+        path.parent.mkdir(parents=True, exist_ok=True)
+        fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=f".{path.stem}.", suffix=".tmp")
+        try:
+            with os.fdopen(fd, "w") as fh:
+                fh.write(json.dumps(sorted(ids), indent=2))
+            os.replace(tmp, path)
+        except BaseException:
+            Path(tmp).unlink(missing_ok=True)
+            raise
+
+
+def update_removed_ids(
+    profile: str | None, *, add: set[str] = frozenset(), discard: set[str] = frozenset()
+) -> None:
+    """Add/discard IDs in `profile`'s list as one read-modify-write under the lock,
+    so removals made at the same moment in two browser tabs are both kept."""
+    with _removed_ids_lock():
+        save_removed_ids(profile, (load_removed_ids(profile) | set(add)) - set(discard))
 
 
 # ────────────────────────── Zotero bridge ──────────────────────────
@@ -794,14 +826,13 @@ def _remove_paper(arxiv_id: str) -> None:
     """Callback for a card's ✕ button: hide the paper from every later ranking.
 
     Removed papers are dropped before ranking, so every paper below moves up one
-    place and the first one past the top-N cutoff takes the freed slot. Reads
-    the file fresh so removals made in another browser tab aren't overwritten.
+    place and the first one past the top-N cutoff takes the freed slot.
     """
-    save_removed_ids(loaded_profile(), load_removed_ids(loaded_profile()) | {arxiv_id})
+    update_removed_ids(loaded_profile(), add={arxiv_id})
 
 
 def _restore_papers(arxiv_ids: list[str]) -> None:
-    save_removed_ids(loaded_profile(), load_removed_ids(loaded_profile()) - set(arxiv_ids))
+    update_removed_ids(loaded_profile(), discard=set(arxiv_ids))
 
 
 def _render_removed_papers(removed: list[dict]) -> None:
@@ -1207,7 +1238,7 @@ def render_profiles_tab():
         # The saved profile inherits what is hidden now, so nothing reappears.
         carried = load_removed_ids(loaded_profile())
         if carried:
-            save_removed_ids(target, load_removed_ids(target) | carried)
+            update_removed_ids(target, add=carried)
         st.session_state.loaded_profile = target
         st.success(f"Saved profile '{target}'.")
         st.rerun()
