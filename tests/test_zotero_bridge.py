@@ -62,6 +62,7 @@ class _MockResponse:
         ("https://arxiv.org/abs/cond-mat/0603274", "cond-mat/0603274"),
         ("", ""),
         ("not an arxiv thing", "not an arxiv thing"),
+        ("not an arxiv thingv2", "not an arxiv thingv2"),
     ],
 )
 def test_arxiv_id_from_input(raw, expected):

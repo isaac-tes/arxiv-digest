@@ -90,7 +90,7 @@ _ARXIV_CATEGORIES = {
 # Full URL / bare ID / arXiv:xxxx forms.
 _ARXIV_URL_RE = re.compile(r"arxiv\.org/(?:abs|pdf)/([^?#]+?)(?:\.pdf)?(?:v\d+)?$", re.IGNORECASE)
 _ARXIV_PREFIX_RE = re.compile(r"^\s*arxiv\s*:\s*", re.IGNORECASE)
-_ARXIV_VERSION_RE = re.compile(r"v\d+$", re.IGNORECASE)
+_ARXIV_VERSION_RE = re.compile(r"(?<=\d)v\d+$", re.IGNORECASE)
 
 
 def arxiv_id_from_input(raw: str) -> str:
