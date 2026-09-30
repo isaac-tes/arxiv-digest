@@ -982,6 +982,33 @@ def test_save_as_carries_removals_and_delete_drops_them(monkeypatch, tmp_path):
     assert not list(at.exception)
 
 
+def test_save_as_stays_on_source_when_removal_transfer_fails(monkeypatch, tmp_path):
+    from streamlit.testing.v1 import AppTest
+
+    _tmp_home(monkeypatch, tmp_path)
+    _profiles_dir(tmp_path, "atoms")
+    papers = [_card_paper("p1", "Paper A"), _card_paper("p2", "Paper B")]
+    at = AppTest.from_file("arxiv_gui.py")
+    at.session_state["papers"] = papers
+    at.run(timeout=15)
+    at.sidebar.selectbox(key="active_profile").set_value("atoms").run(timeout=15)
+    _click_label(at, "Load profile")
+    at.run(timeout=15)
+    at.button(key="remove_p1").click().run(timeout=15)
+
+    destination_removals = tmp_path / ".arxiv_scraper" / "removed" / "topology.json"
+    destination_removals.mkdir()
+    name_box = next(t for t in at.text_input if t.label == "Save current config as")
+    name_box.set_value("topology").run(timeout=15)
+    _click_label(at, "Save", keyless=True)
+    at.run(timeout=15)
+
+    assert at.session_state["loaded_profile"] == "atoms"
+    assert _ranked_titles(at) == ["1. Paper B"]
+    assert not (tmp_path / ".arxiv_scraper" / "profiles" / "topology.json").exists()
+    assert not list(at.exception)
+
+
 def test_score_tab_honors_removed_papers(monkeypatch, tmp_path):
     """A removed paper is reported as removed, and ranks ignore removed papers."""
     import json

@@ -192,7 +192,7 @@ def update_removed_ids(
         save_removed_ids(profile, _read_removed_ids(profile).union(add).difference(discard))
 
 
-def _update_removed_ids_or_warn(profile: str | None, **change: Iterable[str]) -> None:
+def _update_removed_ids_or_warn(profile: str | None, **change: Iterable[str]) -> bool:
     try:
         update_removed_ids(profile, **change)
     except (OSError, ValueError) as exc:
@@ -201,6 +201,8 @@ def _update_removed_ids_or_warn(profile: str | None, **change: Iterable[str]) ->
             "Nothing was changed; fix or delete the file.",
             icon="⚠️",
         )
+        return False
+    return True
 
 
 # ────────────────────────── Zotero bridge ──────────────────────────
@@ -1337,14 +1339,13 @@ def render_profiles_tab():
         except ValueError as exc:
             st.error(str(exc))
         else:
-            save_profile(cfg(), target)
-            # The saved profile inherits what is hidden now, so nothing reappears.
+            # Transfer first; a failure must leave the source profile active.
             carried = load_removed_ids(loaded_profile())
-            if carried:
-                _update_removed_ids_or_warn(target, add=carried)
-            _set_loaded_profile(target)
-            st.success(f"Saved profile '{target}'.")
-            st.rerun()
+            if not carried or _update_removed_ids_or_warn(target, add=carried):
+                save_profile(cfg(), target)
+                _set_loaded_profile(target)
+                st.success(f"Saved profile '{target}'.")
+                st.rerun()
 
     profiles = list_profiles()
     if profiles:
