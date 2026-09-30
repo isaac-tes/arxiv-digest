@@ -10,12 +10,15 @@ from __future__ import annotations
 
 import html
 import json
+import os
 import re
+import tempfile
+import threading
 import time
 from dataclasses import asdict, fields
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Tuple
+from typing import Iterable, Tuple
 
 import pandas as pd
 import streamlit as st
@@ -24,17 +27,39 @@ import arxiv_digest as ad
 import zotero_bridge as zb
 
 PROFILES_DIR = Path.home() / ".arxiv_scraper" / "profiles"
+ACTIVE_PROFILE_PATH = Path.home() / ".arxiv_scraper" / "active_profile.txt"
+REMOVED_PAPERS_PATH = Path.home() / ".arxiv_scraper" / "removed_papers.json"
+REMOVED_DIR = Path.home() / ".arxiv_scraper" / "removed"
 PROJECT_CONFIG = ad.DEFAULT_CONFIG_PATH
 
 
 # ────────────────────────── Profile management ──────────────────────────
 
+def _validate_profile_name(name: str) -> str:
+    if (
+        not name
+        or name != name.strip()
+        or name in {".", "..", "(unsaved)"}
+        or any(char in name for char in ("/", "\\", ":", "\0"))
+    ):
+        raise ValueError("Profile names must be a single path-free file name.")
+    return name
+
+
 def list_profiles() -> list[str]:
     PROFILES_DIR.mkdir(parents=True, exist_ok=True)
-    return sorted(p.stem for p in PROFILES_DIR.glob("*.json"))
+    profiles: list[str] = []
+    for path in PROFILES_DIR.glob("*.json"):
+        try:
+            _validate_profile_name(path.stem)
+        except ValueError:
+            continue
+        profiles.append(path.stem)
+    return sorted(profiles)
 
 
 def save_profile(cfg: ad.Config, name: str) -> Path:
+    name = _validate_profile_name(name)
     PROFILES_DIR.mkdir(parents=True, exist_ok=True)
     target = PROFILES_DIR / f"{name}.json"
     cfg.dump(target)
@@ -42,11 +67,155 @@ def save_profile(cfg: ad.Config, name: str) -> Path:
 
 
 def load_profile(name: str) -> ad.Config:
+    name = _validate_profile_name(name)
     return ad.Config.load(PROFILES_DIR / f"{name}.json")
 
 
+def _saved_active_profile() -> str | None:
+    try:
+        name = _validate_profile_name(
+            ACTIVE_PROFILE_PATH.read_text(encoding="utf-8").strip()
+        )
+    except (OSError, UnicodeError, ValueError):
+        return None
+    return name if name in list_profiles() else None
+
+
+def _persist_active_profile(name: str | None) -> None:
+    if name is None:
+        ACTIVE_PROFILE_PATH.unlink(missing_ok=True)
+        return
+    name = _validate_profile_name(name)
+    ACTIVE_PROFILE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(
+        dir=ACTIVE_PROFILE_PATH.parent,
+        prefix=f".{ACTIVE_PROFILE_PATH.stem}.",
+        suffix=".tmp",
+    )
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            fh.write(name)
+        os.replace(tmp, ACTIVE_PROFILE_PATH)
+    except BaseException:
+        Path(tmp).unlink(missing_ok=True)
+        raise
+
+
+def _set_loaded_profile(name: str | None) -> None:
+    _persist_active_profile(name)
+    st.session_state.loaded_profile = name
+    st.session_state.reset_active_profile_widget = True
+
+
 def delete_profile(name: str) -> None:
+    name = _validate_profile_name(name)
     (PROFILES_DIR / f"{name}.json").unlink(missing_ok=True)
+    with _removed_ids_lock():  # else an in-flight update could recreate the list
+        removed_papers_path(name).unlink(missing_ok=True)
+
+
+# ────────────────────────── Removed papers ──────────────────────────
+
+def removed_papers_path(profile: str | None) -> Path:
+    """Each profile has its own removal list; with no profile loaded, a shared one."""
+    if profile is None:
+        return REMOVED_PAPERS_PATH
+    return REMOVED_DIR / f"{_validate_profile_name(profile)}.json"
+
+
+@st.cache_resource
+def _removed_ids_lock() -> threading.RLock:
+    """One lock shared by every session of this server for the removal files.
+
+    Each browser tab is a session running in its own thread of the same
+    process. Streamlit re-executes this script on every rerun, so a plain
+    module-level lock would be a new object each time; cache_resource keeps one.
+    """
+    return threading.RLock()
+
+
+def _read_removed_ids(profile: str | None) -> set[str]:
+    """Strict read: a missing file is an empty list, any other failure raises."""
+    try:
+        text = removed_papers_path(profile).read_text()
+    except FileNotFoundError:
+        return set()
+    ids = json.loads(text)
+    if not isinstance(ids, list) or not all(isinstance(i, str) for i in ids):
+        raise ValueError("expected a JSON list of arXiv IDs")
+    return set(ids)
+
+
+def load_removed_ids(profile: str | None) -> set[str]:
+    """IDs of papers the user removed from the digest under `profile`.
+
+    Kept on disk so a removal survives page reloads, app restarts, and later
+    fetches (a paper removed from a daily ranking stays out of the weekly one).
+    For display, an unreadable file means nothing has been removed.
+    """
+    with _removed_ids_lock():
+        try:
+            return _read_removed_ids(profile)
+        except (OSError, ValueError):
+            return set()
+
+
+def save_removed_ids(profile: str | None, ids: set[str]) -> None:
+    # Write a uniquely named temp file, then rename it over the list: an
+    # interrupted save never truncates the only copy, and writers never share
+    # a temp file.
+    path = removed_papers_path(profile)
+    with _removed_ids_lock():
+        path.parent.mkdir(parents=True, exist_ok=True)
+        fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=f".{path.stem}.", suffix=".tmp")
+        try:
+            with os.fdopen(fd, "w") as fh:
+                fh.write(json.dumps(sorted(ids), indent=2))
+                fh.flush()
+                os.fsync(fh.fileno())  # data on disk before the rename, or a crash can leave it empty
+            os.replace(tmp, path)
+        except BaseException:
+            Path(tmp).unlink(missing_ok=True)
+            raise
+
+
+def update_removed_ids(
+    profile: str | None, *, add: Iterable[str] = (), discard: Iterable[str] = ()
+) -> None:
+    """Add/discard IDs in `profile`'s list as one read-modify-write under the lock,
+    so removals made at the same moment in two browser tabs are both kept.
+
+    Raises (leaving the file untouched) if the list exists but can't be read,
+    rather than overwriting every earlier removal with just this change.
+    """
+    with _removed_ids_lock():
+        save_removed_ids(profile, _read_removed_ids(profile).union(add).difference(discard))
+
+
+def _update_removed_ids_or_warn(profile: str | None, **change: Iterable[str]) -> None:
+    try:
+        update_removed_ids(profile, **change)
+    except (OSError, ValueError) as exc:
+        st.toast(
+            f"Couldn't update `{removed_papers_path(profile)}` ({exc}). "
+            "Nothing was changed; fix or delete the file.",
+            icon="⚠️",
+        )
+
+
+def _copy_removed_ids_or_warn(source: str | None, target: str) -> bool:
+    """Make `target`'s removal list an exact copy of `source`'s (Save as = snapshot)."""
+    with _removed_ids_lock():
+        try:
+            save_removed_ids(target, _read_removed_ids(source))
+        except (OSError, ValueError) as exc:
+            st.toast(
+                f"Couldn't copy removals to profile `{target}` ({exc}). "
+                "Nothing was saved; fix or delete the file.",
+                icon="⚠️",
+            )
+            return False
+        return True
 
 
 # ────────────────────────── Zotero bridge ──────────────────────────
@@ -273,8 +442,30 @@ _FONT_DEFAULT_VERSION = "2"
 
 
 def init_state():
+    if st.session_state.pop("reset_active_profile_widget", False):
+        st.session_state.pop("active_profile", None)
+    if "loaded_profile" not in st.session_state:
+        st.session_state.loaded_profile = _saved_active_profile()
     if "cfg" not in st.session_state:
-        st.session_state.cfg = ad.Config.load(PROJECT_CONFIG if PROJECT_CONFIG.exists() else None)
+        profile = loaded_profile()
+        if profile:
+            try:
+                st.session_state.cfg = load_profile(profile)
+            except Exception as exc:
+                st.session_state.loaded_profile = None
+                try:
+                    _persist_active_profile(None)
+                except OSError:
+                    pass
+                st.warning(
+                    f"Couldn't load profile '{profile}' ({exc}); using project config. "
+                    "Repair or delete the saved profile in the Profiles tab."
+                )
+                profile = None
+        if not profile:
+            st.session_state.cfg = ad.Config.load(
+                PROJECT_CONFIG if PROJECT_CONFIG.exists() else None
+            )
         st.session_state.cfg_default_version = _FONT_DEFAULT_VERSION
         # A fresh session should show the config's actual defaults (e.g. keyword
         # and author font tinting now default ON). Without this, Streamlit would
@@ -300,6 +491,11 @@ def init_state():
 
 def cfg() -> ad.Config:
     return st.session_state.cfg
+
+
+def loaded_profile() -> str | None:
+    """Name of the saved profile cfg() was last loaded from or saved to."""
+    return st.session_state.get("loaded_profile")
 
 
 # Keyed widgets cache their value in st.session_state[key] and IGNORE the
@@ -347,17 +543,28 @@ def render_sidebar():
 
         st.subheader("Profile")
         profiles = list_profiles()
+        loaded = loaded_profile()
+        index = profiles.index(loaded) + 1 if loaded in profiles else 0
         active = st.selectbox(
             "Active",
             options=["(unsaved)"] + profiles,
-            index=0,
+            index=index,
             key="active_profile",
         )
         if active != "(unsaved)" and st.button("Load profile", width="stretch"):
-            st.session_state.cfg = load_profile(active)
-            _reset_widget_state()
-            st.success(f"Loaded {active}")
-            st.rerun()
+            try:
+                profile_cfg = load_profile(active)
+            except Exception as exc:
+                st.error(f"Couldn't load profile '{active}': {exc}")
+            else:
+                st.session_state.cfg = profile_cfg
+                _set_loaded_profile(active)
+                _reset_widget_state()
+                st.success(f"Loaded {active}")
+                st.rerun()
+        st.caption(
+            f"Loaded profile: **{loaded_profile()}**" if loaded_profile() else "No profile loaded."
+        )
 
         st.divider()
 
@@ -747,6 +954,49 @@ def _render_breakdown(breakdown: dict):
         )
 
 
+def _remove_paper(arxiv_id: str) -> None:
+    """Callback for a card's ✕ button: hide the paper from every later ranking.
+
+    Removed papers are dropped before ranking, so every paper below moves up one
+    place and the first one past the top-N cutoff takes the freed slot.
+    """
+    _update_removed_ids_or_warn(loaded_profile(), add={arxiv_id})
+
+
+def _restore_papers(arxiv_ids: list[str]) -> None:
+    _update_removed_ids_or_warn(loaded_profile(), discard=arxiv_ids)
+
+
+def _render_removed_papers(removed: list[dict]) -> None:
+    """Expander listing removed papers that would otherwise be in the ranking shown."""
+    if not removed:
+        return
+    with st.expander(f"Removed papers ({len(removed)})"):
+        owner = f"profile **{loaded_profile()}**" if loaded_profile() else "no loaded profile"
+        st.caption(
+            "Only papers that would otherwise appear in this ranking are listed. "
+            f"The removal list belongs to {owner}; other profiles keep their own. "
+            "Removed papers stay hidden across reloads and later fetches "
+            f"(saved in `{removed_papers_path(loaded_profile())}`)."
+        )
+        for p in removed:
+            title_col, restore_col = st.columns([5, 1])
+            title_col.write(p.get("title", "") or "(Untitled)")
+            restore_col.button(
+                "Restore",
+                key=f"restore_{p['id']}",
+                on_click=_restore_papers,
+                args=([p["id"]],),
+                width="stretch",
+            )
+        st.button(
+            "Restore all",
+            key="restore_all",
+            on_click=_restore_papers,
+            args=([p["id"] for p in removed],),
+        )
+
+
 def render_papers_tab():
     fetched = st.session_state.papers
     if not fetched:
@@ -775,11 +1025,29 @@ def render_papers_tab():
         days=selected_days,
     )
     hidden = len(fetched) - len(papers)
+    removed_ids = load_removed_ids(loaded_profile())
+    # Walk the full ranking, removed papers included: a removed paper met before
+    # the top N fills up would be showing had it not been removed, so only those
+    # are offered for restore (not, say, one removed from yesterday's digest).
+    ranked = ad.build_ranked_entries(papers, cfg(), top_n=len(papers))
+    entries: list[dict] = []
+    removed: list[dict] = []
+    for e in ranked:
+        if len(entries) == cfg().top_n:
+            break
+        if e["id"] in removed_ids:
+            removed.append(e)
+        else:
+            entries.append({**e, "rank": len(entries) + 1})
+    papers = [p for p in papers if p["id"] not in removed_ids]
+    _render_removed_papers(removed)
     if not papers:
-        st.warning("No papers left after filtering. Adjust the day or replacement filter.")
+        st.warning(
+            "No papers left after filtering. Adjust the day or replacement filter"
+            + (", or restore removed papers." if removed else ".")
+        )
         return
 
-    entries = ad.build_ranked_entries(papers, cfg(), top_n=cfg().top_n)
     paper_by_id = {p["id"]: p for p in papers}
 
     col_search, col_export_md, col_export_json = st.columns([3, 1, 1])
@@ -826,12 +1094,14 @@ def render_papers_tab():
     )
     if hidden:
         caption += f" {hidden} hidden by replacement/day filters."
+    if removed:
+        caption += f" {len(removed)} removed by you."
     st.caption(caption)
     st.markdown(_PAPER_CSS, unsafe_allow_html=True)
 
     for e in filtered:
         with st.container(border=True):
-            head, score_col = st.columns([5, 1])
+            head, score_col, remove_col = st.columns([5, 1, 0.3])
 
             def _hl(t: str) -> str:
                 return _highlight_terms(
@@ -887,6 +1157,14 @@ def render_papers_tab():
             with score_col:
                 st.metric("Score", e["score"])
                 _render_zotero_save_button(e["id"], e["title"])
+            with remove_col:
+                st.button(
+                    "✕",
+                    key=f"remove_{e['id']}",
+                    help="Remove from this and later rankings; the papers below move up one place.",
+                    on_click=_remove_paper,
+                    args=(e["id"],),
+                )
 
             with st.expander("Why this score?"):
                 full_paper = paper_by_id.get(e["id"], {})
@@ -1073,6 +1351,7 @@ def render_profiles_tab():
     pc_load, pc_add = st.columns(2)
     if pc_load.button("Load preset", key="preset_load", width="stretch"):
         st.session_state.cfg = ad.preset_config(preset_choice)
+        _set_loaded_profile(None)
         _reset_widget_state()
         st.success(f"Loaded preset '{preset_choice}' (replaced working config).")
         st.rerun()
@@ -1086,9 +1365,17 @@ def render_profiles_tab():
 
     name = st.text_input("Save current config as", placeholder="e.g. topology-mode")
     if st.button("Save", disabled=not name.strip()):
-        save_profile(cfg(), name.strip())
-        st.success(f"Saved profile '{name.strip()}'.")
-        st.rerun()
+        try:
+            target = _validate_profile_name(name.strip())
+        except ValueError as exc:
+            st.error(str(exc))
+        else:
+            # Transfer first; a failure must leave the source profile active.
+            if _copy_removed_ids_or_warn(loaded_profile(), target):
+                save_profile(cfg(), target)
+                _set_loaded_profile(target)
+                st.success(f"Saved profile '{target}'.")
+                st.rerun()
 
     profiles = list_profiles()
     if profiles:
@@ -1096,20 +1383,37 @@ def render_profiles_tab():
         for p in profiles:
             cols = st.columns([3, 1, 1, 1])
             cols[0].write(p)
-            if cols[1].button("Load", key=f"load_{p}"):
-                st.session_state.cfg = load_profile(p)
-                _reset_widget_state()
-                st.success(f"Loaded {p}")
-                st.rerun()
-            cols[2].download_button(
-                "Export",
-                data=json.dumps(asdict(load_profile(p)), indent=2, ensure_ascii=False),
-                file_name=f"{p}.json",
-                mime="application/json",
-                key=f"export_{p}",
-            )
+            try:
+                profile_cfg = load_profile(p)
+            except Exception as exc:
+                cols[0].caption(f"Unreadable profile: {exc}")
+                cols[1].button("Load", key=f"load_{p}", disabled=True)
+                cols[2].download_button(
+                    "Export",
+                    data="",
+                    file_name=f"{p}.json",
+                    mime="application/json",
+                    key=f"export_{p}",
+                    disabled=True,
+                )
+            else:
+                if cols[1].button("Load", key=f"load_{p}"):
+                    st.session_state.cfg = profile_cfg
+                    _set_loaded_profile(p)
+                    _reset_widget_state()
+                    st.success(f"Loaded {p}")
+                    st.rerun()
+                cols[2].download_button(
+                    "Export",
+                    data=json.dumps(asdict(profile_cfg), indent=2, ensure_ascii=False),
+                    file_name=f"{p}.json",
+                    mime="application/json",
+                    key=f"export_{p}",
+                )
             if cols[3].button("Delete", key=f"del_{p}"):
                 delete_profile(p)
+                if loaded_profile() == p:
+                    _set_loaded_profile(None)
                 st.rerun()
 
     st.divider()
@@ -1124,6 +1428,7 @@ def render_profiles_tab():
         try:
             raw = json.load(uploaded)
             st.session_state.cfg = ad.Config.from_json(raw)
+            _set_loaded_profile(None)
             _reset_widget_state()
             st.success("Profile imported into current session.")
             st.rerun()
@@ -1285,8 +1590,16 @@ def render_score_tab():
         if fetched:
             st.divider()
             st.markdown("**Why it did / didn't appear in the digest**")
-            if paper_id in {p.get("id") for p in fetched}:
-                entries = ad.build_ranked_entries(fetched, cfg(), top_n=cfg().top_n)
+            fetched_ids = {p.get("id") for p in fetched}
+            removed_ids = load_removed_ids(loaded_profile())
+            if paper_id in fetched_ids and paper_id in removed_ids:
+                st.info(
+                    "You **removed** this paper from the digest, so it is not ranked. "
+                    "Restore it from *Removed papers* in the **Papers** tab."
+                )
+            elif paper_id in fetched_ids:
+                kept = [p for p in fetched if p.get("id") not in removed_ids]
+                entries = ad.build_ranked_entries(kept, cfg(), top_n=cfg().top_n)
                 rank = next(
                     (e["rank"] for e in entries if e["id"] == paper_id), None
                 )

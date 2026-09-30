@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **Remove a paper from the digest.** Each paper card in the GUI has a ✕ button that drops it from the ranked list. Papers below it move up one place, and the first paper past the top-N cutoff takes the freed slot. Each profile keeps its own removal list (`~/.arxiv_scraper/removed/<profile>.json`, or `~/.arxiv_scraper/removed_papers.json` while no profile is loaded), so removals survive page reloads, app restarts and later fetches: a paper removed from today's ranking is also absent from the week's. The sidebar now shows which profile is loaded, and **Score a paper** reports a removed paper as removed and ranks the others without it. A *Removed papers* expander above the list offers the removed papers that would otherwise be in the ranking shown (not, say, one removed from yesterday's digest), restorable one at a time or all at once. Markdown/JSON downloads follow the list as shown.
+
+### Fixed
+- **Loaded GUI profiles survive reloads.** A fresh session restores the last loaded profile and its saved config before rendering the digest, keeping that profile's removal list active.
+- **Profile names stay within their storage directories.** Path-like names and the reserved `(unsaved)` are rejected before profile and removal files are read, written, or deleted.
+- **The sidebar profile selector follows the loaded config.** Switching profiles or loading a preset/import clears stale widget state before the next render.
+- **Save as snapshots the current removals.** The new profile's removal list is an exact copy of the current one (stale or damaged lists left under that name are replaced), and if the copy fails nothing is saved and the current profile stays active.
+- **Malformed saved profiles no longer block GUI startup.** The app falls back to project config and keeps the damaged file available for deletion.
+- **Score a paper matches a bare arXiv ID with a version.** Pasting `2607.21663v2` kept the `v2`, so a paper that was in the digest was reported as never fetched. The version is now stripped, as it already was for pasted URLs.
+
 ## [0.6.2] - 2026-09-21
 
 ### Fixed
