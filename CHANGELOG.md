@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Profile names stay within their storage directories.** Path-like names are rejected before profile and removal files are read, written, or deleted.
 - **The sidebar profile selector follows the loaded config.** Switching profiles or loading a preset/import clears stale widget state before the next render.
 - **Saving a profile aborts when its removal list cannot be copied.** The source profile stays active, so its removed papers remain hidden.
+- **Malformed saved profiles no longer block GUI startup.** The app falls back to project config and keeps the damaged file available for deletion.
 - **Score a paper matches a bare arXiv ID with a version.** Pasting `2607.21663v2` kept the `v2`, so a paper that was in the digest was reported as never fetched. The version is now stripped, as it already was for pasted URLs.
 
 ## [0.6.2] - 2026-09-21

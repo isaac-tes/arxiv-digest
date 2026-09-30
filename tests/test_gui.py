@@ -1039,6 +1039,34 @@ def test_save_as_stays_on_source_when_source_removal_list_is_unreadable(
     assert not list(at.exception)
 
 
+def test_malformed_active_profile_falls_back_and_can_be_deleted(monkeypatch, tmp_path):
+    import arxiv_digest as ad
+    from streamlit.testing.v1 import AppTest
+
+    _tmp_home(monkeypatch, tmp_path)
+    project_config = tmp_path / "project.json"
+    config = ad.Config()
+    config.core_keywords = ["project-only"]
+    config.dump(project_config)
+    monkeypatch.setattr(ad, "DEFAULT_CONFIG_PATH", project_config)
+
+    profile_path = tmp_path / ".arxiv_scraper" / "profiles" / "broken.json"
+    profile_path.parent.mkdir(parents=True)
+    profile_path.write_text("{")
+    active_path = tmp_path / ".arxiv_scraper" / "active_profile.txt"
+    active_path.write_text("broken")
+
+    at = AppTest.from_file("arxiv_gui.py").run(timeout=15)
+    assert not list(at.exception)
+    assert at.session_state["loaded_profile"] is None
+    assert at.session_state.cfg.core_keywords == ["project-only"]
+    assert not active_path.exists()
+
+    at.button(key="del_broken").click().run(timeout=15)
+    assert not profile_path.exists()
+    assert not list(at.exception)
+
+
 def test_score_tab_honors_removed_papers(monkeypatch, tmp_path):
     """A removed paper is reported as removed, and ranks ignore removed papers."""
     import json

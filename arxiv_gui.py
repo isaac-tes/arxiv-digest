@@ -449,11 +449,24 @@ def init_state():
         st.session_state.loaded_profile = _saved_active_profile()
     if "cfg" not in st.session_state:
         profile = loaded_profile()
-        st.session_state.cfg = (
-            load_profile(profile)
-            if profile
-            else ad.Config.load(PROJECT_CONFIG if PROJECT_CONFIG.exists() else None)
-        )
+        if profile:
+            try:
+                st.session_state.cfg = load_profile(profile)
+            except Exception as exc:
+                st.session_state.loaded_profile = None
+                try:
+                    _persist_active_profile(None)
+                except OSError:
+                    pass
+                st.warning(
+                    f"Couldn't load profile '{profile}' ({exc}); using project config. "
+                    "Repair or delete the saved profile in the Profiles tab."
+                )
+                profile = None
+        if not profile:
+            st.session_state.cfg = ad.Config.load(
+                PROJECT_CONFIG if PROJECT_CONFIG.exists() else None
+            )
         st.session_state.cfg_default_version = _FONT_DEFAULT_VERSION
         # A fresh session should show the config's actual defaults (e.g. keyword
         # and author font tinting now default ON). Without this, Streamlit would
@@ -540,11 +553,16 @@ def render_sidebar():
             key="active_profile",
         )
         if active != "(unsaved)" and st.button("Load profile", width="stretch"):
-            st.session_state.cfg = load_profile(active)
-            _set_loaded_profile(active)
-            _reset_widget_state()
-            st.success(f"Loaded {active}")
-            st.rerun()
+            try:
+                profile_cfg = load_profile(active)
+            except Exception as exc:
+                st.error(f"Couldn't load profile '{active}': {exc}")
+            else:
+                st.session_state.cfg = profile_cfg
+                _set_loaded_profile(active)
+                _reset_widget_state()
+                st.success(f"Loaded {active}")
+                st.rerun()
         st.caption(
             f"Loaded profile: **{loaded_profile()}**" if loaded_profile() else "No profile loaded."
         )
@@ -1366,19 +1384,33 @@ def render_profiles_tab():
         for p in profiles:
             cols = st.columns([3, 1, 1, 1])
             cols[0].write(p)
-            if cols[1].button("Load", key=f"load_{p}"):
-                st.session_state.cfg = load_profile(p)
-                _set_loaded_profile(p)
-                _reset_widget_state()
-                st.success(f"Loaded {p}")
-                st.rerun()
-            cols[2].download_button(
-                "Export",
-                data=json.dumps(asdict(load_profile(p)), indent=2, ensure_ascii=False),
-                file_name=f"{p}.json",
-                mime="application/json",
-                key=f"export_{p}",
-            )
+            try:
+                profile_cfg = load_profile(p)
+            except Exception as exc:
+                cols[0].caption(f"Unreadable profile: {exc}")
+                cols[1].button("Load", key=f"load_{p}", disabled=True)
+                cols[2].download_button(
+                    "Export",
+                    data="",
+                    file_name=f"{p}.json",
+                    mime="application/json",
+                    key=f"export_{p}",
+                    disabled=True,
+                )
+            else:
+                if cols[1].button("Load", key=f"load_{p}"):
+                    st.session_state.cfg = profile_cfg
+                    _set_loaded_profile(p)
+                    _reset_widget_state()
+                    st.success(f"Loaded {p}")
+                    st.rerun()
+                cols[2].download_button(
+                    "Export",
+                    data=json.dumps(asdict(profile_cfg), indent=2, ensure_ascii=False),
+                    file_name=f"{p}.json",
+                    mime="application/json",
+                    key=f"export_{p}",
+                )
             if cols[3].button("Delete", key=f"del_{p}"):
                 delete_profile(p)
                 if loaded_profile() == p:
