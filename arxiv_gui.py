@@ -27,6 +27,7 @@ import arxiv_digest as ad
 import zotero_bridge as zb
 
 PROFILES_DIR = Path.home() / ".arxiv_scraper" / "profiles"
+ACTIVE_PROFILE_PATH = Path.home() / ".arxiv_scraper" / "active_profile.txt"
 REMOVED_PAPERS_PATH = Path.home() / ".arxiv_scraper" / "removed_papers.json"
 REMOVED_DIR = Path.home() / ".arxiv_scraper" / "removed"
 PROJECT_CONFIG = ad.DEFAULT_CONFIG_PATH
@@ -48,6 +49,38 @@ def save_profile(cfg: ad.Config, name: str) -> Path:
 
 def load_profile(name: str) -> ad.Config:
     return ad.Config.load(PROFILES_DIR / f"{name}.json")
+
+
+def _saved_active_profile() -> str | None:
+    try:
+        name = ACTIVE_PROFILE_PATH.read_text(encoding="utf-8").strip()
+    except (OSError, UnicodeError):
+        return None
+    return name if name in list_profiles() else None
+
+
+def _persist_active_profile(name: str | None) -> None:
+    if name is None:
+        ACTIVE_PROFILE_PATH.unlink(missing_ok=True)
+        return
+    ACTIVE_PROFILE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(
+        dir=ACTIVE_PROFILE_PATH.parent,
+        prefix=f".{ACTIVE_PROFILE_PATH.stem}.",
+        suffix=".tmp",
+    )
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            fh.write(name)
+        os.replace(tmp, ACTIVE_PROFILE_PATH)
+    except BaseException:
+        Path(tmp).unlink(missing_ok=True)
+        raise
+
+
+def _set_loaded_profile(name: str | None) -> None:
+    _persist_active_profile(name)
+    st.session_state.loaded_profile = name
 
 
 def delete_profile(name: str) -> None:
@@ -367,8 +400,15 @@ _FONT_DEFAULT_VERSION = "2"
 
 
 def init_state():
+    if "loaded_profile" not in st.session_state:
+        st.session_state.loaded_profile = _saved_active_profile()
     if "cfg" not in st.session_state:
-        st.session_state.cfg = ad.Config.load(PROJECT_CONFIG if PROJECT_CONFIG.exists() else None)
+        profile = loaded_profile()
+        st.session_state.cfg = (
+            load_profile(profile)
+            if profile
+            else ad.Config.load(PROJECT_CONFIG if PROJECT_CONFIG.exists() else None)
+        )
         st.session_state.cfg_default_version = _FONT_DEFAULT_VERSION
         # A fresh session should show the config's actual defaults (e.g. keyword
         # and author font tinting now default ON). Without this, Streamlit would
@@ -386,8 +426,6 @@ def init_state():
         st.session_state.papers = []
     if "last_fetch" not in st.session_state:
         st.session_state.last_fetch = None
-    if "loaded_profile" not in st.session_state:
-        st.session_state.loaded_profile = None
     if "zotero_saved_at" not in st.session_state:
         st.session_state.zotero_saved_at = {}
     if "zotero_saving" not in st.session_state:
@@ -399,7 +437,7 @@ def cfg() -> ad.Config:
 
 
 def loaded_profile() -> str | None:
-    """Name of the profile cfg() was last loaded from or saved to, if any."""
+    """Name of the saved profile cfg() was last loaded from or saved to."""
     return st.session_state.get("loaded_profile")
 
 
@@ -448,15 +486,17 @@ def render_sidebar():
 
         st.subheader("Profile")
         profiles = list_profiles()
+        loaded = loaded_profile()
+        index = profiles.index(loaded) + 1 if loaded in profiles else 0
         active = st.selectbox(
             "Active",
             options=["(unsaved)"] + profiles,
-            index=0,
+            index=index,
             key="active_profile",
         )
         if active != "(unsaved)" and st.button("Load profile", width="stretch"):
             st.session_state.cfg = load_profile(active)
-            st.session_state.loaded_profile = active
+            _set_loaded_profile(active)
             _reset_widget_state()
             st.success(f"Loaded {active}")
             st.rerun()
@@ -1249,7 +1289,7 @@ def render_profiles_tab():
     pc_load, pc_add = st.columns(2)
     if pc_load.button("Load preset", key="preset_load", width="stretch"):
         st.session_state.cfg = ad.preset_config(preset_choice)
-        st.session_state.loaded_profile = None
+        _set_loaded_profile(None)
         _reset_widget_state()
         st.success(f"Loaded preset '{preset_choice}' (replaced working config).")
         st.rerun()
@@ -1269,7 +1309,7 @@ def render_profiles_tab():
         carried = load_removed_ids(loaded_profile())
         if carried:
             _update_removed_ids_or_warn(target, add=carried)
-        st.session_state.loaded_profile = target
+        _set_loaded_profile(target)
         st.success(f"Saved profile '{target}'.")
         st.rerun()
 
@@ -1281,7 +1321,7 @@ def render_profiles_tab():
             cols[0].write(p)
             if cols[1].button("Load", key=f"load_{p}"):
                 st.session_state.cfg = load_profile(p)
-                st.session_state.loaded_profile = p
+                _set_loaded_profile(p)
                 _reset_widget_state()
                 st.success(f"Loaded {p}")
                 st.rerun()
@@ -1295,7 +1335,7 @@ def render_profiles_tab():
             if cols[3].button("Delete", key=f"del_{p}"):
                 delete_profile(p)
                 if loaded_profile() == p:
-                    st.session_state.loaded_profile = None
+                    _set_loaded_profile(None)
                 st.rerun()
 
     st.divider()
@@ -1310,7 +1350,7 @@ def render_profiles_tab():
         try:
             raw = json.load(uploaded)
             st.session_state.cfg = ad.Config.from_json(raw)
-            st.session_state.loaded_profile = None
+            _set_loaded_profile(None)
             _reset_widget_state()
             st.success("Profile imported into current session.")
             st.rerun()

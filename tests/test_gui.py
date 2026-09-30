@@ -860,6 +860,37 @@ def test_removals_are_kept_per_profile(monkeypatch, tmp_path):
     assert not list(at.exception)
 
 
+def test_loaded_profile_and_removals_survive_new_session(monkeypatch, tmp_path):
+    import arxiv_digest as ad
+    from streamlit.testing.v1 import AppTest
+
+    _tmp_home(monkeypatch, tmp_path)
+    profile_path = tmp_path / ".arxiv_scraper" / "profiles" / "atoms.json"
+    profile_path.parent.mkdir(parents=True)
+    profile = ad.Config()
+    profile.core_keywords = ["profile-only"]
+    profile.dump(profile_path)
+    papers = [_card_paper("p1", "Paper A"), _card_paper("p2", "Paper B")]
+
+    at = AppTest.from_file("arxiv_gui.py")
+    at.session_state["papers"] = papers
+    at.run(timeout=15)
+    at.sidebar.selectbox(key="active_profile").set_value("atoms").run(timeout=15)
+    _click_label(at, "Load profile")
+    at.run(timeout=15)
+    at.button(key="remove_p1").click().run(timeout=15)
+
+    reloaded = AppTest.from_file("arxiv_gui.py")
+    reloaded.session_state["papers"] = papers
+    reloaded.run(timeout=15)
+
+    assert reloaded.session_state["loaded_profile"] == "atoms"
+    assert reloaded.sidebar.selectbox(key="active_profile").value == "atoms"
+    assert reloaded.session_state.cfg.core_keywords == ["profile-only"]
+    assert _ranked_titles(reloaded) == ["1. Paper B"]
+    assert not list(reloaded.exception)
+
+
 def test_save_as_carries_removals_and_delete_drops_them(monkeypatch, tmp_path):
     import json
 
@@ -876,12 +907,15 @@ def test_save_as_carries_removals_and_delete_drops_them(monkeypatch, tmp_path):
     _click_label(at, "Save", keyless=True)
     at.run(timeout=15)
     fresh_file = tmp_path / ".arxiv_scraper" / "removed" / "fresh.json"
+    active_file = tmp_path / ".arxiv_scraper" / "active_profile.txt"
     assert at.session_state["loaded_profile"] == "fresh"
+    assert active_file.read_text() == "fresh"
     assert json.loads(fresh_file.read_text()) == ["p1"]
     assert _ranked_titles(at) == ["1. Paper B"]
 
     at.button(key="del_fresh").click().run(timeout=15)
     assert not fresh_file.exists()
+    assert not active_file.exists()
     assert at.session_state["loaded_profile"] is None
     assert not list(at.exception)
 
