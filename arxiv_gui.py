@@ -291,7 +291,7 @@ def _set_zotero_saved(arxiv_id: str) -> None:
     st.session_state.zotero_saved_at[arxiv_id] = time.monotonic()
 
 
-def _do_zotero_save(arxiv_id: str, title: str) -> None:
+def _do_zotero_save(arxiv_id: str, title: str, col_key: str | None = None) -> None:
     """Callback for the Save button — runs exactly once per click.
 
     Saves to the user's **personal** Zotero library via the local bridge (the
@@ -305,7 +305,7 @@ def _do_zotero_save(arxiv_id: str, title: str) -> None:
     # A retry supersedes any outcome still waiting to be rendered.
     st.session_state.pop(f"zotero_result_{arxiv_id}", None)
 
-    collection = st.session_state.get(f"zotero_col_{arxiv_id}", _NO_COLLECTION)
+    collection = st.session_state.get(col_key or f"zotero_col_card_{arxiv_id}", _NO_COLLECTION)
     collection_key = _zotero_collection_key_for(collection)
 
     try:
@@ -333,7 +333,7 @@ def _zotero_saved_at(arxiv_id: str) -> float | None:
     return records.get(arxiv_id)
 
 
-def _render_zotero_save_button(arxiv_id: str, title: str) -> None:
+def _render_zotero_save_button(arxiv_id: str, title: str, scope: str = "card") -> None:
     """A 'Save to Zotero' popover next to a paper, like the Zotero Connector.
 
     Opens a popover with a **Collection** dropdown for the personal My Library
@@ -346,6 +346,9 @@ def _render_zotero_save_button(arxiv_id: str, title: str) -> None:
     is dropped on the next full re-render).
     """
     fresh_tick = _zotero_tick_is_fresh(_zotero_saved_at(arxiv_id))
+    # Keys carry the tab (`scope`): Streamlit renders every tab on each run, so a
+    # paper shown on its card and in Score a paper would otherwise reuse keys.
+    col_key = f"zotero_col_{scope}_{arxiv_id}"
 
     @st.fragment(run_every=f"{FRAGMENT_RERUN_SECONDS}s" if fresh_tick else None)
     def _tick_or_popover() -> None:
@@ -367,14 +370,14 @@ def _render_zotero_save_button(arxiv_id: str, title: str) -> None:
             st.selectbox(
                 "Collection",
                 options=_zotero_collection_options(),
-                key=f"zotero_col_{arxiv_id}",
+                key=col_key,
             )
             st.button(
                 "Save",
-                key=f"zotero_do_{arxiv_id}",
+                key=f"zotero_do_{scope}_{arxiv_id}",
                 type="primary",
                 on_click=_do_zotero_save,
-                args=(arxiv_id, title),
+                args=(arxiv_id, title, col_key),
             )
 
     _tick_or_popover()
@@ -997,6 +1000,36 @@ def _render_removed_papers(removed: list[dict]) -> None:
         )
 
 
+def _selected_days() -> list[str] | None:
+    """The Papers tab's Day picker choice (None = all days)."""
+    choice = st.session_state.get("papers_day", "All days")
+    return None if choice == "All days" else [choice]
+
+
+def _digest(fetched: list[dict], days: list[str] | None) -> tuple[list[dict], list[dict], list[dict]]:
+    """The ranking the Papers tab shows: (entries, removed, visible papers).
+
+    Single source of truth for both the Papers and the Score-a-paper tab, so the
+    two can never disagree on rank. Removed papers are skipped while walking the
+    full ranking; only those met before the top N fills up are returned in
+    `removed` (the ones that would be showing had they not been removed).
+    """
+    papers = ad.filter_papers(
+        fetched, include_replacements=cfg().include_replacements, days=days
+    )
+    removed_ids = load_removed_ids(loaded_profile())
+    entries: list[dict] = []
+    removed: list[dict] = []
+    for e in ad.build_ranked_entries(papers, cfg(), top_n=len(papers)):
+        if len(entries) == cfg().top_n:
+            break
+        if e["id"] in removed_ids:
+            removed.append(e)
+        else:
+            entries.append({**e, "rank": len(entries) + 1})
+    return entries, removed, [p for p in papers if p["id"] not in removed_ids]
+
+
 def render_papers_tab():
     fetched = st.session_state.papers
     if not fetched:
@@ -1005,9 +1038,10 @@ def render_papers_tab():
 
     # Back-in-time day picker (only days arXiv's pastweek feed still lists).
     day_labels = ad.available_day_labels(fetched)
-    selected_days = None
+    if st.session_state.get("papers_day") not in (None, "All days", *day_labels):
+        st.session_state.pop("papers_day")  # the picked day left the fetch
     if day_labels:
-        choice = st.selectbox(
+        st.selectbox(
             "Day",
             options=["All days"] + day_labels,
             help=(
@@ -1015,31 +1049,13 @@ def render_papers_tab():
                 "arXiv's pastweek feed still returns (~last 5 days) are available "
                 "— arXiv provides no URL for arbitrary older days."
             ),
+            key="papers_day",
         )
-        if choice != "All days":
-            selected_days = [choice]
 
-    papers = ad.filter_papers(
-        fetched,
-        include_replacements=cfg().include_replacements,
-        days=selected_days,
-    )
-    hidden = len(fetched) - len(papers)
-    removed_ids = load_removed_ids(loaded_profile())
-    # Walk the full ranking, removed papers included: a removed paper met before
-    # the top N fills up would be showing had it not been removed, so only those
-    # are offered for restore (not, say, one removed from yesterday's digest).
-    ranked = ad.build_ranked_entries(papers, cfg(), top_n=len(papers))
-    entries: list[dict] = []
-    removed: list[dict] = []
-    for e in ranked:
-        if len(entries) == cfg().top_n:
-            break
-        if e["id"] in removed_ids:
-            removed.append(e)
-        else:
-            entries.append({**e, "rank": len(entries) + 1})
-    papers = [p for p in papers if p["id"] not in removed_ids]
+    entries, removed, papers = _digest(fetched, _selected_days())
+    hidden = len(fetched) - len(ad.filter_papers(
+        fetched, include_replacements=cfg().include_replacements, days=_selected_days()
+    ))
     _render_removed_papers(removed)
     if not papers:
         st.warning(
@@ -1591,32 +1607,50 @@ def render_score_tab():
             st.divider()
             st.markdown("**Why it did / didn't appear in the digest**")
             fetched_ids = {p.get("id") for p in fetched}
-            removed_ids = load_removed_ids(loaded_profile())
-            if paper_id in fetched_ids and paper_id in removed_ids:
-                st.info(
-                    "You **removed** this paper from the digest, so it is not ranked. "
-                    "Restore it from *Removed papers* in the **Papers** tab."
+            days = _selected_days()
+            entries, removed, visible = _digest(fetched, days)
+            rank = next((e["rank"] for e in entries if e["id"] == paper_id), None)
+            if rank is not None:
+                st.success(
+                    f"This paper **is** in the current digest at rank **#{rank}** "
+                    f"with score **{breakdown['total']}**."
                 )
-            elif paper_id in fetched_ids:
-                kept = [p for p in fetched if p.get("id") not in removed_ids]
-                entries = ad.build_ranked_entries(kept, cfg(), top_n=cfg().top_n)
-                rank = next(
-                    (e["rank"] for e in entries if e["id"] == paper_id), None
-                )
-                if rank is not None:
-                    st.success(
-                        f"This paper **is** in the current digest at rank **#{rank}** "
-                        f"with score **{breakdown['total']}**."
+            elif paper_id not in fetched_ids:
+                st.info(_absence_reason(paper_id, fetched, cfg()))
+            elif paper_id in load_removed_ids(loaded_profile()):
+                if paper_id in {e["id"] for e in removed}:
+                    st.info(
+                        "You **removed** this paper from the digest, so it is not ranked. "
+                        "Restore it from *Removed papers* in the **Papers** tab."
                     )
                 else:
-                    st.info(_absence_reason(paper_id, fetched, cfg()))
+                    st.info(
+                        "You **removed** this paper, but the current filters or top-N hide it. "
+                        "Adjust the Papers tab filters or increase Top N until it appears "
+                        "under *Removed papers*, then restore it."
+                    )
+            elif paper_id not in {p["id"] for p in ad.filter_papers(
+                fetched, include_replacements=cfg().include_replacements
+            )}:
+                st.info(
+                    "This paper was fetched but is a **replacement** submission, which "
+                    "the digest hides. Tick *Include replacement submissions* to rank it."
+                )
+            elif paper_id not in {p["id"] for p in visible}:
+                st.info(
+                    f"This paper was fetched but is not from the day picked in the "
+                    f"**Papers** tab ({days[0]}). Pick *All days* to rank it."
+                )
             else:
-                st.info(_absence_reason(paper_id, fetched, cfg()))
+                st.info(
+                    f"This paper **was** fetched but ranked below your "
+                    f"top-{cfg().top_n} cutoff."
+                )
         else:
             st.caption("Fetch papers first to compare against the current digest.")
 
         st.divider()
-        _render_zotero_save_button(paper_id, paper["title"])
+        _render_zotero_save_button(paper_id, paper["title"], scope="score")
 
 
 # ────────────────────────── Main ──────────────────────────
