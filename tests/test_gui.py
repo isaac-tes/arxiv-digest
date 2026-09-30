@@ -929,6 +929,21 @@ def test_profile_name_cannot_escape_storage(monkeypatch, tmp_path):
     assert not list(at.exception)
 
 
+def test_profile_name_cannot_shadow_unsaved_option(monkeypatch, tmp_path):
+    from streamlit.testing.v1 import AppTest
+
+    _tmp_home(monkeypatch, tmp_path)
+    at = AppTest.from_file("arxiv_gui.py").run(timeout=15)
+    name_box = next(t for t in at.text_input if t.label == "Save current config as")
+    name_box.set_value("(unsaved)").run(timeout=15)
+    _click_label(at, "Save", keyless=True)
+    at.run(timeout=15)
+
+    assert not (tmp_path / ".arxiv_scraper" / "profiles" / "(unsaved).json").exists()
+    assert at.session_state["loaded_profile"] is None
+    assert not list(at.exception)
+
+
 def test_profile_path_helpers_reject_traversal(monkeypatch, tmp_path):
     import arxiv_digest as ad
     import arxiv_gui

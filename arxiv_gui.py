@@ -39,7 +39,7 @@ def _validate_profile_name(name: str) -> str:
     if (
         not name
         or name != name.strip()
-        or name in {".", ".."}
+        or name in {".", "..", "(unsaved)"}
         or any(char in name for char in ("/", "\\", ":", "\0"))
     ):
         raise ValueError("Profile names must be a single path-free file name.")
