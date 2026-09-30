@@ -205,6 +205,20 @@ def _update_removed_ids_or_warn(profile: str | None, **change: Iterable[str]) ->
     return True
 
 
+def _copy_removed_ids_or_warn(source: str | None, target: str) -> bool:
+    with _removed_ids_lock():
+        try:
+            carried = _read_removed_ids(source)
+        except (OSError, ValueError) as exc:
+            st.toast(
+                f"Couldn't read removals for profile `{source or '(unsaved)'}` ({exc}). "
+                "Nothing was changed; fix or delete the file.",
+                icon="⚠️",
+            )
+            return False
+        return not carried or _update_removed_ids_or_warn(target, add=carried)
+
+
 # ────────────────────────── Zotero bridge ──────────────────────────
 
 @st.cache_data(ttl=10, show_spinner=False)
@@ -1340,8 +1354,7 @@ def render_profiles_tab():
             st.error(str(exc))
         else:
             # Transfer first; a failure must leave the source profile active.
-            carried = load_removed_ids(loaded_profile())
-            if not carried or _update_removed_ids_or_warn(target, add=carried):
+            if _copy_removed_ids_or_warn(loaded_profile(), target):
                 save_profile(cfg(), target)
                 _set_loaded_profile(target)
                 st.success(f"Saved profile '{target}'.")
