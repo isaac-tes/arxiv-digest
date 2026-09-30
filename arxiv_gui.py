@@ -1608,7 +1608,7 @@ def render_score_tab():
             st.markdown("**Why it did / didn't appear in the digest**")
             fetched_ids = {p.get("id") for p in fetched}
             days = _selected_days()
-            entries, _, visible = _digest(fetched, days)
+            entries, removed, visible = _digest(fetched, days)
             rank = next((e["rank"] for e in entries if e["id"] == paper_id), None)
             if rank is not None:
                 st.success(
@@ -1618,10 +1618,17 @@ def render_score_tab():
             elif paper_id not in fetched_ids:
                 st.info(_absence_reason(paper_id, fetched, cfg()))
             elif paper_id in load_removed_ids(loaded_profile()):
-                st.info(
-                    "You **removed** this paper from the digest, so it is not ranked. "
-                    "Restore it from *Removed papers* in the **Papers** tab."
-                )
+                if paper_id in {e["id"] for e in removed}:
+                    st.info(
+                        "You **removed** this paper from the digest, so it is not ranked. "
+                        "Restore it from *Removed papers* in the **Papers** tab."
+                    )
+                else:
+                    st.info(
+                        "You **removed** this paper, but the current filters or top-N hide it. "
+                        "Adjust the Papers tab filters or increase Top N until it appears "
+                        "under *Removed papers*, then restore it."
+                    )
             elif paper_id not in {p["id"] for p in ad.filter_papers(
                 fetched, include_replacements=cfg().include_replacements
             )}:

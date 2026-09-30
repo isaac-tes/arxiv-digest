@@ -1408,6 +1408,32 @@ def test_score_tab_rank_matches_papers_tab_issue_7(monkeypatch, tmp_path):
     assert any("rank **#1**" in s.value for s in at.success)
 
 
+@pytest.mark.parametrize("hidden_by", ["top-n", "day-filter"])
+def test_score_tab_does_not_promise_missing_restore_button(monkeypatch, tmp_path, hidden_by):
+    import json
+
+    papers = (
+        [_card_paper("2609.00001", "Monday paper", section="Mon, 28 Sep 2026"),
+         _card_paper("2609.00002", "Tuesday paper", section="Tue, 29 Sep 2026")]
+        if hidden_by == "day-filter"
+        else [_card_paper("2609.00001", "Paper A"), _card_paper("2609.00002", "Paper B")]
+    )
+    at = _score_tab_app(monkeypatch, tmp_path, papers)
+    removed_file = tmp_path / ".arxiv_scraper" / "removed_papers.json"
+    removed_file.parent.mkdir(parents=True, exist_ok=True)
+    removed_file.write_text(json.dumps(["2609.00002"]))
+    if hidden_by == "top-n":
+        at.session_state.cfg.top_n = 1
+    at.run(timeout=15)
+    if hidden_by == "day-filter":
+        at.selectbox(key="papers_day").set_value("Mon, 28 Sep 2026").run(timeout=15)
+
+    _score(at, "2609.00002")
+
+    assert any("adjust the papers tab filters or increase top n" in i.value.lower() for i in at.info)
+    assert not list(at.exception)
+
+
 def test_score_tab_follows_papers_tab_day_picker_issue_7(monkeypatch, tmp_path):
     """#7: with a single day picked in the Papers tab, Score a paper ranks that day."""
     import arxiv_digest as ad

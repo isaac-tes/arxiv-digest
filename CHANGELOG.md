@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - **Score a paper reports the rank the Papers tab shows** (#7). Both tabs now build the digest the same way: replacement submissions and the Papers tab's Day choice are applied before ranking, and a hidden paper is explained as a replacement, another day, removed, or below the top-N cutoff.
 - **Score a paper no longer crashes for a paper also listed in the Papers tab** (#8). Each tab's *Save to Zotero* popover now has its own widget keys.
+- **Score a paper only offers a real Restore action.** If the removed paper is hidden by current filters or the top-N cutoff, the message tells you how to reveal it in the Papers tab first.
 - **Loaded GUI profiles survive reloads.** A fresh session restores the last loaded profile and its saved config before rendering the digest, keeping that profile's removal list active.
 - **Profile names stay within their storage directories.** Path-like names and the reserved `(unsaved)` are rejected before profile and removal files are read, written, or deleted.
 - **The sidebar profile selector follows the loaded config.** Switching profiles or loading a preset/import clears stale widget state before the next render.
