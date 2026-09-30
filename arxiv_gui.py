@@ -35,12 +35,31 @@ PROJECT_CONFIG = ad.DEFAULT_CONFIG_PATH
 
 # ────────────────────────── Profile management ──────────────────────────
 
+def _validate_profile_name(name: str) -> str:
+    if (
+        not name
+        or name != name.strip()
+        or name in {".", ".."}
+        or any(char in name for char in ("/", "\\", ":", "\0"))
+    ):
+        raise ValueError("Profile names must be a single path-free file name.")
+    return name
+
+
 def list_profiles() -> list[str]:
     PROFILES_DIR.mkdir(parents=True, exist_ok=True)
-    return sorted(p.stem for p in PROFILES_DIR.glob("*.json"))
+    profiles: list[str] = []
+    for path in PROFILES_DIR.glob("*.json"):
+        try:
+            _validate_profile_name(path.stem)
+        except ValueError:
+            continue
+        profiles.append(path.stem)
+    return sorted(profiles)
 
 
 def save_profile(cfg: ad.Config, name: str) -> Path:
+    name = _validate_profile_name(name)
     PROFILES_DIR.mkdir(parents=True, exist_ok=True)
     target = PROFILES_DIR / f"{name}.json"
     cfg.dump(target)
@@ -48,13 +67,16 @@ def save_profile(cfg: ad.Config, name: str) -> Path:
 
 
 def load_profile(name: str) -> ad.Config:
+    name = _validate_profile_name(name)
     return ad.Config.load(PROFILES_DIR / f"{name}.json")
 
 
 def _saved_active_profile() -> str | None:
     try:
-        name = ACTIVE_PROFILE_PATH.read_text(encoding="utf-8").strip()
-    except (OSError, UnicodeError):
+        name = _validate_profile_name(
+            ACTIVE_PROFILE_PATH.read_text(encoding="utf-8").strip()
+        )
+    except (OSError, UnicodeError, ValueError):
         return None
     return name if name in list_profiles() else None
 
@@ -63,6 +85,7 @@ def _persist_active_profile(name: str | None) -> None:
     if name is None:
         ACTIVE_PROFILE_PATH.unlink(missing_ok=True)
         return
+    name = _validate_profile_name(name)
     ACTIVE_PROFILE_PATH.parent.mkdir(parents=True, exist_ok=True)
     fd, tmp = tempfile.mkstemp(
         dir=ACTIVE_PROFILE_PATH.parent,
@@ -81,9 +104,11 @@ def _persist_active_profile(name: str | None) -> None:
 def _set_loaded_profile(name: str | None) -> None:
     _persist_active_profile(name)
     st.session_state.loaded_profile = name
+    st.session_state.reset_active_profile_widget = True
 
 
 def delete_profile(name: str) -> None:
+    name = _validate_profile_name(name)
     (PROFILES_DIR / f"{name}.json").unlink(missing_ok=True)
     with _removed_ids_lock():  # else an in-flight update could recreate the list
         removed_papers_path(name).unlink(missing_ok=True)
@@ -93,7 +118,9 @@ def delete_profile(name: str) -> None:
 
 def removed_papers_path(profile: str | None) -> Path:
     """Each profile has its own removal list; with no profile loaded, a shared one."""
-    return REMOVED_DIR / f"{profile}.json" if profile else REMOVED_PAPERS_PATH
+    if profile is None:
+        return REMOVED_PAPERS_PATH
+    return REMOVED_DIR / f"{_validate_profile_name(profile)}.json"
 
 
 @st.cache_resource
@@ -400,6 +427,8 @@ _FONT_DEFAULT_VERSION = "2"
 
 
 def init_state():
+    if st.session_state.pop("reset_active_profile_widget", False):
+        st.session_state.pop("active_profile", None)
     if "loaded_profile" not in st.session_state:
         st.session_state.loaded_profile = _saved_active_profile()
     if "cfg" not in st.session_state:
@@ -1303,15 +1332,19 @@ def render_profiles_tab():
 
     name = st.text_input("Save current config as", placeholder="e.g. topology-mode")
     if st.button("Save", disabled=not name.strip()):
-        target = name.strip()
-        save_profile(cfg(), target)
-        # The saved profile inherits what is hidden now, so nothing reappears.
-        carried = load_removed_ids(loaded_profile())
-        if carried:
-            _update_removed_ids_or_warn(target, add=carried)
-        _set_loaded_profile(target)
-        st.success(f"Saved profile '{target}'.")
-        st.rerun()
+        try:
+            target = _validate_profile_name(name.strip())
+        except ValueError as exc:
+            st.error(str(exc))
+        else:
+            save_profile(cfg(), target)
+            # The saved profile inherits what is hidden now, so nothing reappears.
+            carried = load_removed_ids(loaded_profile())
+            if carried:
+                _update_removed_ids_or_warn(target, add=carried)
+            _set_loaded_profile(target)
+            st.success(f"Saved profile '{target}'.")
+            st.rerun()
 
     profiles = list_profiles()
     if profiles:

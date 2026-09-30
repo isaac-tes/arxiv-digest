@@ -891,6 +891,68 @@ def test_loaded_profile_and_removals_survive_new_session(monkeypatch, tmp_path):
     assert not list(reloaded.exception)
 
 
+def test_active_profile_widget_tracks_profile_changes(monkeypatch, tmp_path):
+    from streamlit.testing.v1 import AppTest
+
+    _tmp_home(monkeypatch, tmp_path)
+    _profiles_dir(tmp_path, "atoms", "topology")
+    at = AppTest.from_file("arxiv_gui.py").run(timeout=15)
+
+    at.sidebar.selectbox(key="active_profile").set_value("atoms").run(timeout=15)
+    _click_label(at, "Load profile")
+    at.run(timeout=15)
+    assert at.sidebar.selectbox(key="active_profile").value == "atoms"
+
+    at.button(key="load_topology").click().run(timeout=15)
+    assert at.session_state["loaded_profile"] == "topology"
+    assert at.sidebar.selectbox(key="active_profile").value == "topology"
+
+    at.button(key="preset_load").click().run(timeout=15)
+    assert at.session_state["loaded_profile"] is None
+    assert at.sidebar.selectbox(key="active_profile").value == "(unsaved)"
+    assert not list(at.exception)
+
+
+def test_profile_name_cannot_escape_storage(monkeypatch, tmp_path):
+    from streamlit.testing.v1 import AppTest
+
+    _tmp_home(monkeypatch, tmp_path)
+    at = AppTest.from_file("arxiv_gui.py").run(timeout=15)
+    name_box = next(t for t in at.text_input if t.label == "Save current config as")
+    name_box.set_value("../outside").run(timeout=15)
+    _click_label(at, "Save", keyless=True)
+    at.run(timeout=15)
+
+    assert not (tmp_path / ".arxiv_scraper" / "outside.json").exists()
+    assert at.session_state["loaded_profile"] is None
+    assert any("single path-free file name" in e.value for e in at.error)
+    assert not list(at.exception)
+
+
+def test_profile_path_helpers_reject_traversal(monkeypatch, tmp_path):
+    import arxiv_digest as ad
+    import arxiv_gui
+
+    home = tmp_path / ".arxiv_scraper"
+    outside = home / "outside.json"
+    outside.parent.mkdir(parents=True)
+    sentinel = ad.Config()
+    sentinel.core_keywords = ["sentinel"]
+    sentinel.dump(outside)
+    monkeypatch.setattr(arxiv_gui, "PROFILES_DIR", home / "profiles")
+    monkeypatch.setattr(arxiv_gui, "REMOVED_DIR", home / "removed")
+
+    with pytest.raises(ValueError, match="single path-free file name"):
+        arxiv_gui.save_profile(ad.Config(), "../outside")
+    with pytest.raises(ValueError, match="single path-free file name"):
+        arxiv_gui.load_profile("../outside")
+    with pytest.raises(ValueError, match="single path-free file name"):
+        arxiv_gui.delete_profile("../outside")
+    with pytest.raises(ValueError, match="single path-free file name"):
+        arxiv_gui.removed_papers_path("../outside")
+    assert ad.Config.load(outside).core_keywords == ["sentinel"]
+
+
 def test_save_as_carries_removals_and_delete_drops_them(monkeypatch, tmp_path):
     import json
 
