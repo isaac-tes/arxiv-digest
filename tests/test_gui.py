@@ -49,7 +49,7 @@ def test_zotero_save_callback_blocks_concurrent_save_in_flight(monkeypatch):
 
     # A save is already in flight for this paper (its id is in zotero_saving).
     arxiv_gui.st.session_state.zotero_saving = {"2608.16520"}
-    arxiv_gui.st.session_state["zotero_col_2608.16520"] = "My Library"
+    arxiv_gui.st.session_state["zotero_col_card_2608.16520"] = "My Library"
 
     arxiv_gui._do_zotero_save("2608.16520", "Test paper")
     assert calls["n"] == 0
@@ -74,7 +74,7 @@ def test_zotero_save_callback_allows_resave(monkeypatch):
 
     arxiv_gui.st.session_state.zotero_saving = set()
     arxiv_gui.st.session_state.zotero_saved_at = {}
-    arxiv_gui.st.session_state["zotero_col_2608.16520"] = "(no collection)"
+    arxiv_gui.st.session_state["zotero_col_card_2608.16520"] = "(no collection)"
 
     # Second save must be allowed (no saved_papers guard anymore).
     arxiv_gui._do_zotero_save("2608.16520", "Test paper")
@@ -1365,3 +1365,69 @@ def test_gui_add_preset_merges_cfg():
     authors = [a.lower() for a in at.session_state["cfg"].named_authors]
     assert "schnell" in authors
     assert len(authors) >= before  # union never shrinks
+
+
+def _score(at, raw):
+    next(t for t in at.text_input if t.label == "arXiv link or ID").set_value(raw).run(timeout=15)
+    _click_label(at, "Score this paper")
+    at.run(timeout=15)
+
+
+def _score_tab_app(monkeypatch, tmp_path, papers):
+    import arxiv_digest as ad
+    import zotero_bridge as zb
+    from streamlit.testing.v1 import AppTest
+
+    _tmp_home(monkeypatch, tmp_path)
+    monkeypatch.setattr(
+        zb, "fetch_arxiv_atom", lambda pid: _atom_entry("2026-09-28T00:00:00Z", ["quant-ph"], pid)
+    )
+    at = AppTest.from_file("arxiv_gui.py")
+    at.session_state["cfg"] = ad.Config()  # replacements hidden, like the Papers tab default
+    at.session_state["papers"] = papers
+    return at.run(timeout=15)
+
+
+def test_score_tab_rank_matches_papers_tab_issue_7(monkeypatch, tmp_path):
+    """#7: Score a paper must rank the same filtered list the Papers tab shows."""
+    import arxiv_digest as ad
+
+    kw = ad._default_core_keywords()[0]  # the replacement outscores the new paper
+    at = _score_tab_app(monkeypatch, tmp_path, [
+        _card_paper("2609.00001", "A new paper"),
+        _card_paper("2609.00002", f"A replaced paper on {kw}",
+                    section="Replacement submissions (showing 1 of 1 entries)"),
+    ])
+    assert _ranked_titles(at) == ["1. A new paper"]
+
+    _score(at, "2609.00002")
+    assert not any("is** in the current digest" in s.value for s in at.success)
+    assert any("replacement" in i.value.lower() for i in at.info)
+
+    _score(at, "2609.00001")
+    assert any("rank **#1**" in s.value for s in at.success)
+
+
+def test_score_tab_follows_papers_tab_day_picker_issue_7(monkeypatch, tmp_path):
+    """#7: with a single day picked in the Papers tab, Score a paper ranks that day."""
+    import arxiv_digest as ad
+
+    kw = ad._default_core_keywords()[0]
+    at = _score_tab_app(monkeypatch, tmp_path, [
+        _card_paper("2609.00001", "Monday paper", section="Mon, 28 Sep 2026"),
+        _card_paper("2609.00002", f"Tuesday paper on {kw}", section="Tue, 29 Sep 2026"),
+    ])
+    at.selectbox(key="papers_day").set_value("Mon, 28 Sep 2026").run(timeout=15)
+    assert _ranked_titles(at) == ["1. Monday paper"]
+
+    _score(at, "2609.00001")
+    assert any("rank **#1**" in s.value for s in at.success)
+    _score(at, "2609.00002")
+    assert any("day" in i.value.lower() for i in at.info)
+
+
+def test_score_tab_zotero_button_does_not_clash_with_card_issue_8(monkeypatch, tmp_path):
+    """#8: scoring a paper also shown in the Papers tab must not duplicate widget keys."""
+    at = _score_tab_app(monkeypatch, tmp_path, [_card_paper("2609.00001", "A new paper")])
+    _score(at, "2609.00001")
+    assert not list(at.exception), [e.value for e in at.exception]
