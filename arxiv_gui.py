@@ -192,7 +192,7 @@ def update_removed_ids(
         save_removed_ids(profile, _read_removed_ids(profile).union(add).difference(discard))
 
 
-def _update_removed_ids_or_warn(profile: str | None, **change: Iterable[str]) -> bool:
+def _update_removed_ids_or_warn(profile: str | None, **change: Iterable[str]) -> None:
     try:
         update_removed_ids(profile, **change)
     except (OSError, ValueError) as exc:
@@ -201,22 +201,21 @@ def _update_removed_ids_or_warn(profile: str | None, **change: Iterable[str]) ->
             "Nothing was changed; fix or delete the file.",
             icon="⚠️",
         )
-        return False
-    return True
 
 
 def _copy_removed_ids_or_warn(source: str | None, target: str) -> bool:
+    """Make `target`'s removal list an exact copy of `source`'s (Save as = snapshot)."""
     with _removed_ids_lock():
         try:
-            carried = _read_removed_ids(source)
+            save_removed_ids(target, _read_removed_ids(source))
         except (OSError, ValueError) as exc:
             st.toast(
-                f"Couldn't read removals for profile `{source or '(unsaved)'}` ({exc}). "
-                "Nothing was changed; fix or delete the file.",
+                f"Couldn't copy removals to profile `{target}` ({exc}). "
+                "Nothing was saved; fix or delete the file.",
                 icon="⚠️",
             )
             return False
-        return not carried or _update_removed_ids_or_warn(target, add=carried)
+        return True
 
 
 # ────────────────────────── Zotero bridge ──────────────────────────

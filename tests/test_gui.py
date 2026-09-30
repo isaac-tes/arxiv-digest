@@ -1054,6 +1054,31 @@ def test_save_as_stays_on_source_when_source_removal_list_is_unreadable(
     assert not list(at.exception)
 
 
+@pytest.mark.parametrize("stale", ['["old"]', "{"])
+def test_save_as_replaces_existing_target_removals(monkeypatch, tmp_path, stale):
+    import json
+
+    from streamlit.testing.v1 import AppTest
+
+    _tmp_home(monkeypatch, tmp_path)
+    target = tmp_path / ".arxiv_scraper" / "removed" / "topology.json"
+    target.parent.mkdir(parents=True)
+    target.write_text(stale)
+    at = AppTest.from_file("arxiv_gui.py")
+    at.session_state["papers"] = [_card_paper("p1", "Paper A"), _card_paper("p2", "Paper B")]
+    at.run(timeout=15)
+    at.button(key="remove_p1").click().run(timeout=15)
+
+    name_box = next(t for t in at.text_input if t.label == "Save current config as")
+    name_box.set_value("topology").run(timeout=15)
+    _click_label(at, "Save", keyless=True)
+    at.run(timeout=15)
+
+    assert at.session_state["loaded_profile"] == "topology"
+    assert json.loads(target.read_text()) == ["p1"]
+    assert not list(at.exception)
+
+
 def test_malformed_active_profile_falls_back_and_can_be_deleted(monkeypatch, tmp_path):
     import arxiv_digest as ad
     from streamlit.testing.v1 import AppTest
