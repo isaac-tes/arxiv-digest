@@ -4,4 +4,4 @@ The full release history lives in [CHANGELOG.md](https://github.com/isaac-tes/ar
 
 ## Latest
 
-- **0.2.0 (2026-05-06)**: Streamlit GUI, configurable scoring weights, 74-test pytest suite, `uv tool install` support, mkdocs-material docs, GitHub Actions CI.
+- **0.6.3 (2026-09-30)**: GUI paper removal and restore, profile-scoped persistence, accurate Score a paper ranking, and independent Zotero controls.
