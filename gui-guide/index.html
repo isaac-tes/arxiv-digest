@@ -1213,14 +1213,14 @@ paper</strong>, <strong>Keywords</strong>, <strong>Authors</strong>, <strong>Low
 <strong>Profiles</strong> (plus the sidebar with Timeframe / Top N / Feeds / fetch controls
 and the Display + Zotero status sections).</p>
 <ul>
-<li><strong>Papers</strong>: ranked list, search box (filters by title / authors / abstract), MD + JSON download buttons. Per paper: rank, title, authors, subjects, section, summary, arXiv link, score badge, a <strong>Save to Zotero</strong> button, expandable score breakdown, expandable full abstract.</li>
+<li><strong>Papers</strong>: ranked list, search box (filters by title / authors / abstract), MD + JSON download buttons. Per paper: rank, title, authors, subjects, section, summary, arXiv link, score badge, a <strong>Save to Zotero</strong> button, a <strong>✕</strong> button to remove it from the list (the papers below move up and the next one fills the top N; removals are remembered per profile across reloads and later fetches, and can be restored from <em>Removed papers</em>), expandable score breakdown, expandable full abstract.</li>
 <li><strong>Score a paper</strong>: paste an arXiv link or ID to see how it would score under your current config, why it did (or didn't) appear in the digest, and save it to Zotero.</li>
 <li><strong>Keywords</strong>: spreadsheet-style editor for <code>core_keywords</code>. Each match adds the <em>Per-keyword bonus</em> (default +6).</li>
 <li><strong>Authors</strong>: same pattern for <code>named_authors</code>. Default +6 per match. Whole-word match by default (configurable in Scoring, like keywords).</li>
 <li><strong>Low priority</strong>: penalty list. If <em>any</em> term matches, the paper takes the <em>Low-priority penalty</em> (default −5), once, not per hit.</li>
 <li><strong>Feeds</strong>: <code>name → URL</code> editor. Add custom arXiv lists (e.g. <code>hep-th=https://arxiv.org/list/hep-th/new</code>). The <code>/new</code> / <code>/pastweek</code> suffix is rewritten by the timeframe selector.</li>
 <li><strong>Scoring</strong>: a <strong>Whole-word matching</strong> toggle (default on; untick for legacy substring matching), then number inputs for each weight: per-keyword bonus, per-author bonus, per-feed subject bonuses, low-priority penalty, long-abstract bonus, abstract-length threshold. <strong>Per-feed bonuses</strong>: every extra feed you add in the Feeds tab gets its own bonus field here (raise or lower how much a paper from that feed scores). Set to 0 to disable.</li>
-<li><strong>Profiles</strong>: save / load / export / import named configs. Files live in <code>~/.arxiv_scraper/profiles/&lt;name&gt;.json</code> and persist across project clones. <strong>Write project config</strong> dumps the current config to <code>arxiv_config.json</code> in the project root, which is what the CLI picks up on the next run. Use this to push GUI tweaks into your daily CLI digest.</li>
+<li><strong>Profiles</strong>: save / load / export / import named configs. Each profile keeps its own list of removed papers (under <code>~/.arxiv_scraper/removed/</code>). Files live in <code>~/.arxiv_scraper/profiles/&lt;name&gt;.json</code> and persist across project clones. <strong>Write project config</strong> dumps the current config to <code>arxiv_config.json</code> in the project root, which is what the CLI picks up on the next run. Use this to push GUI tweaks into your daily CLI digest.</li>
 </ul>
 <h2 id="highlighting">Highlighting<a class="headerlink" href="#highlighting" title="Permanent link">&para;</a></h2>
 <p>Matched terms are hover-highlighted in the Papers tab so you can see <em>why</em> a
@@ -1383,7 +1383,7 @@ edits first, otherwise they won't be included.</p>
     <span class="md-icon" title="Last update">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M21 13.1c-.1 0-.3.1-.4.2l-1 1 2.1 2.1 1-1c.2-.2.2-.6 0-.8l-1.3-1.3c-.1-.1-.2-.2-.4-.2m-1.9 1.8-6.1 6V23h2.1l6.1-6.1zM12.5 7v5.2l4 2.4-1 1L11 13V7zM11 21.9c-5.1-.5-9-4.8-9-9.9C2 6.5 6.5 2 12 2c5.3 0 9.6 4.1 10 9.3-.3-.1-.6-.2-1-.2s-.7.1-1 .2C19.6 7.2 16.2 4 12 4c-4.4 0-8 3.6-8 8 0 4.1 3.1 7.5 7.1 7.9l-.1.2z"/></svg>
     </span>
-    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="September 15, 2026 12:19:34 UTC"><span class="timeago" datetime="2026-09-15T12:19:34+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="September 15, 2026 12:19:34 UTC">2026-09-15</span>
+    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="September 30, 2026 12:39:51 UTC"><span class="timeago" datetime="2026-09-30T12:39:51+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="September 30, 2026 12:39:51 UTC">2026-09-30</span>
   </span>
 
     
