@@ -37,6 +37,19 @@ public struct DigestConfig: Codable, Sendable {
         set { data["timeframe"] = .string(newValue) }
     }
 
+    /// The arXiv feeds / cross-lists to fetch (e.g. `cond-mat.quant-gas`,
+    /// `quant-ph`). Editable in the Config tab.
+    public var defaultFeeds: [String] {
+        get { data["default_feeds"]?.arrayValue ?? [] }
+        set { data["default_feeds"] = .array(newValue.map { .string($0) }) }
+    }
+
+    /// Known feed names from the config's `feeds` map, offered as suggestions
+    /// when choosing cross-lists.
+    public var availableFeedNames: [String] {
+        (data["feeds"]?.objectValue?.keys).map { Array($0).sorted() } ?? []
+    }
+
     // MARK: - Highlight appearance (mirrors the GUI's per-aspect colors/toggles)
 
     /// Per-aspect highlight color as a hex string. Defaults match the GUI's
@@ -135,6 +148,11 @@ public enum JSONValue: Codable, Sendable, Equatable {
         if case .array(let arr) = self {
             return arr.compactMap { $0.stringValue }
         }
+        return nil
+    }
+
+    public var objectValue: [String: JSONValue]? {
+        if case .object(let o) = self { return o }
         return nil
     }
 

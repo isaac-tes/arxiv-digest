@@ -11,6 +11,8 @@ struct PaperDetailView: View {
 
     @State private var result: ScoreResult?
     @State private var isLoading = false
+    @State private var isSavingZotero = false
+    @State private var zoteroAlert: String?
 
     private var terms: HighlightTerms {
         HighlightEngine.matchedTerms(for: paper, config: model.config)
@@ -87,6 +89,8 @@ struct PaperDetailView: View {
                     }
                     .padding(.top, 4)
                 }
+
+                zoteroSection
             }
             .padding()
         }
@@ -95,6 +99,48 @@ struct PaperDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         #endif
         .task { await load() }
+        .task { await model.refreshZoteroAvailability() }
+        .alert("Zotero", isPresented: zoteroAlertPresented) {
+            Button("OK", role: .cancel) { zoteroAlert = nil }
+        } message: {
+            Text(zoteroAlert ?? "")
+        }
+    }
+
+    /// "Save to Zotero", shown only when the server has a Web API key. When it
+    /// doesn't, an explanatory row keeps the feature discoverable without firing
+    /// a deep-link that can't actually create an item.
+    @ViewBuilder
+    private var zoteroSection: some View {
+        Divider()
+        switch model.zoteroAvailability {
+        case .web:
+            Button {
+                Task { await saveToZotero() }
+            } label: {
+                if isSavingZotero {
+                    HStack { ProgressView(); Text("Saving to Zotero…") }
+                } else {
+                    Label("Save to Zotero", systemImage: "tray.and.arrow.down")
+                }
+            }
+            .disabled(isSavingZotero)
+        case .unavailable:
+            Label("Zotero saving not configured on the server", systemImage: "info.circle")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private var zoteroAlertPresented: Binding<Bool> {
+        Binding(get: { zoteroAlert != nil }, set: { if !$0 { zoteroAlert = nil } })
+    }
+
+    private func saveToZotero() async {
+        isSavingZotero = true
+        defer { isSavingZotero = false }
+        let result = await model.saveToZotero(arxivId: paper.id)
+        zoteroAlert = result?.message ?? model.errorMessage ?? "Could not save to Zotero."
     }
 
     private func load() async {

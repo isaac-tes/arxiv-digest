@@ -53,10 +53,10 @@ def test_config_roundtrip(client):
 
 def test_config_patch_merges(client):
     client.put("/config", json={"data": {"core_keywords": ["floquet"]}})
-    patch = client.patch("/config", json={"data": {"named_authors": [""]}})
+    patch = client.patch("/config", json={"data": {"named_authors": ["einstein"]}})
     data = patch.json()["data"]
     assert data["core_keywords"] == ["floquet"]
-    assert data["named_authors"] == [""]
+    assert data["named_authors"] == ["einstein"]
 
 
 def test_presets_listed(client):
@@ -73,7 +73,7 @@ def test_lists_crud(client):
 
     add = client.post(
         f"/lists/{list_id}/papers",
-        json={"arxiv_id": "arXiv:2601.0001", "title": "A Floquet paper", "authors": "A. "},
+        json={"arxiv_id": "arXiv:2601.0001", "title": "A Floquet paper", "authors": "A. Einstein"},
     )
     assert add.status_code == 201
 

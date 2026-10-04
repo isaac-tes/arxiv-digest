@@ -21,6 +21,8 @@ final class AppModel {
 
     var isLoading = false
     var errorMessage: String?
+    /// Transient success note (e.g. "Saved ✓"), shown then cleared by views.
+    var statusMessage: String?
 
     /// UserDefaults key for the persisted backend URL (editable in Settings so
     /// the app can point at a Mac's LAN IP when running on a physical device).
@@ -49,12 +51,17 @@ final class AppModel {
 
     // MARK: - Digest
 
-    func loadDigest(timeframe: String = "pastweek", topN: Int? = nil, refresh: Bool = false) async {
+    /// Fetch using the current config's timeframe + top_n. The server resolves
+    /// feeds from the saved config, so changing feeds/timeframe requires a
+    /// `refresh` to bypass the 1h cache (see saveConfig).
+    func loadDigest(refresh: Bool = false) async {
         isLoading = true
         errorMessage = nil
         defer { isLoading = false }
         do {
-            digest = try await client.fetchDigest(timeframe: timeframe, topN: topN, refresh: refresh)
+            digest = try await client.fetchDigest(
+                timeframe: config.timeframe, topN: config.topN, refresh: refresh
+            )
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -70,9 +77,14 @@ final class AppModel {
         }
     }
 
+    /// Persist the config, then re-fetch the digest so new keywords / feeds /
+    /// timeframe are reflected in the rankings (refresh bypasses the 1h cache,
+    /// which is keyed on the request feeds, not the saved config).
     func saveConfig() async {
         do {
             config = try await client.putConfig(config)
+            statusMessage = "Saved ✓"
+            await loadDigest(refresh: true)
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -89,8 +101,42 @@ final class AppModel {
     func mergePreset(named name: String) async {
         do {
             config = try await client.mergePreset(named: name)
+            statusMessage = "Merged '\(name)'"
+            await loadDigest(refresh: true)
         } catch {
             errorMessage = error.localizedDescription
+        }
+    }
+
+    // MARK: - Zotero
+
+    /// Whether the server can save to Zotero (Web API key present). Refreshed by
+    /// `refreshZoteroAvailability`; drives whether the detail view offers the action.
+    var zoteroAvailability: ZoteroSaveAvailability = .unavailable
+
+    func refreshZoteroAvailability() async {
+        let status = (try? await client.zoteroStatus()) ?? [:]
+        zoteroAvailability = ZoteroPolicy.availability(from: status)
+    }
+
+    /// Save a paper to Zotero via the Web API. Only meaningful when
+    /// `zoteroAvailability == .web`; otherwise the server has no key and the
+    /// only alternative (a `zotero://select` deep-link) cannot create an item,
+    /// so we surface guidance instead of firing a link that saves nothing.
+    @discardableResult
+    func saveToZotero(arxivId: String) async -> ZoteroSaveResult? {
+        await refreshZoteroAvailability()
+        guard zoteroAvailability == .web else {
+            errorMessage = "Zotero saving isn't configured. Set ZOTERO_API_KEY and ZOTERO_LIBRARY_ID on the server."
+            return nil
+        }
+        do {
+            let result = try await client.saveToZotero(arxivId: arxivId, mode: .web)
+            statusMessage = result.message
+            return result
+        } catch {
+            errorMessage = error.localizedDescription
+            return nil
         }
     }
 

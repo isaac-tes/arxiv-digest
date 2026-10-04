@@ -29,7 +29,7 @@ final class HighlightEngineTests: XCTestCase {
         config.coreKeywords = ["floquet"]
         let paper = Paper(
             rank: 1, id: "arXiv:2601.0002", title: "Floquet engineering",
-            authors: "A. ", link: "https://arxiv.org/abs/2601.0002",
+            authors: "A. Einstein", link: "https://arxiv.org/abs/2601.0002",
             subjects: "cond-mat.quant-gas", section: "New", summary: "Driven systems", score: 6
         )
         let terms = HighlightEngine.matchedTerms(for: paper, config: config)
@@ -44,7 +44,7 @@ final class ModelCodableTests: XCTestCase {
           "papers": [
             {
               "rank": 1, "id": "arXiv:2601.0001", "title": "A paper",
-              "authors": "A. ", "link": "https://arxiv.org/abs/2601.0001",
+              "authors": "A. Einstein", "link": "https://arxiv.org/abs/2601.0001",
               "subjects": "cond-mat.quant-gas", "section": "New",
               "summary": "Summary", "score": 6
             }
@@ -77,7 +77,7 @@ final class ModelCodableTests: XCTestCase {
           "signals": {
             "keyword": {
               "keywords": [["floquet", 6], ["anyon", 6]],
-              "authors": [[ 6]],
+              "authors": [["einstein", 6]],
               "subjects": {"cond-mat.quant-gas": 4},
               "low_priority_hits": ["photonic"],
               "low_priority_penalty": -5,
@@ -92,7 +92,7 @@ final class ModelCodableTests: XCTestCase {
         let keyword = breakdown.signals["keyword"]
         XCTAssertEqual(keyword?.keywords?.first?.term, "floquet")
         XCTAssertEqual(keyword?.keywords?.first?.weight, 6)
-        XCTAssertEqual(keyword?.authors?.first?.term, "")
+        XCTAssertEqual(keyword?.authors?.first?.term, "einstein")
         XCTAssertEqual(keyword?.subjects?["cond-mat.quant-gas"], 4)
         XCTAssertEqual(breakdown.total, 18)
     }

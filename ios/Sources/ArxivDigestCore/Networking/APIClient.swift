@@ -187,6 +187,21 @@ public struct APIClient: Sendable {
     public func zoteroStatus() async throws -> [String: Bool] {
         try await request("GET", "zotero/status")
     }
+
+    public func saveToZotero(arxivId: String, mode: ZoteroMode, collectionKey: String? = nil) async throws -> ZoteroSaveResult {
+        struct Body: Codable {
+            let arxivId: String
+            let mode: String
+            let collectionKey: String?
+            enum CodingKeys: String, CodingKey {
+                case arxivId = "arxiv_id"
+                case mode
+                case collectionKey = "collection_key"
+            }
+        }
+        return try await request("POST", "zotero/save",
+                                 body: Body(arxivId: arxivId, mode: mode.rawValue, collectionKey: collectionKey))
+    }
 }
 
 /// Used for endpoints that return an empty body (e.g. 204).

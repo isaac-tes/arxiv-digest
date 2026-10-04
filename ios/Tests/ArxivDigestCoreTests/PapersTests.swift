@@ -9,7 +9,7 @@ private func makePaper(rank: Int, title: String, authors: String, summary: Strin
 
 final class PaperSearchTests: XCTestCase {
     private let papers = [
-        makePaper(rank: 1, title: "Floquet engineering", authors: "A. ", summary: "driven lattices"),
+        makePaper(rank: 1, title: "Floquet engineering", authors: "A. Einstein", summary: "driven lattices"),
         makePaper(rank: 2, title: "Anyon statistics", authors: "I. Bloch", summary: "fractional excitations"),
         makePaper(rank: 3, title: "Tensor networks", authors: "F. Verstraete", summary: "DMRG methods"),
     ]
@@ -57,6 +57,40 @@ final class ConfigAppearanceTests: XCTestCase {
         XCTAssertTrue(cfg.fontColor(for: .keyword))
     }
 
+    func testFeedsRoundTripAndAvailableNames() throws {
+        let json = """
+        {"default_feeds": ["cond-mat.quant-gas", "quant-ph"],
+         "feeds": {"cond-mat.quant-gas": "u1", "quant-ph": "u2", "cond-mat": "u3"}}
+        """.data(using: .utf8)!
+        let inner = try JSONDecoder().decode([String: JSONValue].self, from: json)
+        var cfg = DigestConfig(data: inner)
+        XCTAssertEqual(cfg.defaultFeeds, ["cond-mat.quant-gas", "quant-ph"])
+        XCTAssertEqual(cfg.availableFeedNames, ["cond-mat", "cond-mat.quant-gas", "quant-ph"])
+        cfg.defaultFeeds = ["cond-mat.mes-hall"]
+        XCTAssertEqual(cfg.defaultFeeds, ["cond-mat.mes-hall"])
+    }
+
+    func testZoteroSaveResultDecoding() throws {
+        let json = """
+        {"ok": true, "mode": "deeplink", "message": "Open in Zotero app",
+         "deep_link": "zotero://select/items/2601.1"}
+        """.data(using: .utf8)!
+        let r = try JSONDecoder().decode(ZoteroSaveResult.self, from: json)
+        XCTAssertTrue(r.ok)
+        XCTAssertEqual(r.mode, "deeplink")
+        XCTAssertEqual(r.deepLink, "zotero://select/items/2601.1")
+    }
+
+    // The web-API path is the only one that actually creates a Zotero item;
+    // the server's `deeplink` mode returns a `zotero://select/...` link that can
+    // only select a *pre-existing* item, so we treat "no web API" as unavailable
+    // rather than firing a link that silently saves nothing.
+    func testZoteroPolicyAvailability() {
+        XCTAssertEqual(ZoteroPolicy.availability(from: ["web_api_available": true]), .web)
+        XCTAssertEqual(ZoteroPolicy.availability(from: ["web_api_available": false]), .unavailable)
+        XCTAssertEqual(ZoteroPolicy.availability(from: [:]), .unavailable)
+    }
+
     func testHighlightTogglesRoundTrip() {
         var cfg = DigestConfig()
         cfg.highlightAuthors = false
@@ -68,5 +102,59 @@ final class ConfigAppearanceTests: XCTestCase {
         let decoded = try! JSONDecoder().decode(DigestConfig.self, from: data)
         XCTAssertFalse(decoded.highlightAuthors)
         XCTAssertEqual(decoded.color(for: .keyword), cfg.color(for: .keyword))
+    }
+}
+
+final class APIClientZoteroTests: XCTestCase {
+    override func setUp() {
+        super.setUp()
+        MockURLProtocol.reset()
+    }
+
+    private func makeClient() -> APIClient {
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [MockURLProtocol.self]
+        let session = URLSession(configuration: config)
+        return APIClient(baseURL: URL(string: "http://127.0.0.1:8000")!, session: session)
+    }
+
+    func testSaveToZoteroPostsSnakeCaseBodyAndDecodes() async throws {
+        MockURLProtocol.handler = { request in
+            XCTAssertEqual(request.httpMethod, "POST")
+            XCTAssertEqual(request.url?.path, "/zotero/save")
+            let bodyData = request.bodyData ?? Data()
+            let obj = try XCTUnwrap(try JSONSerialization.jsonObject(with: bodyData) as? [String: Any])
+            XCTAssertEqual(obj["arxiv_id"] as? String, "2601.1")
+            XCTAssertEqual(obj["mode"] as? String, "web")
+            let body = #"{"ok": true, "mode": "web", "message": "Saved to Zotero"}"#.data(using: .utf8)!
+            let resp = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            return (resp, body)
+        }
+        let result = try await makeClient().saveToZotero(arxivId: "2601.1", mode: .web)
+        XCTAssertTrue(result.ok)
+        XCTAssertEqual(result.mode, "web")
+        XCTAssertNil(result.deepLink)
+    }
+}
+
+/// Reads a `URLRequest`'s body even when `URLSession` moved it into
+/// `httpBodyStream` (which it does for the streamed POST bodies our client
+/// sends), so tests can assert on the JSON payload.
+extension URLRequest {
+    var bodyData: Data? {
+        if let httpBody { return httpBody }
+        guard let stream = httpBodyStream else { return nil }
+        stream.open()
+        defer { stream.close() }
+        var data = Data()
+        let bufSize = 4096
+        let buffer = UnsafeMutablePointer<UInt8>.allocate(capacity: bufSize)
+        defer { buffer.deallocate() }
+        while stream.hasBytesAvailable {
+            let read = stream.read(buffer, maxLength: bufSize)
+            if read <= 0 { break }
+            data.append(buffer, count: read)
+        }
+        return data
     }
 }

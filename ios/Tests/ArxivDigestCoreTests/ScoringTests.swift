@@ -12,7 +12,7 @@ final class ScoreResultTests: XCTestCase {
           "paper": {
             "id": "2601.00123",
             "title": "Floquet engineering of anyons",
-            "authors": "A. , I. Bloch",
+            "authors": "A. Einstein, I. Bloch",
             "link": "https://arxiv.org/abs/2601.00123",
             "subjects": "cond-mat.quant-gas, quant-ph",
             "section": "Fri, 19 Jun 2026",
@@ -22,7 +22,7 @@ final class ScoreResultTests: XCTestCase {
             "signals": {
               "keyword": {
                 "keywords": [["floquet", 6], ["anyon", 6]],
-                "authors": [[ 6]],
+                "authors": [["einstein", 6]],
                 "subjects": {"cond-mat.quant-gas": 4},
                 "low_priority_hits": [],
                 "low_priority_penalty": 0,
