@@ -1,9 +1,15 @@
-"""Config router: per-user config CRUD + starter presets."""
+"""Config router: per-user config CRUD + starter presets.
+
+Every response carries the *effective* config: the stored blob (or the default
+config file, or built-in defaults) hydrated through `arxiv_digest.Config`, so
+the app edits exactly the values the scorer uses, with every field present.
+"""
 
 from __future__ import annotations
 
 import json
-from pathlib import Path
+from dataclasses import asdict
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -12,8 +18,8 @@ from ..auth import get_current_user
 from ..db import get_db
 from ..models import Config as ConfigModel
 from ..models import User
-from ..schemas import ConfigOut, ConfigUpdate
-from ..scoring import config_from_dict
+from ..schemas import ConfigOut, ConfigUpdate, PresetInfo
+from ..scoring import config_from_dict, load_user_config
 
 router = APIRouter(prefix="/config", tags=["config"])
 
@@ -28,25 +34,24 @@ def _get_or_create(db: Session, user: User) -> ConfigModel:
     return row
 
 
+def _hydrate(data: dict[str, Any]) -> dict[str, Any]:
+    """Validate a config blob and return it with every field filled in."""
+    try:
+        return asdict(config_from_dict(data))
+    except (TypeError, ValueError, AttributeError) as exc:
+        raise HTTPException(status_code=422, detail=f"Invalid config: {exc}") from exc
+
+
+def _store(db: Session, user: User, data: dict[str, Any]) -> ConfigOut:
+    row = _get_or_create(db, user)
+    row.data = json.dumps(data, ensure_ascii=False)
+    db.commit()
+    return ConfigOut(data=data)
+
+
 @router.get("", response_model=ConfigOut)
 def get_config(user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> ConfigOut:
-    row = _get_or_create(db, user)
-    stored = json.loads(row.data or "{}")
-    if stored:
-        return ConfigOut(data=stored)
-
-    # No stored config: fall back to the default config file (e.g. a saved GUI
-    # profile) so the app highlights with the same colors/keywords as the web GUI.
-    from ..settings import get_settings
-
-    default_path = get_settings().default_config_path
-    if default_path:
-        path = Path(default_path).expanduser()
-        if path.exists():
-            with path.open("r", encoding="utf-8") as fh:
-                return ConfigOut(data=json.load(fh))
-
-    return ConfigOut(data={})
+    return ConfigOut(data=asdict(load_user_config(db, user)))
 
 
 @router.put("", response_model=ConfigOut)
@@ -55,11 +60,7 @@ def put_config(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> ConfigOut:
-    row = _get_or_create(db, user)
-    row.data = json.dumps(body.data, ensure_ascii=False)
-    db.commit()
-    db.refresh(row)
-    return ConfigOut(data=json.loads(row.data))
+    return _store(db, user, _hydrate(body.data))
 
 
 @router.patch("", response_model=ConfigOut)
@@ -68,13 +69,16 @@ def patch_config(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> ConfigOut:
-    row = _get_or_create(db, user)
-    current = json.loads(row.data or "{}")
-    current.update(body.data)
-    row.data = json.dumps(current, ensure_ascii=False)
-    db.commit()
-    db.refresh(row)
-    return ConfigOut(data=json.loads(row.data))
+    current = asdict(load_user_config(db, user))
+    return _store(db, user, _hydrate({**current, **body.data}))
+
+
+@router.get("/defaults", response_model=ConfigOut)
+def get_defaults() -> ConfigOut:
+    """Built-in defaults, for the app's per-section "Reset to defaults"."""
+    from arxiv_digest import Config
+
+    return ConfigOut(data=asdict(Config()))
 
 
 @router.get("/presets", response_model=list[str])
@@ -84,27 +88,40 @@ def list_presets() -> list[str]:
     return preset_names()
 
 
+@router.get("/presets/info", response_model=list[PresetInfo])
+def list_preset_info() -> list[PresetInfo]:
+    from arxiv_digest import preset_description, preset_names
+
+    return [PresetInfo(name=n, description=preset_description(n)) for n in preset_names()]
+
+
 @router.post("/presets/{name}/merge", response_model=ConfigOut)
 def merge_preset(
     name: str,
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> ConfigOut:
-    from arxiv_digest import merge_preset
+    """GUI "Add preset": union the preset into the current config."""
+    from arxiv_digest import merge_preset as ad_merge_preset
 
-    row = _get_or_create(db, user)
-    cfg = config_from_dict(json.loads(row.data or "{}"))
     try:
-        merged = merge_preset(cfg, name)
+        merged = ad_merge_preset(load_user_config(db, user), name)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=f"Unknown preset '{name}'") from exc
-    row.data = json.dumps(_config_to_dict(merged), ensure_ascii=False)
-    db.commit()
-    db.refresh(row)
-    return ConfigOut(data=json.loads(row.data))
+    return _store(db, user, asdict(merged))
 
 
-def _config_to_dict(cfg) -> dict:
-    from dataclasses import asdict
+@router.post("/presets/{name}/load", response_model=ConfigOut)
+def load_preset(
+    name: str,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> ConfigOut:
+    """GUI "Load preset": replace the config with the preset (defaults elsewhere)."""
+    from arxiv_digest import preset_config
 
-    return asdict(cfg)
+    try:
+        cfg = preset_config(name)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=f"Unknown preset '{name}'") from exc
+    return _store(db, user, asdict(cfg))

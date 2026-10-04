@@ -1,8 +1,9 @@
 """Zotero router: save a paper to Zotero from mobile.
 
-Two modes (ADR 0005):
-- **web**: Zotero Web API — requires a zotero.org API key (works on iOS + Android).
-- **deeplink**: return a zotero:// deep-link for the Zotero iOS app.
+Web API only (ADR 0005, amended): requires a zotero.org API key on the server.
+The no-key path on iOS is the OS share sheet (Zotero's share extension), which
+needs no server. The old `deeplink` mode was removed: a `zotero://select` link
+can only select an existing item, so it saved nothing.
 
 The desktop GUI keeps its own local bridge (zotero_bridge.py); this endpoint is
 for the mobile apps.
@@ -27,10 +28,7 @@ ZOTERO_LIBRARY_ID = os.environ.get("ZOTERO_LIBRARY_ID", "")
 
 @router.get("/status")
 def zotero_status(user: User = Depends(get_current_user)) -> dict:
-    return {
-        "web_api_available": bool(ZOTERO_API_KEY and ZOTERO_LIBRARY_ID),
-        "deeplink_supported": True,
-    }
+    return {"web_api_available": bool(ZOTERO_API_KEY and ZOTERO_LIBRARY_ID)}
 
 
 @router.post("/save", response_model=ZoteroSaveResponse)
@@ -38,16 +36,6 @@ def save_to_zotero(
     body: ZoteroSaveRequest,
     user: User = Depends(get_current_user),
 ) -> ZoteroSaveResponse:
-    if body.mode == "deeplink":
-        # zotero://select/items/<key> — the Zotero iOS app handles this.
-        return ZoteroSaveResponse(
-            ok=True,
-            mode="deeplink",
-            message="Open in Zotero app",
-            deep_link=f"zotero://select/items/{body.arxiv_id}",
-        )
-
-    # Web API path.
     if not (ZOTERO_API_KEY and ZOTERO_LIBRARY_ID):
         raise HTTPException(
             status_code=503,
@@ -92,14 +80,15 @@ def save_to_zotero(
 
 
 def _creators(authors: str) -> list[dict]:
-    """Parse a comma-separated author string into Zotero creator objects."""
+    """Parse a comma-separated "First [Middle] Last" author string into Zotero
+    creator objects: the last token is the surname, the rest the given names."""
     out = []
     for part in (authors or "").split(","):
         part = part.strip()
         if not part:
             continue
         if " " in part:
-            last, first = part.rsplit(" ", 1)
+            first, last = part.rsplit(" ", 1)
             out.append({"creatorType": "author", "firstName": first, "lastName": last})
         else:
             out.append({"creatorType": "author", "lastName": part})

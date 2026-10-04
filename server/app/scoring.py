@@ -46,8 +46,9 @@ def load_user_config(db, user) -> Config:
     from .settings import get_settings
 
     row = db.query(ConfigModel).filter(ConfigModel.user_id == user.id).first()
-    if row and row.data:
-        return config_from_dict(json.loads(row.data))
+    stored = json.loads(row.data or "{}") if row else {}
+    if stored:
+        return config_from_dict(stored)
 
     default_path = get_settings().default_config_path
     if default_path:

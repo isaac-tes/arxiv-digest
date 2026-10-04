@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .db import init_db
-from .routers import auth, config, digest, feedback, lists, score, zotero
+from .routers import auth, config, digest, feedback, lists, removed, score, zotero
 from .settings import get_settings
 
 
@@ -37,6 +37,7 @@ def create_app() -> FastAPI:
 
     app.include_router(auth.router)
     app.include_router(digest.router)
+    app.include_router(removed.router)
     app.include_router(score.router)
     app.include_router(config.router)
     app.include_router(lists.router)

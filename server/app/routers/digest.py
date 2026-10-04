@@ -1,115 +1,207 @@
-"""Digest router: fetch, filter, score, rank papers."""
+"""Digest router: fetch, filter, score, rank papers (ADR 0008).
+
+The view this returns mirrors the GUI's Papers tab (`arxiv_gui._digest`):
+replacements are filtered, an optional announcement day is kept, the user's
+removed papers are skipped while walking the full ranking, and the walk stops
+at top-N. Score-a-paper ranks against the same view (see `digest_view`).
+"""
 
 from __future__ import annotations
 
 import threading
 import time
+from dataclasses import dataclass, field
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from fastapi import APIRouter, Depends
+import requests
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from ..auth import get_current_user
 from ..db import get_db
-from ..models import User
+from ..models import RemovedPaper, User
 from ..schemas import DigestResponse, PaperOut
-from ..scoring import load_user_config, score_paper
+from ..scoring import explain_paper, load_user_config
 
 router = APIRouter(prefix="/digest", tags=["digest"])
 
-# In-memory fetch cache (ADR/plan §11: "cache aggressively (1h)"). Scraping
-# several arXiv list pages for a pastweek digest takes 30–40s, which times out
-# mobile clients on every load; caching the fetched+scored papers keeps repeat
-# loads instant. Keyed by (user_id, timeframe, feeds); the top_n slice is
-# applied per-request so different top_n reuse the same fetch.
+# In-memory fetch cache ("cache aggressively (1h)"). A pastweek fetch queries
+# the export API per category with rate-limit pauses and can take 30 s+, which
+# times out mobile clients on every load. The cache holds the *raw* fetched
+# papers, keyed by (timeframe, resolved feed names); filtering, removal and
+# ranking run per request against the current config, so editing keywords,
+# weights, the day, or removals never re-fetches.
 _CACHE_TTL_SECONDS = 60 * 60
 _cache_lock = threading.Lock()
-_digest_cache: dict[tuple, tuple[float, list[dict[str, Any]]]] = {}
 
 
-def _fetch_scored_papers(cfg, feed_list: list[str] | None, timeframe: str) -> list[dict[str, Any]]:
-    from arxiv_digest import fetch_feeds, filter_papers
-
-    urls = _feed_urls(cfg, feed_list, timeframe)
-    papers = fetch_feeds(urls)
-    papers = filter_papers(papers, include_replacements=cfg.include_replacements)
-    for p in papers:
-        p["score"] = score_paper(p, cfg)
-    return papers
+@dataclass
+class FetchResult:
+    papers: list[dict[str, Any]]
+    notices: list[str] = field(default_factory=list)
+    fetched_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
 
-def _cached_scored_papers(
-    user_id: int, cfg, feed_list: list[str] | None, timeframe: str, refresh: bool
-) -> list[dict[str, Any]]:
-    key = (user_id, timeframe, tuple(feed_list) if feed_list else None)
+_fetch_cache: dict[tuple, tuple[float, FetchResult]] = {}
+
+
+def resolve_feed_names(cfg, feeds: list[str] | None) -> list[str]:
+    """Requested feeds (or the config's subscribed ones), known names/URLs only."""
+    names = feeds or cfg.default_feeds
+    return [n for n in names if n in cfg.feeds or n.startswith(("http://", "https://"))]
+
+
+def _fetch(cfg, names: list[str], timeframe: str) -> FetchResult:
+    """Fetch exactly like the CLI (`arxiv_digest.main`).
+
+    `pastweek` uses the export API for a true seven-day window
+    (`fetch_pastweek`); explicit URL feeds only work on the HTML path, so they
+    are skipped there. `today` scrapes the HTML /new listing.
+    """
+    import arxiv_digest as ad
+
+    notices: list[str] = []
+    if timeframe == "pastweek":
+        end = datetime.now(UTC)
+        start = end - timedelta(days=7)
+        api_names = [n for n in names if not n.startswith("http")]
+        papers = ad.fetch_pastweek(api_names, start, end, notices=notices)
+    else:
+        urls = [ad.feed_url(cfg.feeds[n], timeframe) if n in cfg.feeds else n for n in names]
+        papers = ad.fetch_feeds(urls)
+    return FetchResult(papers=papers, notices=notices)
+
+
+def cached_fetch(cfg, names: list[str], timeframe: str, refresh: bool = False) -> FetchResult:
+    key = (timeframe, tuple(names))
     now = time.monotonic()
     if not refresh:
         with _cache_lock:
-            hit = _digest_cache.get(key)
+            hit = _fetch_cache.get(key)
             if hit and (now - hit[0]) < _CACHE_TTL_SECONDS:
                 return hit[1]
-    papers = _fetch_scored_papers(cfg, feed_list, timeframe)
+    try:
+        result = _fetch(cfg, names, timeframe)
+    except requests.RequestException as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=f"arXiv fetch failed ({type(exc).__name__}). arXiv may be slow or down; try again in a moment.",
+        ) from exc
     with _cache_lock:
-        _digest_cache[key] = (now, papers)
-    return papers
+        _fetch_cache[key] = (now, result)
+    return result
 
 
-def _feed_urls(cfg, feeds: list[str] | None, timeframe: str) -> list[str]:
-    """Build arXiv listing URLs for the requested feeds + timeframe.
+def peek_cache(names: list[str], timeframe: str) -> FetchResult | None:
+    """The cached fetch for these feeds, if still fresh (never fetches)."""
+    with _cache_lock:
+        hit = _fetch_cache.get((timeframe, tuple(names)))
+    if hit and (time.monotonic() - hit[0]) < _CACHE_TTL_SECONDS:
+        return hit[1]
+    return None
 
-    Mirrors arxiv_digest.determine_feed's URL rewriting: /new = today,
-    /pastweek = last ~5 days.
+
+def removed_ids(db: Session, user: User) -> set[str]:
+    rows = db.query(RemovedPaper.arxiv_id).filter(RemovedPaper.user_id == user.id).all()
+    return {r[0] for r in rows}
+
+
+@dataclass
+class DigestView:
+    entries: list[dict[str, Any]]
+    removed: list[dict[str, Any]]
+    visible: list[dict[str, Any]]
+    filtered: list[dict[str, Any]]
+    day: str | None
+    available_days: list[str]
+
+
+def digest_view(
+    fetched: list[dict[str, Any]], cfg, removed: set[str], day: str | None, top_n: int
+) -> DigestView:
+    """The ranking the Papers tab shows. Port of `arxiv_gui._digest`.
+
+    A `day` no longer present in the fetch is dropped (the GUI does the same).
     """
-    suffix = "new" if timeframe == "today" else "pastweek"
-    names = feeds or cfg.default_feeds
-    urls: list[str] = []
-    for name in names:
-        if name in cfg.feeds:
-            base = cfg.feeds[name]
-            url = (
-                base.replace("/new", f"/{suffix}")
-                .replace("/recent", f"/{suffix}")
-                .replace("/pastweek", f"/{suffix}")
-            )
-            urls.append(url)
-        elif name.startswith("http"):
-            urls.append(name)
-    return urls
+    import arxiv_digest as ad
+
+    days = ad.available_day_labels(fetched)
+    if day not in days:
+        day = None
+    filtered = ad.filter_papers(
+        fetched, include_replacements=cfg.include_replacements, days=[day] if day else None
+    )
+    limit = max(top_n, 1)
+    entries: list[dict[str, Any]] = []
+    removed_entries: list[dict[str, Any]] = []
+    for e in ad.build_ranked_entries(filtered, cfg, top_n=len(filtered)):
+        if len(entries) == limit:
+            break
+        if e["id"] in removed:
+            removed_entries.append(e)
+        else:
+            entries.append({**e, "rank": len(entries) + 1})
+    visible = [p for p in filtered if p["id"] not in removed]
+    return DigestView(entries, removed_entries, visible, filtered, day, days)
+
+
+def _paper_out(entry: dict[str, Any], by_id: dict[str, dict], cfg) -> PaperOut:
+    full = by_id.get(entry["id"], {})
+    return PaperOut(
+        **entry,
+        abstract=full.get("abstract", "") or "",
+        breakdown=explain_paper(full, cfg) if full else None,
+    )
 
 
 @router.get("", response_model=DigestResponse)
 def get_digest(
-    timeframe: str = "pastweek",
+    timeframe: str | None = None,
     top_n: int | None = None,
     feeds: str | None = None,
+    day: str | None = None,
     refresh: bool = False,
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> DigestResponse:
-    from arxiv_digest import build_ranked_entries
-
     cfg = load_user_config(db, user)
-    feed_list = feeds.split(",") if feeds else None
+    timeframe = timeframe or cfg.timeframe
+    if timeframe not in ("today", "pastweek"):
+        raise HTTPException(status_code=422, detail="timeframe must be 'today' or 'pastweek'")
+    names = resolve_feed_names(cfg, feeds.split(",") if feeds else None)
+    limit = top_n or cfg.top_n
 
-    papers = _cached_scored_papers(user.id, cfg, feed_list, timeframe, refresh)
+    result = cached_fetch(cfg, names, timeframe, refresh)
+    view = digest_view(result.papers, cfg, removed_ids(db, user), day, limit)
+    by_id = {p["id"]: p for p in result.papers}
 
-    entries = build_ranked_entries(papers, cfg, top_n=top_n)
     return DigestResponse(
-        papers=[PaperOut(**e) for e in entries],
-        total_papers=len(papers),
-        requested_top=top_n or cfg.top_n,
+        papers=[_paper_out(e, by_id, cfg) for e in view.entries],
+        total_papers=len(view.visible),
+        requested_top=limit,
+        fetched_papers=len(result.papers),
+        hidden_by_filters=len(result.papers) - len(view.filtered),
+        removed=[_paper_out(e, by_id, cfg) for e in view.removed],
+        available_days=view.available_days,
+        day=view.day,
+        timeframe=timeframe,
+        feeds=names,
+        notices=result.notices,
+        fetched_at=result.fetched_at,
     )
 
 
 @router.post("/refresh", response_model=DigestResponse)
 def refresh_digest(
-    timeframe: str = "pastweek",
+    timeframe: str | None = None,
     top_n: int | None = None,
     feeds: str | None = None,
+    day: str | None = None,
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> DigestResponse:
-    """Force a refetch, bypassing the 1h cache (plan §4)."""
+    """Force a refetch, bypassing the 1h cache."""
     return get_digest(
-        timeframe=timeframe, top_n=top_n, feeds=feeds, refresh=True, user=user, db=db
+        timeframe=timeframe, top_n=top_n, feeds=feeds, day=day, refresh=True, user=user, db=db
     )

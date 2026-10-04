@@ -1,37 +1,10 @@
 """Tests for the digest service API.
 
-Uses a temporary SQLite DB and FastAPI's TestClient. No network calls hit arXiv
-(the digest endpoint's fetch is not exercised here; scoring/config/lists are).
+Uses a temporary SQLite DB and FastAPI's TestClient (set up in conftest.py).
+No network calls hit arXiv.
 """
 
 from __future__ import annotations
-
-import os
-import sys
-import tempfile
-from pathlib import Path
-
-import pytest
-
-# Repo root so arxiv_digest.py is importable.
-REPO_ROOT = Path(__file__).resolve().parent.parent.parent
-if str(REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(REPO_ROOT))
-
-# Point the server at a temp SQLite DB before importing the app.
-_tmpdir = tempfile.mkdtemp(prefix="digest-test-")
-os.environ["DIGEST_DATABASE_URL"] = f"sqlite:///{_tmpdir}/test.db"
-os.environ["DIGEST_MODE"] = "local"
-
-from fastapi.testclient import TestClient  # noqa: E402
-
-from app.main import app  # noqa: E402
-
-
-@pytest.fixture(scope="module")
-def client():
-    with TestClient(app) as c:
-        yield c
 
 
 def test_health(client):
@@ -100,11 +73,25 @@ def test_feedback_recorded(client):
 def test_zotero_status(client):
     resp = client.get("/zotero/status")
     assert resp.status_code == 200
-    assert resp.json()["deeplink_supported"] is True
+    assert resp.json() == {"web_api_available": False}
 
 
-def test_zotero_deeplink(client):
+def test_zotero_deeplink_mode_removed(client):
+    # The zotero://select link could not create an item (ADR 0005 amendment).
     resp = client.post("/zotero/save", json={"arxiv_id": "arXiv:2601.0001", "mode": "deeplink"})
-    assert resp.status_code == 200
-    assert resp.json()["mode"] == "deeplink"
-    assert resp.json()["deep_link"].startswith("zotero://")
+    assert resp.status_code == 422
+
+
+def test_zotero_web_without_key_is_503(client):
+    resp = client.post("/zotero/save", json={"arxiv_id": "2601.0001"})
+    assert resp.status_code == 503
+
+
+def test_zotero_creators_first_last():
+    from app.routers.zotero import _creators
+
+    assert _creators("Ada Q. Lovelace, Plato, Grace Hopper") == [
+        {"creatorType": "author", "firstName": "Ada Q.", "lastName": "Lovelace"},
+        {"creatorType": "author", "lastName": "Plato"},
+        {"creatorType": "author", "firstName": "Grace", "lastName": "Hopper"},
+    ]

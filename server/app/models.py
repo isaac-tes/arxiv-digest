@@ -80,3 +80,15 @@ class Feedback(Base):
     action: Mapped[str] = mapped_column(String(16))  # star | dismiss | penalize
     signal: Mapped[str] = mapped_column(String(32), default="keyword")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+
+
+class RemovedPaper(Base):
+    """A paper the user hid from the digest (ADR 0008). Not a score change."""
+
+    __tablename__ = "removed_papers"
+    __table_args__ = (UniqueConstraint("user_id", "arxiv_id", name="uq_removed_paper"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    arxiv_id: Mapped[str] = mapped_column(String(64))
+    removed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
