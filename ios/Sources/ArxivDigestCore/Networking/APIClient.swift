@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 
 /// Errors thrown by the API client.
 public enum APIError: Error, LocalizedError, Sendable {
@@ -41,7 +44,9 @@ public struct APIClient: Sendable {
             let config = URLSessionConfiguration.default
             config.timeoutIntervalForRequest = 120   // per-request inactivity
             config.timeoutIntervalForResource = 300  // whole-transfer ceiling
-            config.waitsForConnectivity = true
+            #if !canImport(FoundationNetworking)
+            config.waitsForConnectivity = true  // unavailable on Linux Foundation
+            #endif
             self.session = URLSession(configuration: config)
         }
     }

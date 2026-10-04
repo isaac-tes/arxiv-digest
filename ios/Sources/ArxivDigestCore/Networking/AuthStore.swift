@@ -1,3 +1,4 @@
+#if canImport(Security)
 import Foundation
 import Security
 
@@ -49,3 +50,4 @@ public struct AuthStore: Sendable {
         SecItemDelete(query as CFDictionary)
     }
 }
+#endif

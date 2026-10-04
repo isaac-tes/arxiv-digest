@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 
 /// A `URLProtocol` stub so `APIClient` can be tested without a live server.
 ///

@@ -1,5 +1,8 @@
 import XCTest
 @testable import ArxivDigestCore
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 
 private func makePaper(rank: Int, title: String, authors: String, summary: String) -> Paper {
     Paper(rank: rank, id: "id\(rank)", title: title, authors: authors,

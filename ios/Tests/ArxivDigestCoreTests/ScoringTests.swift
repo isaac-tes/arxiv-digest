@@ -1,5 +1,8 @@
 import XCTest
 @testable import ArxivDigestCore
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 
 /// Tests for the `/score` response decoding and the highlight-span engine that
 /// backs the app's keyword/author highlighting (web-GUI parity).
