@@ -1,6 +1,6 @@
 # ADR 0005 — Zotero Web API + deep-link on mobile
 
-- **Status**: Accepted
+- **Status**: Accepted, amended 2026-10-04 (see *Amendment* below)
 - **Date**: 2026-08-24
 
 ## Context
@@ -28,3 +28,15 @@ desktop GUI keeps the existing local bridge unchanged.
 - Requires the user to set up a zotero.org API key for the Web API path (mitigated by
   the deep-link fallback).
 - Two code paths to maintain on the client, but both are thin.
+
+## Amendment (2026-10-04): the no-key path is the share sheet
+
+The server-generated deep link this ADR described (`zotero://select/items/<id>`)
+cannot create an item: Zotero's `select` URI only selects an item that already
+exists, addressed by its Zotero item key, not by an arXiv id. It saved nothing.
+
+- The `deeplink` mode is removed from `/zotero/save`; the endpoint is Web-API only.
+- The no-key path on iOS is **Share to Zotero**: the app passes the arXiv page
+  URL to the OS share sheet, and the Zotero iOS app's share extension saves it
+  the way the Connector would. No server involvement.
+- Android, when it exists, will use its own share intent in the same way.
