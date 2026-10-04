@@ -69,7 +69,8 @@ uv run python arxiv_digest.py --timeframe pastweek --feed cond-mat --feed quant-
 uv run python arxiv_digest.py --list-config --no-config              # inspect built-in defaults
 uv run python arxiv_digest.py --timeframe today --include-replacements      # keep 'Replacement submissions'
 uv run streamlit run arxiv_gui.py                                    # Streamlit GUI
-uv run pytest                                                        # 135-test suite, ~1s, no network
+uv run mkdocs build --strict                                         # docs build / link check
+uv run pytest                                                        # 217-test suite, ~2s, no network
 ```
 
 CLI uses `--timeframe {today,pastweek}`. There are no `--today` / `--pastweek` / `--days` flags despite older docs — confirm with `--help`. `--include-replacements` keeps arXiv "Replacement submissions" (hidden by default; only present in the `today`/`/new` feed).
@@ -85,12 +86,32 @@ CLI uses `--timeframe {today,pastweek}`. There are no `--today` / `--pastweek` /
 5. **Rank & format** — `build_ranked_entries` sorts and slices to `top_n`; `format_digest` / `format_markdown` produce output strings.
 6. **Output** — stdout (always) + optional JSON/Markdown under `reports/`. GUI download buttons reuse the same formatters.
 
-Feed URLs encode the timeframe: `/new` = today, `/pastweek` = last ~5 days. `determine_feed` rewrites the suffix based on `--timeframe` (or `cfg.timeframe`). arXiv has no arbitrary-day URL, so the GUI day-picker is limited to the days `/pastweek` returns.
+Feed URLs encode the timeframe: `/new` = today, while `pastweek` uses a true seven-day submission window through the export API. The pure `feed_url()` helper rewrites a configured URL for the selected timeframe; `determine_feed` is a thin compatibility adapter. `fetch_pastweek()` is shared by the CLI and GUI, queries each selected category explicitly, and reconciles API results with arXiv's announcement sections. arXiv has no arbitrary-day URL, so the GUI day-picker is limited to the announcement sections present in the current fetch.
 
 **Starter presets** (`PRESETS` dict + `preset_names` / `preset_config` / `merge_preset`): three read-only built-in topic bundles (open-quantum-systems / quantum-many-body / floquet-topological), each keywords+authors+feeds+feed_weights. `preset_config(name)` builds a full `Config` (preset content, defaults elsewhere) — GUI **Load** / CLI `--preset` (replace). `merge_preset(cfg, name)` unions content onto `cfg` — GUI **Add** / CLI `--add-preset` (repeatable). `--list-presets` prints them. Presets never write to disk (local profile / `arxiv_config.json` intact) — in-memory only until Save/`--save-config`.
 
 `arxiv_config.json` is gitignored; defaults live in `_default_*` helpers (incl. `_default_feed_weights`) and `ScoringWeights()` near the top. Legacy configs (old `weights.*_subject` keys) auto-migrate into `feed_weights` via `_hydrate_feed_weights`. GUI profiles live in `~/.arxiv_scraper/profiles/<name>.json`; both profiles and the project config persist the full `Config`.
 
+Starter presets must remain generic and must not reintroduce personal or group-specific author names; `tests/test_presets.py::test_every_preset_has_authors` guards this boundary.
+
 GUI display: `arxiv_gui.py` hover-highlights authors (in the author list), and matched keywords/low-priority terms in the title + abstract via `_highlight_terms`; toggled by the three `highlight_*` config flags. The highlighters reuse the scorer's `ad.term_pattern` (honoring `word_boundary_matching`), so highlights and scores never diverge. Streamlit strips the `title` attribute, so tooltips use CSS (`.tip`/`.hl-tip`), not `title=`.
 
-Tests live in `tests/`; run with `uv run pytest` (135 tests). `requests.get` is monkey-patched, so no network calls hit arXiv during the suite. GUI tests use `streamlit.testing.v1.AppTest` (headless).
+Tests live in `tests/`; run with `uv run pytest` (217 tests). `requests.get` is monkey-patched, so no network calls hit arXiv during the suite. GUI tests use `streamlit.testing.v1.AppTest` (headless).
+
+## Contributing & git conventions
+
+**`CONTRIBUTING.md` (repo root) is the source of truth for workflow, commits, and releases — read it before committing or cutting a release.** Key rules I must follow:
+
+- **Conventional Commits are mandatory.** Every commit subject starts with a type prefix (`fix:`, `feat:`, `docs:`, `chore:`, `ci:`, `refactor:`, `test:`, `perf:`, `style:`, `build:`, `release:`), imperative mood, ≤~72 chars, no trailing period, capital only where a proper noun needs it. Bodies use trailers (`BREAKING CHANGE:`, `Closes #N`, `Co-authored-by:`) when relevant. The prefix drives auto-generated release-notes grouping — do not skip it.
+- **Branch naming:** `<kind>/<short-summary>` off `main`, e.g. `fix/pastweek-timeout` (not `fix_timeout`).
+- **Tests + CHANGELOG are part of every change:** add/update tests under `tests/` (suite stays green and network-free), and add curated notes to `CHANGELOG.md` (see below).
+- This repo uses **worktrunk (`wt`)**: each branch is its own worktree and `main` is checked out in a separate worktree, so `git checkout main` here fails. Land a branch with `wt merge <target>` (squash+rebase+ff+remove); it updates local `main` but does **not** push — the release only fires after `git push origin main`.
+
+## Public-release state
+
+- The GitHub repository is public. The remote release surface is `main` plus version tags; WIP branches remain local unless explicitly approved for publication.
+- Beads' Dolt data is intentionally local-only. Do not restore `refs/dolt/data` on the public remote without an explicit privacy review.
+- Release automation expects a version bump in `pyproject.toml`, a matching `uv.lock`, and curated `CHANGELOG.md` notes. A push to `main` creates `v<version>` (`.github/workflows/tag-on-version-bump.yml`) and publishes the GitHub Release (`.github/workflows/release.yml`).
+- **CHANGELOG.md curated notes are required and read by the release workflow**, which extracts `section(version) or section("Unreleased")` — i.e. it prefers `## [X.Y.Z] - <date>`, falling back to `## [Unreleased]`. On a version bump, rename `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD` (matches existing entries). These curated notes are **prepended** to GitHub's `--generate-notes` commit/PR list; without them the release has only the raw commit list.
+- **`docs/changelog.md` is a hand-written stub** (links to the root CHANGELOG, shows a "Latest" line) — it is NOT synced from `CHANGELOG.md`, so the root changelog is not rendered on the MkDocs site. Update the stub's "Latest" line by hand if it matters for a release.
+- `README.md` is the source for the MkDocs landing page. Run `uv run python scripts/generate_readme.py` after README edits, then `uv run mkdocs build --strict`.

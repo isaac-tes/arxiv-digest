@@ -10,11 +10,15 @@ from __future__ import annotations
 
 import html
 import json
+import os
 import re
+import tempfile
+import threading
+import time
 from dataclasses import asdict, fields
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Tuple
+from typing import Iterable, Tuple
 
 import pandas as pd
 import streamlit as st
@@ -23,17 +27,39 @@ import arxiv_digest as ad
 import zotero_bridge as zb
 
 PROFILES_DIR = Path.home() / ".arxiv_scraper" / "profiles"
+ACTIVE_PROFILE_PATH = Path.home() / ".arxiv_scraper" / "active_profile.txt"
+REMOVED_PAPERS_PATH = Path.home() / ".arxiv_scraper" / "removed_papers.json"
+REMOVED_DIR = Path.home() / ".arxiv_scraper" / "removed"
 PROJECT_CONFIG = ad.DEFAULT_CONFIG_PATH
 
 
 # ────────────────────────── Profile management ──────────────────────────
 
+def _validate_profile_name(name: str) -> str:
+    if (
+        not name
+        or name != name.strip()
+        or name in {".", "..", "(unsaved)"}
+        or any(char in name for char in ("/", "\\", ":", "\0"))
+    ):
+        raise ValueError("Profile names must be a single path-free file name.")
+    return name
+
+
 def list_profiles() -> list[str]:
     PROFILES_DIR.mkdir(parents=True, exist_ok=True)
-    return sorted(p.stem for p in PROFILES_DIR.glob("*.json"))
+    profiles: list[str] = []
+    for path in PROFILES_DIR.glob("*.json"):
+        try:
+            _validate_profile_name(path.stem)
+        except ValueError:
+            continue
+        profiles.append(path.stem)
+    return sorted(profiles)
 
 
 def save_profile(cfg: ad.Config, name: str) -> Path:
+    name = _validate_profile_name(name)
     PROFILES_DIR.mkdir(parents=True, exist_ok=True)
     target = PROFILES_DIR / f"{name}.json"
     cfg.dump(target)
@@ -41,11 +67,155 @@ def save_profile(cfg: ad.Config, name: str) -> Path:
 
 
 def load_profile(name: str) -> ad.Config:
+    name = _validate_profile_name(name)
     return ad.Config.load(PROFILES_DIR / f"{name}.json")
 
 
+def _saved_active_profile() -> str | None:
+    try:
+        name = _validate_profile_name(
+            ACTIVE_PROFILE_PATH.read_text(encoding="utf-8").strip()
+        )
+    except (OSError, UnicodeError, ValueError):
+        return None
+    return name if name in list_profiles() else None
+
+
+def _persist_active_profile(name: str | None) -> None:
+    if name is None:
+        ACTIVE_PROFILE_PATH.unlink(missing_ok=True)
+        return
+    name = _validate_profile_name(name)
+    ACTIVE_PROFILE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(
+        dir=ACTIVE_PROFILE_PATH.parent,
+        prefix=f".{ACTIVE_PROFILE_PATH.stem}.",
+        suffix=".tmp",
+    )
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            fh.write(name)
+        os.replace(tmp, ACTIVE_PROFILE_PATH)
+    except BaseException:
+        Path(tmp).unlink(missing_ok=True)
+        raise
+
+
+def _set_loaded_profile(name: str | None) -> None:
+    _persist_active_profile(name)
+    st.session_state.loaded_profile = name
+    st.session_state.reset_active_profile_widget = True
+
+
 def delete_profile(name: str) -> None:
+    name = _validate_profile_name(name)
     (PROFILES_DIR / f"{name}.json").unlink(missing_ok=True)
+    with _removed_ids_lock():  # else an in-flight update could recreate the list
+        removed_papers_path(name).unlink(missing_ok=True)
+
+
+# ────────────────────────── Removed papers ──────────────────────────
+
+def removed_papers_path(profile: str | None) -> Path:
+    """Each profile has its own removal list; with no profile loaded, a shared one."""
+    if profile is None:
+        return REMOVED_PAPERS_PATH
+    return REMOVED_DIR / f"{_validate_profile_name(profile)}.json"
+
+
+@st.cache_resource
+def _removed_ids_lock() -> threading.RLock:
+    """One lock shared by every session of this server for the removal files.
+
+    Each browser tab is a session running in its own thread of the same
+    process. Streamlit re-executes this script on every rerun, so a plain
+    module-level lock would be a new object each time; cache_resource keeps one.
+    """
+    return threading.RLock()
+
+
+def _read_removed_ids(profile: str | None) -> set[str]:
+    """Strict read: a missing file is an empty list, any other failure raises."""
+    try:
+        text = removed_papers_path(profile).read_text()
+    except FileNotFoundError:
+        return set()
+    ids = json.loads(text)
+    if not isinstance(ids, list) or not all(isinstance(i, str) for i in ids):
+        raise ValueError("expected a JSON list of arXiv IDs")
+    return set(ids)
+
+
+def load_removed_ids(profile: str | None) -> set[str]:
+    """IDs of papers the user removed from the digest under `profile`.
+
+    Kept on disk so a removal survives page reloads, app restarts, and later
+    fetches (a paper removed from a daily ranking stays out of the weekly one).
+    For display, an unreadable file means nothing has been removed.
+    """
+    with _removed_ids_lock():
+        try:
+            return _read_removed_ids(profile)
+        except (OSError, ValueError):
+            return set()
+
+
+def save_removed_ids(profile: str | None, ids: set[str]) -> None:
+    # Write a uniquely named temp file, then rename it over the list: an
+    # interrupted save never truncates the only copy, and writers never share
+    # a temp file.
+    path = removed_papers_path(profile)
+    with _removed_ids_lock():
+        path.parent.mkdir(parents=True, exist_ok=True)
+        fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=f".{path.stem}.", suffix=".tmp")
+        try:
+            with os.fdopen(fd, "w") as fh:
+                fh.write(json.dumps(sorted(ids), indent=2))
+                fh.flush()
+                os.fsync(fh.fileno())  # data on disk before the rename, or a crash can leave it empty
+            os.replace(tmp, path)
+        except BaseException:
+            Path(tmp).unlink(missing_ok=True)
+            raise
+
+
+def update_removed_ids(
+    profile: str | None, *, add: Iterable[str] = (), discard: Iterable[str] = ()
+) -> None:
+    """Add/discard IDs in `profile`'s list as one read-modify-write under the lock,
+    so removals made at the same moment in two browser tabs are both kept.
+
+    Raises (leaving the file untouched) if the list exists but can't be read,
+    rather than overwriting every earlier removal with just this change.
+    """
+    with _removed_ids_lock():
+        save_removed_ids(profile, _read_removed_ids(profile).union(add).difference(discard))
+
+
+def _update_removed_ids_or_warn(profile: str | None, **change: Iterable[str]) -> None:
+    try:
+        update_removed_ids(profile, **change)
+    except (OSError, ValueError) as exc:
+        st.toast(
+            f"Couldn't update `{removed_papers_path(profile)}` ({exc}). "
+            "Nothing was changed; fix or delete the file.",
+            icon="⚠️",
+        )
+
+
+def _copy_removed_ids_or_warn(source: str | None, target: str) -> bool:
+    """Make `target`'s removal list an exact copy of `source`'s (Save as = snapshot)."""
+    with _removed_ids_lock():
+        try:
+            save_removed_ids(target, _read_removed_ids(source))
+        except (OSError, ValueError) as exc:
+            st.toast(
+                f"Couldn't copy removals to profile `{target}` ({exc}). "
+                "Nothing was saved; fix or delete the file.",
+                icon="⚠️",
+            )
+            return False
+        return True
 
 
 # ────────────────────────── Zotero bridge ──────────────────────────
@@ -77,26 +247,66 @@ def _zotero_collections_cached() -> list[dict]:
     return zb.list_collections()
 
 
-def _do_zotero_save(arxiv_id: str, title: str) -> None:
+_NO_COLLECTION = "(no collection)"
+
+
+def _zotero_collection_options() -> list[str]:
+    """Labels for the personal-library collection dropdown."""
+    return [_NO_COLLECTION] + [c["name"] for c in _zotero_collections_cached()]
+
+
+def _zotero_collection_key_for(name: str) -> str | None:
+    """Map a personal-library collection label to its key."""
+    if name == _NO_COLLECTION:
+        return None
+    for c in _zotero_collections_cached():
+        if c["name"] == name:
+            return c["key"]
+    return None
+
+
+# How long the transient "Saved ✓" indicator stays visible after a save, and
+# the auto-re-run interval used to retire it. The fragment timer is only live
+# while a tick is fresh, so idle papers carry no recurring work.
+SAVED_TICK_SECONDS = 30.0
+FRAGMENT_RERUN_SECONDS = 10.0
+
+
+def _zotero_tick_is_fresh(saved_at: float | None, now: float | None = None) -> bool:
+    """Whether a saved timestamp is still within the "Saved ✓" window.
+
+    ``None`` (never saved) is never fresh. ``now`` defaults to ``time.monotonic()``
+    but is injectable for deterministic tests.
+    """
+    if saved_at is None:
+        return False
+    now = time.monotonic() if now is None else now
+    return (now - saved_at) < SAVED_TICK_SECONDS
+
+
+def _set_zotero_saved(arxiv_id: str) -> None:
+    """Record a successful save so the transient 'Saved ✓' tick shows."""
+    if "zotero_saved_at" not in st.session_state:
+        st.session_state.zotero_saved_at = {}
+    st.session_state.zotero_saved_at[arxiv_id] = time.monotonic()
+
+
+def _do_zotero_save(arxiv_id: str, title: str, col_key: str | None = None) -> None:
     """Callback for the Save button — runs exactly once per click.
 
-    Performs the save and records the outcome in session state so the render
-    can display it. Guarded so each paper saves at most once per session and a
-    double-click can't trigger a second write.
+    Saves to the user's **personal** Zotero library via the local bridge (the
+    fast, no-key path that pops Zotero's own "Allow this application?" dialog).
+    Records a transient outcome so the render can show it. A denied/failed save
+    is stored as an error and must never show a success toast.
     """
-    if arxiv_id in st.session_state.saved_papers:
-        return
     if arxiv_id in st.session_state.zotero_saving:
         return  # a save is already in flight for this paper
     st.session_state.zotero_saving.add(arxiv_id)
+    # A retry supersedes any outcome still waiting to be rendered.
+    st.session_state.pop(f"zotero_result_{arxiv_id}", None)
 
-    # Resolve the chosen collection name -> key from the cached list.
-    collection_key = None
-    chosen = st.session_state.get(f"zotero_col_{arxiv_id}")
-    if chosen and chosen != "My Library":
-        collection_key = next(
-            (c["key"] for c in _zotero_collections_cached() if c["name"] == chosen), None
-        )
+    collection = st.session_state.get(col_key or f"zotero_col_card_{arxiv_id}", _NO_COLLECTION)
+    collection_key = _zotero_collection_key_for(collection)
 
     try:
         result = zb.save_to_zotero(arxiv_id, collection_key=collection_key)
@@ -105,13 +315,11 @@ def _do_zotero_save(arxiv_id: str, title: str) -> None:
         st.session_state.zotero_saving.discard(arxiv_id)
         return
 
-    if result.get("ok"):
-        st.session_state.saved_papers.add(arxiv_id)
-        st.session_state[f"zotero_result_{arxiv_id}"] = ("ok", title)
-    elif result.get("already_exists"):
-        # Already in the library — treat as saved so we stop trying.
-        st.session_state.saved_papers.add(arxiv_id)
-        st.session_state[f"zotero_result_{arxiv_id}"] = ("ok", title)
+    if result.get("ok") or result.get("already_exists"):
+        # Success (or already present) — record the transient 'Saved ✓' tick.
+        # The tick, not a lingering one-shot, is the success indicator, so a
+        # later rerun can never fire a stale 'Saved to Zotero:' toast.
+        _set_zotero_saved(arxiv_id)
     else:
         st.session_state[f"zotero_result_{arxiv_id}"] = (
             "error", result.get("error", "Zotero save failed."),
@@ -119,54 +327,79 @@ def _do_zotero_save(arxiv_id: str, title: str) -> None:
     st.session_state.zotero_saving.discard(arxiv_id)
 
 
-def _render_zotero_save_button(arxiv_id: str, title: str) -> None:
+def _zotero_saved_at(arxiv_id: str) -> float | None:
+    """Return the recorded save timestamp for a paper, or None if never saved."""
+    records = st.session_state.zotero_saved_at if "zotero_saved_at" in st.session_state else {}
+    return records.get(arxiv_id)
+
+
+def _render_zotero_save_button(arxiv_id: str, title: str, scope: str = "card") -> None:
     """A 'Save to Zotero' popover next to a paper, like the Zotero Connector.
 
-    Opens a popover listing the user's Zotero collections (plus 'My Library').
-    Saving runs via an on_click callback (exactly once per click) and is guarded
-    so each paper saves at most once per session. The confirmation toast
-    auto-dismisses after 10s.
+    Opens a popover with a **Collection** dropdown for the personal My Library
+    and a Save button. Group-library saving is intentionally not offered because
+    Zotero's local API has no supported group-library route. After a successful save a transient 'Saved ✓' caption replaces the
+    popover for ``SAVED_TICK_SECONDS``; it then returns on its own because the
+    decorative fragment carries a ``run_every`` auto-re-run while the tick is
+    fresh. The timer is only registered while the tick is fresh, so idle papers
+    carry no recurring background work (the small residue after a tick expires
+    is dropped on the next full re-render).
     """
-    if arxiv_id in st.session_state.saved_papers:
-        st.caption("Saved ✓")
-        return
+    fresh_tick = _zotero_tick_is_fresh(_zotero_saved_at(arxiv_id))
+    # Keys carry the tab (`scope`): Streamlit renders every tab on each run, so a
+    # paper shown on its card and in Score a paper would otherwise reuse keys.
+    col_key = f"zotero_col_{scope}_{arxiv_id}"
 
-    with st.popover("Save to Zotero", width="stretch"):
-        st.caption("Choose a collection, then save.")
-        collections = _zotero_collections_cached()
-        # Filter-as-you-type search bar at the top of the dropdown.
-        search = st.text_input(
-            "Search collections", placeholder="Filter…", key=f"zotero_search_{arxiv_id}"
-        ).strip().lower()
-        if search:
-            collections = [c for c in collections if search in c["name"].lower()]
-        options = ["My Library"] + [c["name"] for c in collections]
-        st.selectbox("Collection", options=options, key=f"zotero_col_{arxiv_id}")
-        st.button(
-            "Save",
-            key=f"zotero_do_{arxiv_id}",
-            type="primary",
-            on_click=_do_zotero_save,
-            args=(arxiv_id, title),
-        )
-
-        # Show the outcome of the last save attempt for this paper, once —
-        # the result is popped so an unrelated rerun with the popover still
-        # open doesn't keep re-firing the "Saved" toast (which looked like
-        # the paper was being saved over and over).
+    @st.fragment(run_every=f"{FRAGMENT_RERUN_SECONDS}s" if fresh_tick else None)
+    def _tick_or_popover() -> None:
+        # Consume the pending result before the fresh-tick early return. The
+        # old implementation popped inside the popover, so an error/success
+        # could linger unseen and a stale success toast appeared seconds later.
         result = st.session_state.pop(f"zotero_result_{arxiv_id}", None)
         if result:
             kind, msg = result
-            if kind == "ok":
-                st.toast(f"Saved to Zotero: {msg}", duration=10000)
-            else:
+            if kind == "error":
                 st.error(msg)
+
+        if _zotero_tick_is_fresh(_zotero_saved_at(arxiv_id)):
+            st.caption("Saved ✓")
+            return
+
+        with st.popover("Save to Zotero", width="stretch"):
+            st.caption("Choose a collection, then save to My Library.")
+            st.selectbox(
+                "Collection",
+                options=_zotero_collection_options(),
+                key=col_key,
+            )
+            st.button(
+                "Save",
+                key=f"zotero_do_{scope}_{arxiv_id}",
+                type="primary",
+                on_click=_do_zotero_save,
+                args=(arxiv_id, title, col_key),
+            )
+
+    _tick_or_popover()
 
 
 # ────────────────────────── Fetching with cache ──────────────────────────
 
+def _pastweek_feeds_to_fetch(feeds_key: Tuple[Tuple[str, str], ...]) -> list[str]:
+    """Return every selected category for the export-API fetch.
+
+    The export API's ``cat:cond-mat`` query is *not* a wildcard for dotted
+    subcategories such as ``cond-mat.quant-gas``. Keep parent and child feeds
+    here; :func:`arxiv_digest.fetch_pastweek` deduplicates overlapping papers by
+    arXiv id after querying each category.
+    """
+    return [name for name, _ in feeds_key]
+
+
 @st.cache_data(ttl=3600, show_spinner=False)
-def fetch_papers_cached(timeframe: str, feeds_key: Tuple[Tuple[str, str], ...]) -> list[dict]:
+def fetch_papers_cached(
+    timeframe: str, feeds_key: Tuple[Tuple[str, str], ...]
+) -> tuple[list[dict], list[str]]:
     """Cached fetch keyed on (timeframe, sorted feed URLs).
 
     feeds_key is a tuple of (name, url) pairs because lists/dicts aren't hashable.
@@ -175,44 +408,97 @@ def fetch_papers_cached(timeframe: str, feeds_key: Tuple[Tuple[str, str], ...]) 
     API with a true 7-day date-range window, because arXiv's /pastweek HTML
     listing is unreliable (it returns 1–5 days, not a guaranteed week).
     """
+    # Persistent disk cache (survives restarts, keyed on the UTC day) sits under
+    # the in-memory st.cache_data layer, so re-selecting the same feeds — even
+    # after restarting the app — reuses saved papers instead of re-hitting arXiv
+    # and tripping the rate limiter.
+    feed_names = [name for name, _ in feeds_key]
+    cache_key = ad._fetch_cache_key(timeframe, feed_names)
+    cached = ad.load_fetch_cache(cache_key)
+    if cached is not None:
+        return cached, []
+
     if timeframe == "pastweek":
-        end = datetime.now()
+        end = datetime.now(UTC)
         start = end - timedelta(days=7)
-        all_papers: list[dict] = []
-        seen: set[str] = set()
-        for name, _ in feeds_key:
-            for p in ad.fetch_feed_api(name, start, end):
-                if p["id"] in seen:
-                    continue
-                seen.add(p["id"])
-                all_papers.append(p)
-        return all_papers
+        to_fetch = _pastweek_feeds_to_fetch(feeds_key)
+        notices: list[str] = []
+        papers = ad.fetch_pastweek(to_fetch, start, end, notices=notices)
+        ad.save_fetch_cache(cache_key, papers)
+        return papers, notices
 
     # today: HTML /new feed
     urls = []
     for _, base_url in feeds_key:
-        url = base_url.replace("/recent", "/new").replace("/pastweek", "/new")
-        urls.append(url)
-    return ad.fetch_feeds(urls)
+        urls.append(ad.feed_url(base_url, "today"))
+    papers = ad.fetch_feeds(urls)
+    ad.save_fetch_cache(cache_key, papers)
+    return papers, []
 
 
 # ────────────────────────── Session state init ──────────────────────────
 
+# Bump whenever a config default changes (eg. keyword/author font tinting
+# switched to ON) so an already-open session re-applies the new defaults once,
+# instead of keeping stale sidebar widget state that overrides them.
+_FONT_DEFAULT_VERSION = "2"
+
+
 def init_state():
+    if st.session_state.pop("reset_active_profile_widget", False):
+        st.session_state.pop("active_profile", None)
+    if "loaded_profile" not in st.session_state:
+        st.session_state.loaded_profile = _saved_active_profile()
     if "cfg" not in st.session_state:
-        st.session_state.cfg = ad.Config.load(PROJECT_CONFIG if PROJECT_CONFIG.exists() else None)
+        profile = loaded_profile()
+        if profile:
+            try:
+                st.session_state.cfg = load_profile(profile)
+            except Exception as exc:
+                st.session_state.loaded_profile = None
+                try:
+                    _persist_active_profile(None)
+                except OSError:
+                    pass
+                st.warning(
+                    f"Couldn't load profile '{profile}' ({exc}); using project config. "
+                    "Repair or delete the saved profile in the Profiles tab."
+                )
+                profile = None
+        if not profile:
+            st.session_state.cfg = ad.Config.load(
+                PROJECT_CONFIG if PROJECT_CONFIG.exists() else None
+            )
+        st.session_state.cfg_default_version = _FONT_DEFAULT_VERSION
+        # A fresh session should show the config's actual defaults (e.g. keyword
+        # and author font tinting now default ON). Without this, Streamlit would
+        # return a stale sidebar checkbox value from a widget key seeded earlier
+        # in the session and silently overwrite the config default (the same
+        # staleness _reset_widget_state guards against on profile load).
+        _reset_widget_state(*_DISPLAY_KEYS)
+    elif st.session_state.get("cfg_default_version") != _FONT_DEFAULT_VERSION:
+        # The defaults changed while this session was already alive (Streamlit
+        # keeps session_state across a hot-reload rerun). Re-apply the new
+        # defaults once by clearing the display widget keys so they re-read cfg.
+        st.session_state.cfg_default_version = _FONT_DEFAULT_VERSION
+        _reset_widget_state(*_DISPLAY_KEYS)
     if "papers" not in st.session_state:
         st.session_state.papers = []
     if "last_fetch" not in st.session_state:
         st.session_state.last_fetch = None
-    if "saved_papers" not in st.session_state:
-        st.session_state.saved_papers = set()
+    if "zotero_saved_at" not in st.session_state:
+        st.session_state.zotero_saved_at = {}
     if "zotero_saving" not in st.session_state:
         st.session_state.zotero_saving = set()
 
 
 def cfg() -> ad.Config:
     return st.session_state.cfg
+
+
+def loaded_profile() -> str | None:
+    """Name of the saved profile cfg() was last loaded from or saved to."""
+    return st.session_state.get("loaded_profile")
 
 
 # Keyed widgets cache their value in st.session_state[key] and IGNORE the
@@ -234,6 +520,7 @@ _DISPLAY_KEYS = [
     "highlight_authors",
     "highlight_terms_title",
     "highlight_terms_abstract",
+    "highlight_terms_summary",
     "color_keyword",
     "color_low_priority",
     "color_author",
@@ -259,17 +546,28 @@ def render_sidebar():
 
         st.subheader("Profile")
         profiles = list_profiles()
+        loaded = loaded_profile()
+        index = profiles.index(loaded) + 1 if loaded in profiles else 0
         active = st.selectbox(
             "Active",
             options=["(unsaved)"] + profiles,
-            index=0,
+            index=index,
             key="active_profile",
         )
         if active != "(unsaved)" and st.button("Load profile", width="stretch"):
-            st.session_state.cfg = load_profile(active)
-            _reset_widget_state()
-            st.success(f"Loaded {active}")
-            st.rerun()
+            try:
+                profile_cfg = load_profile(active)
+            except Exception as exc:
+                st.error(f"Couldn't load profile '{active}': {exc}")
+            else:
+                st.session_state.cfg = profile_cfg
+                _set_loaded_profile(active)
+                _reset_widget_state()
+                st.success(f"Loaded {active}")
+                st.rerun()
+        st.caption(
+            f"Loaded profile: **{loaded_profile()}**" if loaded_profile() else "No profile loaded."
+        )
 
         st.divider()
 
@@ -317,15 +615,26 @@ def render_sidebar():
         ):
             with st.spinner("Fetching from arXiv..."):
                 feeds_key = tuple(sorted((f, cfg().feeds[f]) for f in selected_feeds))
-                st.session_state.papers = fetch_papers_cached(timeframe, feeds_key)
-                st.session_state.last_fetch = datetime.now()
-            st.success(f"Fetched {len(st.session_state.papers)} papers.")
+                try:
+                    papers, notices = fetch_papers_cached(timeframe, feeds_key)
+                    st.session_state.papers = papers
+                    st.session_state.last_fetch = datetime.now()
+                except ad.requests.RequestException as exc:
+                    st.error(
+                        f"arXiv fetch failed ({type(exc).__name__}). "
+                        "arXiv may be slow or down — try again in a moment."
+                    )
+                else:
+                    for note in notices:
+                        st.warning(note)
+                    st.success(f"Fetched {len(st.session_state.papers)} papers.")
 
         if st.session_state.last_fetch:
             st.caption(f"Last fetched: {st.session_state.last_fetch:%Y-%m-%d %H:%M:%S}")
 
         if st.button("Clear fetch cache", width="stretch"):
             fetch_papers_cached.clear()
+            ad.clear_fetch_cache()
             st.session_state.papers = []
             st.session_state.last_fetch = None
             st.rerun()
@@ -347,6 +656,11 @@ def render_sidebar():
             "Highlight keywords in abstracts", value=cfg().highlight_terms_abstract,
             help="Light highlight of matched keywords / low-priority terms in full abstracts.",
             key="highlight_terms_abstract",
+        )
+        cfg().highlight_terms_summary = st.checkbox(
+            "Highlight keywords in summaries", value=cfg().highlight_terms_summary,
+            help="Same highlight as full abstracts, applied to the truncated abstract summary on each paper card. Off by default.",
+            key="highlight_terms_summary",
         )
 
         st.caption("Highlight colors (per aspect)")
@@ -384,8 +698,8 @@ def render_sidebar():
         st.subheader("Zotero")
         render_zotero_status_pill()
         st.caption(
-            "Save papers to your Zotero library via the local API. Requires the "
-            "Zotero desktop app to be running."
+            "Save papers to your personal Zotero library via the local API. "
+            "Group-library saving is not available through Zotero's local API."
         )
 
 
@@ -407,9 +721,18 @@ _PAPER_CSS = """
 .paper-meta a:hover { text-decoration: underline; }
 .paper-authors .hl-author {
   font-weight: 700; border-bottom: 1px dotted; cursor: help; padding: 0 1px;
-  border-radius: 3px; transition: background .12s;
+  border-radius: 3px; transition: background .12s; position: relative;
 }
 .paper-authors .hl-author:hover { background: rgba(127,127,127,.18); }
+.paper-authors .hl-author .hl-tip {
+  visibility: hidden; opacity: 0; transition: opacity .12s;
+  position: absolute; z-index: 1000; bottom: 145%; left: 0;
+  background: #1f2630; color: #e6edf3; padding: 6px 9px; border-radius: 6px;
+  width: max-content; max-width: 320px; font-size: .8rem; font-weight: 400;
+  line-height: 1.35; border: 1px solid #30363d; box-shadow: 0 4px 12px rgba(0,0,0,.45);
+  white-space: normal;
+}
+.paper-authors .hl-author:hover .hl-tip { visibility: visible; opacity: 1; }
 /* CSS tooltip — Streamlit strips the `title` attribute, so we roll our own. */
 .tip { position: relative; border-bottom: 1px dotted #8b949e; cursor: help; }
 .tip .tip-text {
@@ -544,13 +867,13 @@ def _authors_html(
     out = []
     for a in parts:
         esc = html.escape(a)
-        if any(ad.term_matches(n, a, word_boundary=word_boundary) for n in named):
+        if any(ad.author_matches(n, a, word_boundary=word_boundary) for n in named):
             style = f"border-bottom-color:{color};"
             if font:
                 style += f"color:{color};"
             out.append(
-                f'<span class="hl-author" style="{style}" title="Highlighted author '
-                f'(+{bonus} to score)">{esc}</span>'
+                f'<span class="hl-author" style="{style}">{esc}'
+                f'<span class="hl-tip">Highlighted author (+{bonus} to score)</span></span>'
             )
         else:
             out.append(esc)
@@ -634,6 +957,79 @@ def _render_breakdown(breakdown: dict):
         )
 
 
+def _remove_paper(arxiv_id: str) -> None:
+    """Callback for a card's ✕ button: hide the paper from every later ranking.
+
+    Removed papers are dropped before ranking, so every paper below moves up one
+    place and the first one past the top-N cutoff takes the freed slot.
+    """
+    _update_removed_ids_or_warn(loaded_profile(), add={arxiv_id})
+
+
+def _restore_papers(arxiv_ids: list[str]) -> None:
+    _update_removed_ids_or_warn(loaded_profile(), discard=arxiv_ids)
+
+
+def _render_removed_papers(removed: list[dict]) -> None:
+    """Expander listing removed papers that would otherwise be in the ranking shown."""
+    if not removed:
+        return
+    with st.expander(f"Removed papers ({len(removed)})"):
+        owner = f"profile **{loaded_profile()}**" if loaded_profile() else "no loaded profile"
+        st.caption(
+            "Only papers that would otherwise appear in this ranking are listed. "
+            f"The removal list belongs to {owner}; other profiles keep their own. "
+            "Removed papers stay hidden across reloads and later fetches "
+            f"(saved in `{removed_papers_path(loaded_profile())}`)."
+        )
+        for p in removed:
+            title_col, restore_col = st.columns([5, 1])
+            title_col.write(p.get("title", "") or "(Untitled)")
+            restore_col.button(
+                "Restore",
+                key=f"restore_{p['id']}",
+                on_click=_restore_papers,
+                args=([p["id"]],),
+                width="stretch",
+            )
+        st.button(
+            "Restore all",
+            key="restore_all",
+            on_click=_restore_papers,
+            args=([p["id"] for p in removed],),
+        )
+
+
+def _selected_days() -> list[str] | None:
+    """The Papers tab's Day picker choice (None = all days)."""
+    choice = st.session_state.get("papers_day", "All days")
+    return None if choice == "All days" else [choice]
+
+
+def _digest(fetched: list[dict], days: list[str] | None) -> tuple[list[dict], list[dict], list[dict]]:
+    """The ranking the Papers tab shows: (entries, removed, visible papers).
+
+    Single source of truth for both the Papers and the Score-a-paper tab, so the
+    two can never disagree on rank. Removed papers are skipped while walking the
+    full ranking; only those met before the top N fills up are returned in
+    `removed` (the ones that would be showing had they not been removed).
+    """
+    papers = ad.filter_papers(
+        fetched, include_replacements=cfg().include_replacements, days=days
+    )
+    removed_ids = load_removed_ids(loaded_profile())
+    entries: list[dict] = []
+    removed: list[dict] = []
+    for e in ad.build_ranked_entries(papers, cfg(), top_n=len(papers)):
+        if len(entries) == cfg().top_n:
+            break
+        if e["id"] in removed_ids:
+            removed.append(e)
+        else:
+            entries.append({**e, "rank": len(entries) + 1})
+    return entries, removed, [p for p in papers if p["id"] not in removed_ids]
+
+
 def render_papers_tab():
     fetched = st.session_state.papers
     if not fetched:
@@ -642,9 +1038,10 @@ def render_papers_tab():
 
     # Back-in-time day picker (only days arXiv's pastweek feed still lists).
     day_labels = ad.available_day_labels(fetched)
-    selected_days = None
+    if st.session_state.get("papers_day") not in (None, "All days", *day_labels):
+        st.session_state.pop("papers_day")  # the picked day left the fetch
     if day_labels:
-        choice = st.selectbox(
+        st.selectbox(
             "Day",
             options=["All days"] + day_labels,
             help=(
@@ -652,21 +1049,21 @@ def render_papers_tab():
                 "arXiv's pastweek feed still returns (~last 5 days) are available "
                 "— arXiv provides no URL for arbitrary older days."
             ),
+            key="papers_day",
         )
-        if choice != "All days":
-            selected_days = [choice]
 
-    papers = ad.filter_papers(
-        fetched,
-        include_replacements=cfg().include_replacements,
-        days=selected_days,
-    )
-    hidden = len(fetched) - len(papers)
+    entries, removed, papers = _digest(fetched, _selected_days())
+    hidden = len(fetched) - len(ad.filter_papers(
+        fetched, include_replacements=cfg().include_replacements, days=_selected_days()
+    ))
+    _render_removed_papers(removed)
     if not papers:
-        st.warning("No papers left after filtering. Adjust the day or replacement filter.")
+        st.warning(
+            "No papers left after filtering. Adjust the day or replacement filter"
+            + (", or restore removed papers." if removed else ".")
+        )
         return
 
-    entries = ad.build_ranked_entries(papers, cfg(), top_n=cfg().top_n)
     paper_by_id = {p["id"]: p for p in papers}
 
     col_search, col_export_md, col_export_json = st.columns([3, 1, 1])
@@ -713,22 +1110,28 @@ def render_papers_tab():
     )
     if hidden:
         caption += f" {hidden} hidden by replacement/day filters."
+    if removed:
+        caption += f" {len(removed)} removed by you."
     st.caption(caption)
     st.markdown(_PAPER_CSS, unsafe_allow_html=True)
 
     for e in filtered:
         with st.container(border=True):
-            head, score_col = st.columns([5, 1])
+            head, score_col, remove_col = st.columns([5, 1, 0.3])
+
+            def _hl(t: str) -> str:
+                return _highlight_terms(
+                    t, cfg().core_keywords, cfg().low_priority_kw, kw_bonus, lp_pen,
+                    word_boundary=cfg().word_boundary_matching,
+                    color_kw=cfg().color_keyword, color_lp=cfg().color_low_priority,
+                    font_kw=cfg().color_font_keyword, font_lp=cfg().color_font_low_priority,
+                )
+
             with head:
                 kw_bonus = cfg().weights.core_keyword
                 lp_pen = cfg().weights.low_priority_penalty
                 if cfg().highlight_terms_title:
-                    title_html = _highlight_terms(
-                        e["title"], cfg().core_keywords, cfg().low_priority_kw, kw_bonus, lp_pen,
-                        word_boundary=cfg().word_boundary_matching,
-                        color_kw=cfg().color_keyword, color_lp=cfg().color_low_priority,
-                        font_kw=cfg().color_font_keyword, font_lp=cfg().color_font_low_priority,
-                    )
+                    title_html = _hl(e["title"])
                 else:
                     title_html = html.escape(e["title"])
                 st.markdown(
@@ -749,7 +1152,10 @@ def render_papers_tab():
                 )
                 if e["section"]:
                     st.caption(f"Section: {e['section']}")
-                st.write(e["summary"])
+                if cfg().highlight_terms_summary:
+                    st.markdown(f'{_hl(e["summary"])}', unsafe_allow_html=True)
+                else:
+                    st.write(e["summary"])
                 if e["subjects"] or e["link"]:
                     meta_parts = []
                     if e["link"]:
@@ -767,6 +1173,14 @@ def render_papers_tab():
             with score_col:
                 st.metric("Score", e["score"])
                 _render_zotero_save_button(e["id"], e["title"])
+            with remove_col:
+                st.button(
+                    "✕",
+                    key=f"remove_{e['id']}",
+                    help="Remove from this and later rankings; the papers below move up one place.",
+                    on_click=_remove_paper,
+                    args=(e["id"],),
+                )
 
             with st.expander("Why this score?"):
                 full_paper = paper_by_id.get(e["id"], {})
@@ -776,9 +1190,7 @@ def render_papers_tab():
                 abstract = paper_by_id.get(e["id"], {}).get("abstract", "") or "(unavailable)"
                 if cfg().highlight_terms_abstract and abstract != "(unavailable)":
                     st.markdown(
-                        f'<div class="paper-abstract">'
-                        f'{_highlight_terms(abstract, cfg().core_keywords, cfg().low_priority_kw, cfg().weights.core_keyword, cfg().weights.low_priority_penalty, word_boundary=cfg().word_boundary_matching, color_kw=cfg().color_keyword, color_lp=cfg().color_low_priority, font_kw=cfg().color_font_keyword, font_lp=cfg().color_font_low_priority)}'
-                        f'</div>',
+                        f'<div class="paper-abstract">{_hl(abstract)}</div>',
                         unsafe_allow_html=True,
                     )
                 else:
@@ -955,6 +1367,7 @@ def render_profiles_tab():
     pc_load, pc_add = st.columns(2)
     if pc_load.button("Load preset", key="preset_load", width="stretch"):
         st.session_state.cfg = ad.preset_config(preset_choice)
+        _set_loaded_profile(None)
         _reset_widget_state()
         st.success(f"Loaded preset '{preset_choice}' (replaced working config).")
         st.rerun()
@@ -968,9 +1381,17 @@ def render_profiles_tab():
 
     name = st.text_input("Save current config as", placeholder="e.g. topology-mode")
     if st.button("Save", disabled=not name.strip()):
-        save_profile(cfg(), name.strip())
-        st.success(f"Saved profile '{name.strip()}'.")
-        st.rerun()
+        try:
+            target = _validate_profile_name(name.strip())
+        except ValueError as exc:
+            st.error(str(exc))
+        else:
+            # Transfer first; a failure must leave the source profile active.
+            if _copy_removed_ids_or_warn(loaded_profile(), target):
+                save_profile(cfg(), target)
+                _set_loaded_profile(target)
+                st.success(f"Saved profile '{target}'.")
+                st.rerun()
 
     profiles = list_profiles()
     if profiles:
@@ -978,20 +1399,37 @@ def render_profiles_tab():
         for p in profiles:
             cols = st.columns([3, 1, 1, 1])
             cols[0].write(p)
-            if cols[1].button("Load", key=f"load_{p}"):
-                st.session_state.cfg = load_profile(p)
-                _reset_widget_state()
-                st.success(f"Loaded {p}")
-                st.rerun()
-            cols[2].download_button(
-                "Export",
-                data=json.dumps(asdict(load_profile(p)), indent=2, ensure_ascii=False),
-                file_name=f"{p}.json",
-                mime="application/json",
-                key=f"export_{p}",
-            )
+            try:
+                profile_cfg = load_profile(p)
+            except Exception as exc:
+                cols[0].caption(f"Unreadable profile: {exc}")
+                cols[1].button("Load", key=f"load_{p}", disabled=True)
+                cols[2].download_button(
+                    "Export",
+                    data="",
+                    file_name=f"{p}.json",
+                    mime="application/json",
+                    key=f"export_{p}",
+                    disabled=True,
+                )
+            else:
+                if cols[1].button("Load", key=f"load_{p}"):
+                    st.session_state.cfg = profile_cfg
+                    _set_loaded_profile(p)
+                    _reset_widget_state()
+                    st.success(f"Loaded {p}")
+                    st.rerun()
+                cols[2].download_button(
+                    "Export",
+                    data=json.dumps(asdict(profile_cfg), indent=2, ensure_ascii=False),
+                    file_name=f"{p}.json",
+                    mime="application/json",
+                    key=f"export_{p}",
+                )
             if cols[3].button("Delete", key=f"del_{p}"):
                 delete_profile(p)
+                if loaded_profile() == p:
+                    _set_loaded_profile(None)
                 st.rerun()
 
     st.divider()
@@ -1006,6 +1444,7 @@ def render_profiles_tab():
         try:
             raw = json.load(uploaded)
             st.session_state.cfg = ad.Config.from_json(raw)
+            _set_loaded_profile(None)
             _reset_widget_state()
             st.success("Profile imported into current session.")
             st.rerun()
@@ -1167,25 +1606,51 @@ def render_score_tab():
         if fetched:
             st.divider()
             st.markdown("**Why it did / didn't appear in the digest**")
-            if paper_id in {p.get("id") for p in fetched}:
-                entries = ad.build_ranked_entries(fetched, cfg(), top_n=cfg().top_n)
-                rank = next(
-                    (e["rank"] for e in entries if e["id"] == paper_id), None
+            fetched_ids = {p.get("id") for p in fetched}
+            days = _selected_days()
+            entries, removed, visible = _digest(fetched, days)
+            rank = next((e["rank"] for e in entries if e["id"] == paper_id), None)
+            if rank is not None:
+                st.success(
+                    f"This paper **is** in the current digest at rank **#{rank}** "
+                    f"with score **{breakdown['total']}**."
                 )
-                if rank is not None:
-                    st.success(
-                        f"This paper **is** in the current digest at rank **#{rank}** "
-                        f"with score **{breakdown['total']}**."
+            elif paper_id not in fetched_ids:
+                st.info(_absence_reason(paper_id, fetched, cfg()))
+            elif paper_id in load_removed_ids(loaded_profile()):
+                if paper_id in {e["id"] for e in removed}:
+                    st.info(
+                        "You **removed** this paper from the digest, so it is not ranked. "
+                        "Restore it from *Removed papers* in the **Papers** tab."
                     )
                 else:
-                    st.info(_absence_reason(paper_id, fetched, cfg()))
+                    st.info(
+                        "You **removed** this paper, but the current filters or top-N hide it. "
+                        "Adjust the Papers tab filters or increase Top N until it appears "
+                        "under *Removed papers*, then restore it."
+                    )
+            elif paper_id not in {p["id"] for p in ad.filter_papers(
+                fetched, include_replacements=cfg().include_replacements
+            )}:
+                st.info(
+                    "This paper was fetched but is a **replacement** submission, which "
+                    "the digest hides. Tick *Include replacement submissions* to rank it."
+                )
+            elif paper_id not in {p["id"] for p in visible}:
+                st.info(
+                    f"This paper was fetched but is not from the day picked in the "
+                    f"**Papers** tab ({days[0]}). Pick *All days* to rank it."
+                )
             else:
-                st.info(_absence_reason(paper_id, fetched, cfg()))
+                st.info(
+                    f"This paper **was** fetched but ranked below your "
+                    f"top-{cfg().top_n} cutoff."
+                )
         else:
             st.caption("Fetch papers first to compare against the current digest.")
 
         st.divider()
-        _render_zotero_save_button(paper_id, paper["title"])
+        _render_zotero_save_button(paper_id, paper["title"], scope="score")
 
 
 # ────────────────────────── Main ──────────────────────────

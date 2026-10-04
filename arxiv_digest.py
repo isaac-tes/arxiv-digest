@@ -22,6 +22,8 @@ from typing import Dict, List, Sequence
 import requests
 from bs4 import BeautifulSoup
 
+import update_check
+
 DEFAULT_FEEDS = [
     "cond-mat.quant-gas",
     "cond-mat.mes-hall",
@@ -132,7 +134,6 @@ def _default_named_authors() -> List[str]:
         "ozawa",
         "carusotto",
         "goldman",
-        
         "pollmann",
         "verresen",
         "barbiero",
@@ -263,6 +264,8 @@ class Config:
     highlight_authors: bool = True
     highlight_terms_title: bool = True
     highlight_terms_abstract: bool = True
+    # Summary (truncated abstract on the paper card) highlight; off by default.
+    highlight_terms_summary: bool = False
     # Per-aspect highlight colors (hex strings). Each scored-and-highlightable
     # aspect maps to one color; defaults mirror the original hardcoded palette.
     color_keyword: str = "#388bfd"
@@ -270,11 +273,12 @@ class Config:
     color_author: str = "#3fb950"
     color_subject: str = "#a371f7"
     # Per-aspect "color the font too" toggles. When True, the matched text's
-    # font is also tinted with the aspect color (default False = background
-    # highlight only, the original behavior).
-    color_font_keyword: bool = False
+    # font is also tinted with the aspect color. Keywords and authors are on
+    # by default; low-priority and subjects default to background highlight
+    # only.
+    color_font_keyword: bool = True
     color_font_low_priority: bool = False
-    color_font_author: bool = False
+    color_font_author: bool = True
     color_font_subject: bool = False
     weights: ScoringWeights = field(default_factory=ScoringWeights)
 
@@ -317,13 +321,14 @@ class Config:
             highlight_authors=bool(data.get("highlight_authors", True)),
             highlight_terms_title=bool(data.get("highlight_terms_title", True)),
             highlight_terms_abstract=bool(data.get("highlight_terms_abstract", True)),
+            highlight_terms_summary=bool(data.get("highlight_terms_summary", False)),
             color_keyword=str(data.get("color_keyword", "#388bfd")),
             color_low_priority=str(data.get("color_low_priority", "#f85149")),
             color_author=str(data.get("color_author", "#3fb950")),
             color_subject=str(data.get("color_subject", "#a371f7")),
-            color_font_keyword=bool(data.get("color_font_keyword", False)),
+            color_font_keyword=bool(data.get("color_font_keyword", True)),
             color_font_low_priority=bool(data.get("color_font_low_priority", False)),
-            color_font_author=bool(data.get("color_font_author", False)),
+            color_font_author=bool(data.get("color_font_author", True)),
             color_font_subject=bool(data.get("color_font_subject", False)),
             weights=weights,
         )
@@ -344,14 +349,14 @@ class Config:
 #
 # Read-only, built-in research-topic bundles a new user can pick as a starting
 # point instead of the generic cond-mat default.
-# a quantum physics research profile. Presets are
+# Presets are
 # NEVER written to disk on their own — Load/Add only mutate the in-memory
 # Config; the user's arxiv_config.json and ~/.arxiv_scraper profiles are
 # untouched unless they explicitly Save / --save-config.
 #
 # Each preset defines keywords + authors + feeds/feed_weights; scalar prefs
-# (weights, top_n, timeframe, flags) stay at Config defaults. Authors always
-# include famous *distinctive* surnames per field
+# (weights, top_n, timeframe, flags) stay at Config defaults. Authors use
+# famous *distinctive* surnames per field
 # (short/common ones like 'wu'/'link'/'ma' are omitted — they over-match even
 # with whole-word matching), capped at 10.
 
@@ -615,7 +620,49 @@ def fetch_abstract(arxiv_id: str, verbose: bool = False, retries: int = 2) -> st
     return ""
 
 
-def fetch_feed(url: str, sections: List[str] | None = None, verbose: bool = False) -> List[dict]:
+def _backfill_missing_abstracts(papers: List[dict], verbose: bool = False) -> None:
+    """Fetch abstracts in parallel for papers whose ``abstract`` is empty.
+
+    Mutates ``papers`` in place. arXiv's /pastweek listing omits abstracts, so
+    they are back-filled from each paper's /abs/ page. Deduplicate the paper set
+    *before* calling this so an id shared across feeds is fetched only once.
+    """
+    missing = [p for p in papers if not p["abstract"]]
+    if not missing:
+        return
+    if verbose:
+        print(f"  Fetching {len(missing)} abstracts in parallel...")
+    # Limit concurrency to be respectful to arXiv servers.
+    with ThreadPoolExecutor(max_workers=10) as executor:
+        future_to_paper = {
+            executor.submit(fetch_abstract, p["id"], verbose): p for p in missing
+        }
+        for future in as_completed(future_to_paper):
+            paper = future_to_paper[future]
+            try:
+                paper["abstract"] = future.result()
+            except Exception as e:
+                if verbose:
+                    print(f"  Warning: Failed to fetch abstract for {paper['id']}: {e}")
+
+    # A systemic failure (bad ids, arXiv blocking us, network down) shows up as
+    # *every* fetch coming back empty. That used to be silent, which is how the
+    # "arXiv:" id-prefix bug hid for so long — warn unconditionally.
+    still_missing = sum(1 for p in missing if not p["abstract"])
+    if still_missing and still_missing >= len(missing) // 2:
+        print(
+            f"  Warning: {still_missing}/{len(missing)} abstracts "
+            f"could not be retrieved from arxiv.org.",
+            file=sys.stderr,
+        )
+
+
+def fetch_feed(
+    url: str,
+    sections: List[str] | None = None,
+    verbose: bool = False,
+    backfill: bool = True,
+) -> List[dict]:
     resp = requests.get(url, timeout=30)
     resp.raise_for_status()
     soup = BeautifulSoup(resp.text, "html.parser")
@@ -703,36 +750,11 @@ def fetch_feed(url: str, sections: List[str] | None = None, verbose: bool = Fals
                 }
             )
     
-    # Batch fetch missing abstracts in parallel for speed
-    papers_missing_abstract = [p for p in papers if not p["abstract"]]
-    if papers_missing_abstract:
-        if verbose:
-            print(f"  Fetching {len(papers_missing_abstract)} abstracts in parallel...")
-        
-        # Use ThreadPoolExecutor to fetch abstracts concurrently
-        # Limit to 10 concurrent requests to be respectful to arXiv servers
-        with ThreadPoolExecutor(max_workers=10) as executor:
-            future_to_paper = {executor.submit(fetch_abstract, p["id"], verbose): p for p in papers_missing_abstract}
-            
-            for future in as_completed(future_to_paper):
-                paper = future_to_paper[future]
-                try:
-                    paper["abstract"] = future.result()
-                except Exception as e:
-                    if verbose:
-                        print(f"  Warning: Failed to fetch abstract for {paper['id']}: {e}")
+    # Batch fetch missing abstracts in parallel for speed. Skipped when the
+    # caller (fetch_pastweek fallback) will back-fill the deduplicated set.
+    if backfill:
+        _backfill_missing_abstracts(papers, verbose=verbose)
 
-        # A systemic failure (bad ids, arXiv blocking us, network down) shows up
-        # as *every* fetch coming back empty. That used to be silent, which is
-        # how the "arXiv:" id-prefix bug hid for so long — warn unconditionally.
-        still_missing = sum(1 for p in papers_missing_abstract if not p["abstract"])
-        if still_missing and still_missing >= len(papers_missing_abstract) // 2:
-            print(
-                f"  Warning: {still_missing}/{len(papers_missing_abstract)} abstracts "
-                f"could not be retrieved from arxiv.org.",
-                file=sys.stderr,
-            )
-    
     if verbose:
         print(f"  Found {len(papers)} papers")
     
@@ -746,10 +768,7 @@ def fetch_feeds(urls: List[str], sections: List[str] | None = None, verbose: boo
     for u in urls:
         if verbose:
             print(f"Fetching {u}...")
-        try:
-            papers = fetch_feed(u, sections=sections, verbose=verbose)
-        except Exception:
-            raise
+        papers = fetch_feed(u, sections=sections, verbose=verbose)
         for p in papers:
             pid = p.get("id")
             if pid in seen_ids:
@@ -759,22 +778,254 @@ def fetch_feeds(urls: List[str], sections: List[str] | None = None, verbose: boo
     return all_papers
 
 
+# ── Persistent fetch cache ─────────────────────────────────────────────
+#
+# arXiv announces once per day, so a (timeframe, feeds) fetch is stable within a
+# UTC day. Cache results on disk keyed on that, so restarting the app or
+# re-selecting the same feeds reuses the saved papers instead of re-hitting
+# arXiv — which is what trips the export-API rate limiter. The key includes the
+# UTC date, so a new day naturally misses and refetches. Disk-backed (not held
+# in memory) and self-pruning, so it stays small.
+
+_FETCH_CACHE_DIR = Path.home() / ".arxiv_scraper" / "cache"
+_FETCH_CACHE_MAX_AGE_DAYS = 3
+
+
+def _fetch_cache_key(timeframe: str, feed_names: Sequence[str], day: str | None = None) -> str:
+    """Stable short key for a (timeframe, feeds, UTC-day) fetch."""
+    import hashlib
+
+    day = day or datetime.now(UTC).strftime("%Y-%m-%d")
+    raw = f"{timeframe}|{','.join(sorted(feed_names))}|{day}"
+    return hashlib.sha256(raw.encode()).hexdigest()[:16]
+
+
+def load_fetch_cache(key: str) -> List[dict] | None:
+    """Return cached papers for ``key``, or None on miss / unreadable file."""
+    f = _FETCH_CACHE_DIR / f"{key}.json"
+    try:
+        return json.loads(f.read_text())
+    except (OSError, json.JSONDecodeError):
+        return None
+
+
+def save_fetch_cache(key: str, papers: List[dict]) -> None:
+    """Persist ``papers`` under ``key`` and prune stale cache files.
+
+    Empty results are not cached, so a failed/blocked fetch retries next time
+    rather than pinning zero papers for the day. Best-effort: disk errors are
+    swallowed (the cache is an optimization, never a correctness dependency).
+    """
+    if not papers:
+        return
+    try:
+        _FETCH_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        cutoff = time.time() - _FETCH_CACHE_MAX_AGE_DAYS * 86400
+        for old in _FETCH_CACHE_DIR.glob("*.json"):
+            if old.stat().st_mtime < cutoff:
+                old.unlink(missing_ok=True)
+        (_FETCH_CACHE_DIR / f"{key}.json").write_text(json.dumps(papers))
+    except OSError:
+        pass
+
+
+def clear_fetch_cache() -> None:
+    """Delete every persisted fetch-cache file (best-effort)."""
+    try:
+        for f in _FETCH_CACHE_DIR.glob("*.json"):
+            f.unlink(missing_ok=True)
+    except OSError:
+        pass
+
+
 # ── arXiv export API fetch (true date-range window) ─────────────────────────
 #
 # arXiv's /pastweek HTML listing is unreliable — it returns whatever days arXiv
 # currently has listed (often 1–5 days), not a guaranteed 7-day window. For a
 # genuine N-day window we query the arXiv export API with a `submittedDate:[...]`
-# range instead. Each paper's `section` is set to its submission day label so the
-# existing day-picker / filtering logic keeps working.
+# range instead. Each paper's `section` starts with its submission-day fallback;
+# `fetch_pastweek` reconciles it with arXiv's official announcement sections.
 
 _ARXIV_API = "http://export.arxiv.org/api/query"
 _API_ATOM = "{http://www.w3.org/2005/Atom}"
 _API_OPENSEARCH = "{http://a9.com/-/spec/opensearch/1.1/}"
 
 
+# arXiv's export API rate-limits aggressive clients with HTTP 429. We stay on
+# its good side by (a) pacing successive requests, (b) sending a descriptive
+# User-Agent (arXiv asks for this so it can identify/contact the tool rather
+# than hard-block it), and (c) retrying transient 429 / 5xx responses with backoff
+# that honors the server's Retry-After header. arXiv recommends ~3s between
+# requests for bulk use; we honor that here (a 1s pace trips 429s on big
+# multi-page feeds like cond-mat), with the retry/backoff as the safety net for
+# any residual rate limiting.
+_ARXIV_RATE_LIMIT_SECONDS = 3.0
+# With the HTML /pastweek fallback (see fetch_pastweek) as the safety net, the
+# API no longer needs a long retry tail: a sustained 429 (arXiv's App Engine
+# hard-blocks an IP with no Retry-After) would otherwise sleep 3+6+12+24+48+96
+# ≈ 189s per feed before failing over. Cap both the count and the per-wait so a
+# blocked feed fails over in ~15s instead.
+_MAX_API_RETRIES = 3
+_MAX_BACKOFF_SECONDS = 8.0
+# Hard wall-clock budget for the whole retry loop. A blocked arXiv can return
+# 429 *slowly* (~16s per response), so a count-only cap still adds up; this
+# bounds the total time before we fail over to the HTML fallback, whatever the
+# per-request latency.
+_MAX_RETRY_BUDGET_SECONDS = 30.0
+# (connect, read) timeout. A single 30s read is tight when the API folds 500
+# results into one response and arXiv is under load; give the read 60s. The
+# retry/backoff above is the safety net once even that is exceeded.
+_API_TIMEOUT = (10, 60)
+# Page size is a speed/request-count tradeoff. 100 strings 20 requests together
+# (slow, and the burst trips anonymous 429s). 2000 folds a big query into one
+# request that can exceed the read timeout (crashing on ReadTimeout). 500 returns
+# within the timeout yet needs only a handful of requests — a week of cond-mat
+# (~2000) is 4 requests, a sub-field is 1 — so it's fast *and* still respectful.
+_API_PAGE_SIZE = 500
+_API_USER_AGENT = "arxiv-digest (research tool; https://github.com/isaac-tes/arxiv-digest)"
+# Status codes that are safe to retry with backoff.
+_RETRYABLE_STATUS = (429, 500, 502, 503, 504)
+# Transport-level failures (before any HTTP status exists) that are transient and
+# retryable: connection refused/reset and read/connect timeouts.
+_RETRYABLE_EXCEPTIONS = (requests.ConnectionError, requests.Timeout)
+
+
+def _retry_after_seconds(resp: requests.Response) -> float | None:
+    """Parse an HTTP ``Retry-After`` header into seconds (None if absent/malformed)."""
+    wait = resp.headers.get("Retry-After")
+    if wait is None:
+        return None
+    try:
+        return max(float(wait), 0.0)
+    except ValueError:
+        return None
+
+
+def _api_get_with_retry(params: dict, verbose: bool = False) -> requests.Response:
+    """GET the arXiv export API, retrying transient failures with backoff.
+
+    Sends a descriptive ``User-Agent``. Retries are triggered by either a
+    retryable status (429 / 5xx) or a transport exception (read/connect timeout,
+    connection reset) — both are transient and both would otherwise crash a long
+    multi-feed fetch. Each retry waits ``Retry-After`` when the server sends one,
+    else backs off exponentially from ``_ARXIV_RATE_LIMIT_SECONDS``, up to
+    ``_MAX_API_RETRIES`` attempts. A non-retryable HTTP error still raises via
+    ``raise_for_status``; once retries are exhausted the last error is re-raised.
+    """
+    last_err: Exception | None = None
+    last_attempt = _MAX_API_RETRIES
+    deadline = time.monotonic() + _MAX_RETRY_BUDGET_SECONDS
+    for attempt in range(_MAX_API_RETRIES + 1):
+        try:
+            resp = requests.get(
+                _ARXIV_API,
+                params=params,
+                timeout=_API_TIMEOUT,
+                headers={"User-Agent": _API_USER_AGENT},
+            )
+        except _RETRYABLE_EXCEPTIONS as exc:
+            delay = min(_ARXIV_RATE_LIMIT_SECONDS * (2**attempt), _MAX_BACKOFF_SECONDS)
+            if verbose:
+                print(
+                    f"  API {type(exc).__name__}; retrying in {delay:.0f}s "
+                    f"(attempt {attempt + 1}/{_MAX_API_RETRIES + 1})"
+                )
+            last_err = exc
+            if attempt == last_attempt or time.monotonic() + delay >= deadline:
+                break  # out of attempts or time budget; fail over now
+            time.sleep(delay)
+            continue
+
+        if resp.status_code in _RETRYABLE_STATUS:
+            wait = _retry_after_seconds(resp)
+            delay = (
+                wait
+                if wait is not None
+                else min(_ARXIV_RATE_LIMIT_SECONDS * (2**attempt), _MAX_BACKOFF_SECONDS)
+            )
+            if verbose:
+                print(
+                    f"  API {resp.status_code}; retrying in {delay:.0f}s "
+                    f"(attempt {attempt + 1}/{_MAX_API_RETRIES + 1})"
+                )
+            last_err = requests.HTTPError(f"{resp.status_code} Server Error", response=resp)
+            if attempt == last_attempt or time.monotonic() + delay >= deadline:
+                break  # out of attempts or time budget; fail over now
+            time.sleep(delay)
+            continue
+
+        resp.raise_for_status()
+        return resp
+    raise last_err  # type: ignore[misc]
+
+
 def _api_day_label(dt: datetime) -> str:
     """Format a datetime as an arXiv day label, e.g. 'Thu, 20 Aug 2026'."""
     return dt.strftime("%a, %d %b %Y")
+
+
+def _canonical_day_label(label: str) -> str:
+    """Normalize arXiv's sometimes-unpadded HTML date labels."""
+    try:
+        return _api_day_label(datetime.strptime(label, "%a, %d %b %Y"))
+    except ValueError:
+        return label
+
+
+def _parse_listing_day_labels(html: str) -> Dict[str, str]:
+    """Map arXiv ids to the day sections used by an HTML listing page.
+
+    The export API exposes a submission timestamp, not the announcement batch
+    date shown by arXiv's ``/pastweek`` page.  In particular, a paper submitted
+    late on Wednesday can be listed by arXiv under Thursday.  Keep the API as
+    the source of paper metadata, but use the official listing section when it
+    is available so the GUI/CLI day picker agrees with arXiv.
+    """
+    soup = BeautifulSoup(html, "html.parser")
+    labels: Dict[str, str] = {}
+    for h3 in soup.find_all("h3"):
+        section_name = h3.get_text(" ", strip=True)
+        day_label = section_day_label(section_name)
+        if day_label is None:
+            continue
+        day_label = _canonical_day_label(day_label)
+
+        stop = h3.find_next("h3")
+        node = h3.next_sibling
+        while node is not None and node is not stop:
+            if getattr(node, "name", None) == "dt":
+                anchor = node.find("a", title="Abstract")
+                if anchor is not None:
+                    href = anchor.get("href", "") or ""
+                    raw_id = (
+                        href.rsplit("/abs/", 1)[-1]
+                        if "/abs/" in href
+                        else anchor.get_text(strip=True)
+                    )
+                    paper_id = normalize_arxiv_id(raw_id)
+                    if paper_id:
+                        labels[paper_id] = day_label
+            node = node.next_sibling
+    return labels
+
+
+def _fetch_listing_day_labels(category: str, verbose: bool = False) -> Dict[str, str]:
+    """Fetch arXiv's authoritative day labels for one category.
+
+    ``show=2000`` asks the listing page to include the full recent window,
+    rather than only the first page of a busy category.  This is a best-effort
+    annotation step; callers retain the API-derived fallback section if the
+    HTML request fails.
+    """
+    from urllib.parse import quote
+
+    url = f"https://arxiv.org/list/{quote(category, safe='.')}/pastweek?show=2000"
+    resp = requests.get(url, timeout=_API_TIMEOUT, headers={"User-Agent": _API_USER_AGENT})
+    resp.raise_for_status()
+    labels = _parse_listing_day_labels(resp.content)
+    if verbose:
+        print(f"  Listing labels {category}: {len(labels)} papers")
+    return labels
 
 
 def fetch_feed_api(
@@ -789,29 +1040,30 @@ def fetch_feed_api(
     Uses the arXiv export API's `submittedDate` range query, which gives a true
     date window (unlike the /pastweek HTML listing). Returns paper dicts with the
     same shape as `fetch_feed` (id, title, authors, link, subjects, abstract,
-    section=day label). Paginates through the API (100 results per request).
+    section=day label). Paginates through the API (100 results per request),
+    pacing each page by ``_ARXIV_RATE_LIMIT_SECONDS`` and retrying transient 429 /
+    5xx responses with exponential backoff (see `_api_get_with_retry`), so a
+    rate limit degrades to a slower fetch instead of a hard crash.
     """
     papers: List[dict] = []
     start = 0
-    page_size = 100
+    page_size = _API_PAGE_SIZE
     # submittedDate range is inclusive on both ends, in YYYYMMDDHHMM form.
     start_str = start_date.strftime("%Y%m%d%H%M")
     end_str = end_date.strftime("%Y%m%d%H%M")
     query = f"cat:{category} AND submittedDate:[{start_str} TO {end_str}]"
 
     while True:
-        resp = requests.get(
-            _ARXIV_API,
-            params={
+        resp = _api_get_with_retry(
+            {
                 "search_query": query,
                 "start": start,
                 "max_results": page_size,
                 "sortBy": "submittedDate",
                 "sortOrder": "descending",
             },
-            timeout=30,
+            verbose=verbose,
         )
-        resp.raise_for_status()
         root = ET.fromstring(resp.content)
 
         total_node = root.find(f"{_API_OPENSEARCH}totalResults")
@@ -827,6 +1079,8 @@ def fetch_feed_api(
         if not entries or len(papers) >= total or len(papers) >= max_results:
             break
         start += page_size
+        # Pace between paginated pages so arXiv's export API doesn't rate-limit us.
+        time.sleep(_ARXIV_RATE_LIMIT_SECONDS)
 
     return papers
 
@@ -867,6 +1121,122 @@ def _paper_from_api_entry(entry: ET.Element) -> dict:
         "abstract": text("summary"),
         "section": day_label,
     }
+
+
+def _fetch_pastweek_html(category: str, verbose: bool = False) -> List[dict]:
+    """Fallback fetch: arXiv's HTML /pastweek listing for one category.
+
+    Used when the export API is unavailable (rate-limited / timing out). The
+    HTML host (arxiv.org) is a separate service from the export API
+    (export.arxiv.org, behind Google App Engine), so it often still responds
+    when the API is throttling. Caveat: /pastweek returns whatever days arXiv
+    currently lists (often fewer than 7), so this is best-effort, not a true
+    7-day window.
+    """
+    from urllib.parse import quote
+
+    url = f"https://arxiv.org/list/{quote(category, safe='.')}/pastweek?show=2000"
+    # Defer abstract back-fill: fetch_pastweek back-fills the deduplicated set
+    # once, so a paper shared by a parent feed and its sub-feed is fetched once.
+    return fetch_feed(url, verbose=verbose, backfill=False)
+
+
+def fetch_pastweek(
+    feed_names: Sequence[str],
+    start: datetime,
+    end: datetime,
+    verbose: bool = False,
+    notices: list[str] | None = None,
+) -> List[dict]:
+    """Fetch several feeds across a date window, deduplicating by arXiv id.
+
+    ``feed_names`` are category strings (each must be a key of ``cfg.feeds``,
+    validated by the caller). Each is queried through :func:`fetch_feed_api`
+    for the window ``[start, end]`` and results are concatenated, skipping any
+    id already seen so overlapping categories (a parent ``cond-mat`` plus its
+    sub-categories) contribute each paper once. API-derived sections are
+    reconciled with arXiv's HTML announcement-day sections. Calls are spaced
+    apart so the arXiv export API doesn't rate-limit.
+
+    If the export API fails for a category (rate limit / timeout, after retries),
+    that category falls back to the HTML /pastweek listing instead of aborting
+    the whole fetch. When any fallback happens a human-readable explanation is
+    appended to ``notices`` (if a list is passed) so the caller can surface the
+    cause; the reason is also printed under ``verbose``.
+    """
+    papers: List[dict] = []
+    seen: set[str] = set()
+    fell_back: list[str] = []
+    # Once the API proves it is down for one feed, it is down for all of them
+    # (same host, same IP block). Skip it for the rest and go straight to HTML,
+    # so the retry-backoff cost is paid once, not once per feed.
+    api_down = False
+    for idx, name in enumerate(feed_names):
+        feed_papers: List[dict] = []
+        if not api_down:
+            try:
+                feed_papers = fetch_feed_api(name, start, end, verbose=verbose)
+            except requests.RequestException as exc:
+                api_down = True
+                if verbose:
+                    print(
+                        f"  Export API failed for {name} ({type(exc).__name__}); "
+                        "using HTML /pastweek for this and remaining feeds"
+                    )
+        if api_down:
+            fell_back.append(name)
+            try:
+                feed_papers = _fetch_pastweek_html(name, verbose=verbose)
+            except requests.RequestException as exc2:
+                if verbose:
+                    print(f"  HTML fallback also failed for {name}: {exc2}")
+                feed_papers = []
+        for p in feed_papers:
+            if p["id"] in seen:
+                continue
+            seen.add(p["id"])
+            papers.append(p)
+        # Only the API path needs inter-feed pacing; HTML fallback hits a
+        # different host that is not rate-limiting us.
+        if idx < len(feed_names) - 1 and not api_down:
+            time.sleep(_ARXIV_RATE_LIMIT_SECONDS)
+
+    # Back-fill abstracts once over the deduplicated set (fallback feeds deferred
+    # theirs). Papers from the API already carry abstracts, so only HTML-fallback
+    # papers are fetched here, each exactly once.
+    if fell_back:
+        _backfill_missing_abstracts(papers, verbose=verbose)
+
+    if fell_back and notices is not None:
+        notices.append(
+            "arXiv export API was rate-limited or timed out; used the HTML "
+            "/pastweek fallback for: "
+            + ", ".join(fell_back)
+            + ". Results may cover fewer than 7 days."
+        )
+
+    # The API's ``published`` field is the submission timestamp.  It cannot
+    # reproduce arXiv's announcement-day grouping (for example, 2609.10541 is
+    # submitted on Wed 09 Sep UTC but appears in arXiv's Thu 10 Sep listing).
+    # Reconcile sections against the official HTML listing; retain the API
+    # section as a fallback when a category page is unavailable or truncated.
+    # Feeds that already fell back to HTML carry authoritative day labels from
+    # the same /pastweek listing, so re-fetching them here is pure waste (and
+    # for a big category like cond-mat that is a large HTML round-trip).
+    listing_labels: Dict[str, str] = {}
+    fell_back_set = set(fell_back)
+    for name in feed_names:
+        if name in fell_back_set:
+            continue
+        try:
+            listing_labels.update(_fetch_listing_day_labels(name, verbose=verbose))
+        except requests.RequestException as exc:
+            if verbose:
+                print(f"  Warning: Could not fetch {name} day labels: {exc}")
+    for paper in papers:
+        if label := listing_labels.get(paper.get("id", "")):
+            paper["section"] = label
+    return papers
 
 
 # ── Submission-type / day filtering ──────────────────────────────────────────
@@ -965,6 +1335,38 @@ def term_matches(term: str, text: str, *, word_boundary: bool = True) -> bool:
     return bool(pat and pat.search(text))
 
 
+def _name_tokens(text: str) -> list[str]:
+    """Lowercased word tokens of a name, punctuation ('.', ',', '-') dropped."""
+    return [t for t in re.split(r"[^\w]+", text.lower()) if t]
+
+
+def author_matches(term: str, authors_txt: str, *, word_boundary: bool = True) -> bool:
+    """True if a named-author `term` names a person listed in `authors_txt`.
+
+    Single-token terms (surnames like 'bloch' or 'ma') keep the whole-token
+    word-boundary check, so 'ma' never matches 'Mao' nor 'bloch' 'Blochwitz'.
+    Multi-token terms (full names like 'Hannah Price') instead require the same
+    given name and same surname within ONE comma-separated author; middle
+    names/initials on either side are ignored, so 'Hannah Price' still matches
+    'Hannah M. Price' (and a config carrying the initial matches the bare name).
+    A name split across two authors ('Bob Hannah, Charlie Price') does not match.
+    """
+    term_tokens = _name_tokens(term)
+    if not term_tokens:
+        return False
+    if len(term_tokens) == 1:
+        return term_matches(term_tokens[0], authors_txt, word_boundary=word_boundary)
+    for author in authors_txt.split(","):
+        author_tokens = _name_tokens(author)
+        if (
+            len(author_tokens) >= 2
+            and author_tokens[0] == term_tokens[0]
+            and author_tokens[-1] == term_tokens[-1]
+        ):
+            return True
+    return False
+
+
 def explain_score(paper: dict, cfg: Config) -> dict:
     """Return a per-rule breakdown of how `score_paper` arrived at its total.
 
@@ -996,7 +1398,7 @@ def explain_score(paper: dict, cfg: Config) -> dict:
 
     wb = cfg.word_boundary_matching
     matched_keywords = [kw for kw in cfg.core_keywords if term_matches(kw, txt, word_boundary=wb)]
-    matched_authors = [a for a in cfg.named_authors if term_matches(a, authors_txt, word_boundary=wb)]
+    matched_authors = [a for a in cfg.named_authors if author_matches(a, authors_txt, word_boundary=wb)]
     matched_low = [k for k in cfg.low_priority_kw if term_matches(k, txt, word_boundary=wb)]
 
     # Subject scoring is fully driven by per-feed bonuses: each feed whose name
@@ -1160,23 +1562,58 @@ def format_markdown(entries: List[dict], total_papers: int, requested_top: int) 
     return "\n".join(lines).strip()
 
 
+def _timeframe_suffix(timeframe: str) -> str:
+    """Return the arXiv listing suffix for ``timeframe`` (``new`` or ``pastweek``)."""
+    return "new" if timeframe == "today" else "pastweek"
+
+
+def feed_url(base_url: str, timeframe: str) -> str:
+    """Return ``base_url`` with its listing suffix rewritten for ``timeframe``.
+
+    arXiv listing URLs end in one of ``/new``, ``/recent``, or ``/pastweek``
+    (older configs may hold any of these). Only the trailing ``/new``,
+    ``/recent``, or ``/pastweek`` segment is rewritten, to ``/new`` for
+    ``today`` or ``/pastweek`` otherwise; the rest of the URL is untouched.
+    """
+    suffix = _timeframe_suffix(timeframe)
+    for old in ("/new", "/recent", "/pastweek"):
+        if base_url.endswith(old):
+            return base_url[: -len(old)] + f"/{suffix}"
+    return base_url
+
+
+def _validate_feed_names(cfg: Config, names: Sequence[str]) -> None:
+    """Raise ``SystemExit`` on any feed name that is neither known nor a URL.
+
+    Every entry in ``names`` must either be a key of ``cfg.feeds`` or an explicit
+    ``http(s)://`` URL. Unknown names are a hard error rather than a silent skip,
+    so a typo in ``--feed`` or a stale ``default_feeds`` entry can't quietly
+    produce an empty digest.
+    """
+    unknown = [
+        n for n in names if n not in cfg.feeds and not n.startswith(("http://", "https://"))
+    ]
+    if unknown:
+        raise SystemExit(
+            "Unknown feed(s): "
+            + ", ".join(repr(n) for n in unknown)
+            + ". Add them with '--add-url NAME=URL' or edit the config."
+        )
+
+
 def determine_feed(cfg: Config, args: argparse.Namespace) -> List[str]:
     # This function is kept for backward compatibility but main now supports
     # multiple feeds via --feed (action=append). If args.feed is provided it
     # may be a list of names/URLs; return a list of URLs.
-    
+
     # Determine timeframe to use
     timeframe = args.timeframe if args.timeframe else cfg.timeframe
-    timeframe_suffix = "new" if timeframe == "today" else "pastweek"
-    
+
     if args.feed:
         urls: List[str] = []
         for key in args.feed:
             if key in cfg.feeds:
-                # Replace the timeframe suffix in the URL
-                base_url = cfg.feeds[key]
-                url = base_url.replace("/new", f"/{timeframe_suffix}").replace("/recent", f"/{timeframe_suffix}").replace("/pastweek", f"/{timeframe_suffix}")
-                urls.append(url)
+                urls.append(feed_url(cfg.feeds[key], timeframe))
                 continue
             if key.startswith("http"):
                 urls.append(key)
@@ -1187,10 +1624,7 @@ def determine_feed(cfg: Config, args: argparse.Namespace) -> List[str]:
     urls: List[str] = []
     for feed_name in cfg.default_feeds:
         if feed_name in cfg.feeds:
-            # Replace the timeframe suffix in the URL
-            base_url = cfg.feeds[feed_name]
-            url = base_url.replace("/new", f"/{timeframe_suffix}").replace("/recent", f"/{timeframe_suffix}").replace("/pastweek", f"/{timeframe_suffix}")
-            urls.append(url)
+            urls.append(feed_url(cfg.feeds[feed_name], timeframe))
     if urls:
         return urls
 
@@ -1213,6 +1647,11 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
     parser.add_argument("--no-config", action="store_true", help="Ignore config file even if present")
     parser.add_argument("--save-config", action="store_true", help="Persist modified config back to --config path")
     parser.add_argument("--list-config", action="store_true", help="Print current config and exit")
+    parser.add_argument(
+        "--no-update-check",
+        action="store_true",
+        help="Skip the cached check for a newer release at the end of the run",
+    )
     parser.add_argument(
         "--preset",
         choices=list(PRESETS),
@@ -1319,7 +1758,14 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    args = parse_args(argv or sys.argv[1:])
+    argv = list(argv) if argv is not None else sys.argv[1:]
+
+    # `arxiv-digest update` / `arxiv-digest upgrade`: self-update subcommand,
+    # handled before argparse (which only knows flags).
+    if argv and argv[0] in {"update", "upgrade"}:
+        return update_check.run_self_upgrade()
+
+    args = parse_args(argv)
 
     if args.list_presets:
         for name in preset_names():
@@ -1352,6 +1798,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(format_score_breakdown(paper, breakdown))
         return 0
 
+    feed_names = args.feed or cfg.default_feeds
+    _validate_feed_names(cfg, feed_names)
     feed_urls = determine_feed(cfg, args)
 
     # pastweek uses the arXiv export API date-range for a true 7-day window
@@ -1359,19 +1807,17 @@ def main(argv: Sequence[str] | None = None) -> int:
     timeframe = args.timeframe if args.timeframe else cfg.timeframe
     try:
         if timeframe == "pastweek":
-            end = datetime.now()
+            end = datetime.now(UTC)
             start = end - timedelta(days=7)
-            feed_names = args.feed or cfg.default_feeds
-            papers: List[dict] = []
-            seen: set[str] = set()
-            for name in feed_names:
-                if name not in cfg.feeds:
-                    continue
-                for p in fetch_feed_api(name, start, end, verbose=args.verbose):
-                    if p["id"] in seen:
-                        continue
-                    seen.add(p["id"])
-                    papers.append(p)
+            # The export API queries by category, so explicit URL feeds (only
+            # usable on the HTML path) are excluded here.
+            api_names = [n for n in feed_names if not n.startswith("http")]
+            notices: List[str] = []
+            papers = fetch_pastweek(
+                api_names, start, end, verbose=args.verbose, notices=notices
+            )
+            for note in notices:
+                print(f"Warning: {note}", file=sys.stderr)
         else:
             papers = fetch_feeds(feed_urls, sections=args.sections, verbose=args.verbose)
     except requests.RequestException as exc:
@@ -1423,6 +1869,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         markdown_path.write_text(markdown, encoding="utf-8")
         if args.verbose:
             print(f"Saved digest Markdown to {markdown_path}")
+
+    # One-line update notice (cached 24 h, fails silently when GitHub is
+    # unreachable). Interactive default runs only; --no-update-check suppresses.
+    if not args.no_update_check and sys.stdout.isatty():
+        notice = update_check.check_for_update()
+        if notice:
+            print(notice)
     return 0
 
 

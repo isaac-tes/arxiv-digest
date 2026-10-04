@@ -12,8 +12,10 @@ from arxiv_digest import (
     Config,
     apply_cli_modifications,
     determine_feed,
+    feed_url,
     parse_args,
     resolve_report_path,
+    _validate_feed_names,
 )
 
 
@@ -108,6 +110,44 @@ def test_determine_feed_unknown_name_raises():
     args = _ns(feed=["nope"])
     with pytest.raises(SystemExit):
         determine_feed(cfg, args)
+
+
+def test_feed_url_rewrites_each_suffix():
+    assert feed_url("https://arxiv.org/list/cond-mat/new", "pastweek") == (
+        "https://arxiv.org/list/cond-mat/pastweek"
+    )
+    assert feed_url("https://arxiv.org/list/cond-mat/pastweek", "today") == (
+        "https://arxiv.org/list/cond-mat/new"
+    )
+    assert feed_url("https://arxiv.org/list/cond-mat/recent", "today") == (
+        "https://arxiv.org/list/cond-mat/new"
+    )
+    assert feed_url("https://arxiv.org/list/cond-mat.quant-gas/new", "today") == (
+        "https://arxiv.org/list/cond-mat.quant-gas/new"
+    )
+
+
+def test_validate_feed_names_accepts_known_and_url():
+    cfg = Config()
+    # Known names and explicit URLs pass; nothing is raised.
+    _validate_feed_names(cfg, ["cond-mat", "https://arxiv.org/list/hep-th/new"])
+
+
+def test_validate_feed_names_rejects_unknown():
+    cfg = Config()
+    with pytest.raises(SystemExit, match="Unknown feed"):
+        _validate_feed_names(cfg, ["cond-mat", "nonexistent-feed"])
+
+
+def test_main_pastweek_unknown_feed_raises(monkeypatch):
+    """A stale/typo feed name must hard-fail on pastweek, not silently skip."""
+
+    def _no_network(path, *a, **k):
+        raise AssertionError("network should not be reached")
+
+    monkeypatch.setattr(arxiv_digest, "fetch_pastweek", _no_network)
+    with pytest.raises(SystemExit, match="Unknown feed"):
+        arxiv_digest.main(["--timeframe", "pastweek", "--feed", "nonexistent", "--no-config"])
 
 
 def test_format_score_breakdown_renders_all_sections():

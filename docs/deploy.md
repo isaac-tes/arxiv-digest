@@ -49,7 +49,7 @@ curl http://<box-ip>:8000/health     # -> {"status":"ok","mode":"local"}
 
 ### Keep it running across reboots/crashes — systemd
 
-A template unit lives at [`deploy/arxiv-digest.service`](../deploy/arxiv-digest.service).
+A template unit lives at `deploy/arxiv-digest.service` (repo root).
 Fill in `<youruser>` and the checkout path, then:
 
 ```bash

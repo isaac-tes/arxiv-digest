@@ -32,9 +32,10 @@ SAMPLE_API_FEED = """<?xml version="1.0" encoding="UTF-8"?>
 
 
 class _MockResponse:
-    def __init__(self, content: bytes = b"", status_code: int = 200):
+    def __init__(self, content: bytes = b"", status_code: int = 200, headers: dict | None = None):
         self.content = content
         self.status_code = status_code
+        self.headers = headers or {}
 
     def raise_for_status(self):
         if self.status_code >= 400:
@@ -53,6 +54,49 @@ def test_paper_from_api_entry_builds_paper_dict():
     assert paper["subjects"] == "cond-mat.str-el, quant-ph"
     assert paper["link"] == "http://arxiv.org/abs/2608.16520"
     assert paper["section"] == "Mon, 17 Aug 2026"  # day label from published date
+
+
+def test_parse_listing_day_labels_uses_arxiv_section_dates():
+    html = """
+    <h3>Thu, 10 Sep 2026 (showing 1 of 1 entries )</h3>
+    <dt><a href="/abs/2609.10541" title="Abstract">arXiv:2609.10541</a></dt>
+    <dd></dd>
+    <h3>Wed, 9 Sep 2026 (showing 1 of 1 entries )</h3>
+    <dt><a href="/abs/2609.09017" title="Abstract">arXiv:2609.09017</a></dt>
+    <dd></dd>
+    """
+    assert ad._parse_listing_day_labels(html) == {
+        "2609.10541": "Thu, 10 Sep 2026",
+        "2609.09017": "Wed, 09 Sep 2026",
+    }
+
+
+def test_fetch_pastweek_reconciles_api_papers_with_listing_day_labels(monkeypatch):
+    paper = {
+        "id": "2609.10541",
+        "title": "Symplectic Hopf Insulator",
+        "authors": "Isaac Tesfaye",
+        "link": "https://arxiv.org/abs/2609.10541",
+        "subjects": "cond-mat.mes-hall, cond-mat.quant-gas",
+        "abstract": "abstract",
+        "section": "Wed, 09 Sep 2026",
+    }
+    listing = b"""
+    <h3>Thu, 10 Sep 2026 (showing 1 of 1 entries )</h3>
+    <dt><a href=\"/abs/2609.10541\" title=\"Abstract\">arXiv:2609.10541</a></dt>
+    <dd></dd>
+    """
+
+    monkeypatch.setattr(ad, "fetch_feed_api", lambda *args, **kwargs: [paper.copy()])
+    monkeypatch.setattr(ad.time, "sleep", lambda _seconds: None)
+    monkeypatch.setattr(
+        ad.requests,
+        "get",
+        lambda *args, **kwargs: _MockResponse(content=listing),
+    )
+
+    papers = ad.fetch_pastweek(["cond-mat.mes-hall"], datetime(2026, 9, 3), datetime(2026, 9, 10))
+    assert papers[0]["section"] == "Thu, 10 Sep 2026"
 
 
 def test_fetch_feed_api_parses_entries_and_sets_day_labels(monkeypatch):
@@ -82,6 +126,8 @@ def test_fetch_feed_api_paginates(monkeypatch):
     """When totalResults > page size, it keeps fetching until all are collected."""
     import xml.etree.ElementTree as ET
 
+    monkeypatch.setattr(ad.time, "sleep", lambda s: None)  # keep page pacing instant
+
     # Build a feed with totalResults=150 but only 100 entries per page.
     entries = "".join(
         f'<entry><id>http://arxiv.org/abs/2608.{10000+i}</id>'
@@ -104,8 +150,188 @@ def test_fetch_feed_api_paginates(monkeypatch):
     monkeypatch.setattr(ad.requests, "get", _get)
     papers = ad.fetch_feed_api("quant-ph", datetime(2026, 8, 14), datetime(2026, 8, 20))
     # First page returns 100; second page returns the same 100 (mock), so it
-    # stops once len(papers) >= total (150) is not reached but entries repeat.
-    # We assert it made at least 2 requests (start 0 then 100).
+    # stops once len(papers) >= total (150). Page size is 500, so the second
+    # request advances start by 500.
     assert len(starts) >= 2
     assert starts[0] == 0
-    assert starts[1] == 100
+    assert starts[1] == 500
+
+
+def test_fetch_feed_api_retries_read_timeout_then_succeeds(monkeypatch):
+    """A transient ReadTimeout is retried with backoff, then the fetch succeeds."""
+    sleeps: list[float] = []
+    calls = {"n": 0}
+
+    class _FakeReadTimeout(ad.requests.ReadTimeout):
+        pass
+
+    def _get(url, *args, **kwargs):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise _FakeReadTimeout("Read timed out.")
+        return _MockResponse(content=SAMPLE_API_FEED.encode("utf-8"))
+
+    monkeypatch.setattr(ad.requests, "get", _get)
+    monkeypatch.setattr(ad.time, "sleep", lambda s: sleeps.append(s))
+    papers = ad.fetch_feed_api("quant-ph", datetime(2026, 8, 14), datetime(2026, 8, 20))
+    assert len(papers) == 2
+    assert calls["n"] == 2
+    # One retry happened, waiting the base backoff (1s).
+    assert sleeps == [ad._ARXIV_RATE_LIMIT_SECONDS * 1]
+
+
+def test_fetch_feed_api_raises_after_transport_retries_exhausted(monkeypatch):
+    """Persistent timeouts are retried _MAX_API_RETRIES times, then re-raised."""
+    monkeypatch.setattr(ad.time, "sleep", lambda s: None)
+    calls = {"n": 0}
+
+    class _FakeReadTimeout(ad.requests.ReadTimeout):
+        pass
+
+    def _get(url, *args, **kwargs):
+        calls["n"] += 1
+        raise _FakeReadTimeout("Read timed out.")
+
+    monkeypatch.setattr(ad.requests, "get", _get)
+    with pytest.raises(ad.requests.ReadTimeout):
+        ad.fetch_feed_api("quant-ph", datetime(2026, 8, 14), datetime(2026, 8, 20))
+    assert calls["n"] == ad._MAX_API_RETRIES + 1
+
+
+def test_fetch_feed_api_sends_user_agent(monkeypatch):
+    """The export API call sends a descriptive User-Agent (arXiv asks for this)."""
+    captured = {}
+
+    def _get(url, *args, **kwargs):
+        captured["headers"] = kwargs.get("headers", {})
+        return _MockResponse(content=SAMPLE_API_FEED.encode("utf-8"))
+
+    monkeypatch.setattr(ad.requests, "get", _get)
+    ad.fetch_feed_api("quant-ph", datetime(2026, 8, 14), datetime(2026, 8, 20))
+    assert captured["headers"]["User-Agent"].startswith("arxiv-digest")
+
+
+def test_fetch_feed_api_retries_429_then_succeeds(monkeypatch):
+    """A single 429 is retried (honoring Retry-After) and the fetch succeeds."""
+    sleeps: list[float] = []
+    calls = {"n": 0}
+
+    def _get(url, *args, **kwargs):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return _MockResponse(status_code=429, headers={"Retry-After": "2"})
+        return _MockResponse(content=SAMPLE_API_FEED.encode("utf-8"))
+
+    monkeypatch.setattr(ad.requests, "get", _get)
+    monkeypatch.setattr(ad.time, "sleep", lambda s: sleeps.append(s))
+    papers = ad.fetch_feed_api("quant-ph", datetime(2026, 8, 14), datetime(2026, 8, 20))
+    assert len(papers) == 2
+    assert calls["n"] == 2
+    # One retry happened, waiting the Retry-After (2s).
+    assert sleeps == [2.0]
+
+
+def test_fetch_feed_api_raises_after_retries_exhausted(monkeypatch):
+    """Persistent 429 (or 5xx) is retried _MAX_API_RETRIES times, then raises."""
+    monkeypatch.setattr(ad.time, "sleep", lambda s: None)
+    calls = {"n": 0}
+
+    def _get(url, *args, **kwargs):
+        calls["n"] += 1
+        return _MockResponse(status_code=503)
+
+    monkeypatch.setattr(ad.requests, "get", _get)
+    with pytest.raises(Exception):  # HTTPError after retries exhausted
+        ad.fetch_feed_api("quant-ph", datetime(2026, 8, 14), datetime(2026, 8, 20))
+    assert calls["n"] == ad._MAX_API_RETRIES + 1
+
+
+def test_fetch_feed_api_backs_off_exponentially_without_retry_after(monkeypatch):
+    """Without a Retry-After header, backoff starts at the rate-limit interval."""
+    sleeps: list[float] = []
+    calls = {"n": 0}
+
+    def _get(url, *args, **kwargs):
+        calls["n"] += 1
+        if calls["n"] <= 2:
+            return _MockResponse(status_code=429)
+        return _MockResponse(content=SAMPLE_API_FEED.encode("utf-8"))
+
+    monkeypatch.setattr(ad.requests, "get", _get)
+    monkeypatch.setattr(ad.time, "sleep", lambda s: sleeps.append(s))
+    ad.fetch_feed_api("quant-ph", datetime(2026, 8, 14), datetime(2026, 8, 20))
+    # attempt 0 -> 1s, attempt 1 -> 2s (exponential), then success on attempt 2.
+    assert sleeps == [ad._ARXIV_RATE_LIMIT_SECONDS * 1, ad._ARXIV_RATE_LIMIT_SECONDS * 2]
+
+
+def test_api_backoff_is_capped_and_skips_final_sleep(monkeypatch):
+    """A sustained 429 must not sleep 3+6+12+24+48+96s; backoff is capped and
+    the useless sleep before giving up is skipped (regression: 765s grind)."""
+    sleeps: list[float] = []
+    monkeypatch.setattr(ad.requests, "get", lambda *a, **k: _MockResponse(status_code=429))
+    monkeypatch.setattr(ad.time, "sleep", lambda s: sleeps.append(s))
+    with pytest.raises(Exception):
+        ad.fetch_feed_api("quant-ph", datetime(2026, 8, 14), datetime(2026, 8, 20))
+    # One fewer sleep than attempts (no sleep before giving up).
+    assert len(sleeps) == ad._MAX_API_RETRIES
+    # Every wait is capped, so the tail never balloons.
+    assert all(s <= ad._MAX_BACKOFF_SECONDS for s in sleeps)
+
+
+def test_api_retry_respects_wall_clock_budget(monkeypatch):
+    """A slow-responding blocked API (429 after a long delay) must still fail
+    over within the time budget instead of running the full retry count."""
+    start = 1000.0
+    fake = {"t": start}
+    requests_made = {"n": 0}
+
+    def _slow_get(*a, **k):
+        requests_made["n"] += 1
+        fake["t"] += 16.0  # each 429 response takes ~16s to arrive
+        return _MockResponse(status_code=429)
+
+    monkeypatch.setattr(ad.requests, "get", _slow_get)
+    monkeypatch.setattr(ad.time, "monotonic", lambda: fake["t"])
+    monkeypatch.setattr(ad.time, "sleep", lambda s: fake.__setitem__("t", fake["t"] + s))
+
+    with pytest.raises(Exception):
+        ad.fetch_feed_api("quant-ph", datetime(2026, 8, 14), datetime(2026, 8, 20))
+    # 16s + sleep 3 + 16s = 35s > 30s budget -> bails after 2 requests, not the
+    # full 4 (which would be 4*16 + sleeps).
+    assert requests_made["n"] < ad._MAX_API_RETRIES + 1
+    assert (fake["t"] - start) <= _MAX_RETRY_BUDGET_CEILING
+
+
+_MAX_RETRY_BUDGET_CEILING = 40.0  # budget (30s) + one in-flight slow response
+
+
+def test_fetch_pastweek_hits_api_once_when_blocked_then_uses_html(monkeypatch):
+    """When the API is down, only the first feed pays the retry cost; the rest
+    skip straight to the HTML fallback (regression: retry grind paid per feed)."""
+    api_calls = {"n": 0}
+    html_calls: list[str] = []
+
+    def _api_fail(*a, **k):
+        api_calls["n"] += 1
+        raise ad.requests.ConnectionError("blocked")
+
+    def _html(category, verbose=False):
+        html_calls.append(category)
+        return [{"id": f"id-{category}", "title": "t", "authors": "",
+                 "link": "", "subjects": category, "abstract": "",
+                 "section": "Fri, 12 Sep 2026"}]
+
+    monkeypatch.setattr(ad, "fetch_feed_api", _api_fail)
+    monkeypatch.setattr(ad, "_fetch_pastweek_html", _html)
+    monkeypatch.setattr(ad.time, "sleep", lambda s: None)
+
+    feeds = ["cond-mat.quant-gas", "cond-mat.mes-hall", "quant-ph", "cond-mat"]
+    notices: list[str] = []
+    papers = ad.fetch_pastweek(
+        feeds, datetime(2026, 9, 5), datetime(2026, 9, 12), notices=notices
+    )
+
+    assert api_calls["n"] == 1              # API tried once, not once per feed
+    assert html_calls == feeds             # every feed served from HTML
+    assert len(papers) == len(feeds)
+    assert notices and "HTML" in notices[0]

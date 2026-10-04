@@ -43,7 +43,7 @@ class _MockResponse:
 
     def raise_for_status(self):
         if self.status_code >= 400:
-            raise RuntimeError(f"HTTP {self.status_code}")
+            raise zb.requests.HTTPError(f"HTTP {self.status_code}")
 
     def json(self):
         return self._json
@@ -55,10 +55,14 @@ class _MockResponse:
         ("https://arxiv.org/abs/2607.21663", "2607.21663"),
         ("2607.21663", "2607.21663"),
         ("arXiv:2607.21663", "2607.21663"),
+        ("2607.21663v3", "2607.21663"),
+        ("arXiv:2607.21663v1", "2607.21663"),
+        ("cond-mat/0603274v2", "cond-mat/0603274"),
         ("https://arxiv.org/pdf/1810.04805v2", "1810.04805"),
         ("https://arxiv.org/abs/cond-mat/0603274", "cond-mat/0603274"),
         ("", ""),
         ("not an arxiv thing", "not an arxiv thing"),
+        ("not an arxiv thingv2", "not an arxiv thingv2"),
     ],
 )
 def test_arxiv_id_from_input(raw, expected):

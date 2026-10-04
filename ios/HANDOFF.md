@@ -1,9 +1,24 @@
 # iOS app — session handoff
 
-_Last updated: 2026-08-28 · branch `feat/swift_ios`_
+_Last updated: 2026-10-04 · branch `feat/swift_ios` (merged with `main` v0.6.3)_
 
-Living handoff for the native iOS app. Task state lives in **beads** (`bd ready`,
-`bd show <id>`); this file is the human-readable narrative + how-to-run.
+Living handoff for the native iOS app. Locally, task state lives in **beads**
+(`bd ready`, `bd show <id>`); this file is the human-readable narrative + how-to-run.
+
+## Continuing in a cloud session (read first)
+
+- **Beads is local-only** (Dolt data is not on the public remote), so the
+  `arxiv_scraper_cli-*` ids below won't resolve in the cloud. Treat the
+  "Remaining work" section as the task list; the local beads DB stays authoritative.
+- **No Xcode/simulator on Linux.** What works in the cloud:
+  - Server: `cd server && uv sync --extra dev && uv run pytest`
+  - CLI/GUI engine: `uv sync --group dev && uv run pytest` (root)
+  - Swift Core edits are possible, but `swift test` on Linux will fail to build
+    until Core and the tests add
+    `#if canImport(FoundationNetworking) import FoundationNetworking #endif`
+    (URLSession/URLProtocol live there on Linux). Untested on Linux so far.
+- App-target UI (SwiftUI views) can be edited but only verified on a Mac
+  (`xcodegen generate` + `xcodebuild`, see below). Flag UI changes for a Mac check.
 
 ## Architecture in one line
 
@@ -30,7 +45,7 @@ The simulator reaches the host server at `127.0.0.1:8000`.
 1. Bind the server to the LAN: `cd server && uv run uvicorn app.main:app --host 0.0.0.0 --port 8000`
 2. Build/run on the device from Xcode (trust dev signing on the phone once:
    Settings → General → VPN & Device Management).
-3. In-app Settings → Server → your Mac's LAN IP, e.g. `http://192.168.2.133:8000`
+3. In-app Settings → Server → your Mac's LAN IP, e.g. `http://192.168.1.20:8000`
    (**not** `127.0.0.1` — on the phone that's the phone itself).
 
 If it won't connect: macOS firewall on port 8000, or the two devices on different
@@ -108,4 +123,6 @@ list-based parity with the web app.
   `ArxivDigestCoreTests` (TDD). App-target views have no test bundle, so push
   decision logic down into Core (e.g. `ZoteroPolicy`, `PaperSearch`,
   `HighlightEngine`).
-- Git on this branch is conservative: no commits/pushes without explicit request.
+- Conventional Commits (`feat:`, `fix:`, …) per `CONTRIBUTING.md`.
+- Starter presets / test fixtures must stay free of personal or group-specific
+  author names (`tests/test_presets.py::test_every_preset_has_authors`).
