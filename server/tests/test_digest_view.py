@@ -391,3 +391,20 @@ def test_cleared_author_list_stays_cleared(client):
     assert client.get("/config").json()["data"]["named_authors"] == []
     top = client.get("/digest").json()["papers"][0]
     assert top["breakdown"]["signals"]["keyword"]["authors"] == []
+
+
+def test_score_uses_cached_paper_when_arxiv_is_down(client, monkeypatch):
+    client.get("/digest")
+
+    def boom(_):
+        raise requests.HTTPError("429 Too Many Requests")
+
+    monkeypatch.setattr(zb, "fetch_arxiv_atom", boom)
+    body = score(client, "arXiv:2609.00002v2")
+    assert body["rank"] == 2
+    assert body["paper"]["title"] == "B Floquet drive"
+    assert body["breakdown"]["total"] == 8
+    # A paper outside the fetch still needs arXiv and reports the outage.
+    resp = client.post("/score", json={"arxiv_id": "2609.77777"})
+    assert resp.status_code == 502
+    assert "rate-limiting" in resp.json()["detail"]

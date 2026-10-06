@@ -80,21 +80,31 @@ def score_paper_endpoint(
     import zotero_bridge as zb
 
     cfg = load_user_config(db, user)
-    try:
-        entry = zb.fetch_arxiv_atom(body.arxiv_id)
-    except requests.RequestException as exc:
-        raise HTTPException(status_code=502, detail=f"Could not reach arXiv ({type(exc).__name__}).") from exc
-    except Exception:  # noqa: BLE001 - malformed feed etc. -> treat as not found
-        entry = None
-    if entry is None:
-        return ScoreResponse(paper=None, breakdown={"signals": {}, "total": 0}, absence_reason="Paper not found")
+    timeframe = body.timeframe or cfg.timeframe
+    cached = peek_cache(resolve_feed_names(cfg, None), timeframe)
 
-    paper = ad._paper_from_api_entry(entry)
+    # A paper already in the cached fetch is scored from it, so Score works
+    # while arXiv's export API is rate-limiting. Anything else needs arXiv.
+    wanted = zb.arxiv_id_from_input(body.arxiv_id)
+    paper = next((dict(p) for p in (cached.papers if cached else []) if p.get("id") == wanted), None)
+    entry = None
+    if paper is None:
+        try:
+            entry = zb.fetch_arxiv_atom(body.arxiv_id)
+        except requests.RequestException as exc:
+            raise HTTPException(
+                status_code=502,
+                detail=f"Could not reach arXiv ({type(exc).__name__}); it may be rate-limiting. Try again in a moment.",
+            ) from exc
+        except Exception:  # noqa: BLE001 - malformed feed etc. -> treat as not found
+            entry = None
+        if entry is None:
+            return ScoreResponse(paper=None, breakdown={"signals": {}, "total": 0}, absence_reason="Paper not found")
+        paper = ad._paper_from_api_entry(entry)
+
     breakdown = explain_paper(paper, cfg)
     paper_id = paper["id"]
 
-    timeframe = body.timeframe or cfg.timeframe
-    cached = peek_cache(resolve_feed_names(cfg, None), timeframe)
     if cached is None:
         return ScoreResponse(
             paper=paper,

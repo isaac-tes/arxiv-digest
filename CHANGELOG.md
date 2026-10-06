@@ -18,7 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - **Digest service fetches the past week like the CLI**: through the arXiv export API with a true seven-day window (`fetch_pastweek`), not the unreliable `/pastweek` HTML listing. The fetch cache now holds raw papers keyed on the resolved feeds, so editing keywords, weights, the day or removals re-ranks without re-fetching, and changing feeds can no longer serve another feed set's cache.
-- **Score a paper (service)** reports the rank shown in the Papers view or why the paper is absent, like the GUI.
+- **Score a paper (service)** reports the rank shown in the Papers view or why the paper is absent, like the GUI. A paper already in the fetched digest is scored from it, so scoring keeps working while arXiv's export API is rate-limiting.
 - **`GET /config` returns the effective config** with every field filled in; invalid configs are rejected with 422.
 
 ### Fixed
