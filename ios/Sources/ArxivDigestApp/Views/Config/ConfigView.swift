@@ -138,8 +138,12 @@ struct TermListEditor: View {
                         HStack(spacing: 10) {
                             Circle().fill(Color(hex: model.config.color(for: aspect))).frame(width: 7, height: 7)
                             Text(term).foregroundStyle(.primary)
+                            Spacer()
                         }
+                        .contentShape(Rectangle())
                     }
+                    .buttonStyle(.plain)
+                    .accessibilityHint("Edit")
                 }
                 .onDelete { offsets in
                     let doomed = Set(offsets.map { shown[$0] })

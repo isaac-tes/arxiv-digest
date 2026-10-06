@@ -95,6 +95,7 @@ struct ScoreView: View {
                     HStack(alignment: .top) {
                         Text(Highlight.terms(paper.title, enabled: model.config.highlightTermsTitle, config: model.config))
                             .font(.headline)
+                            .fixedSize(horizontal: false, vertical: true)
                             .frame(maxWidth: .infinity, alignment: .leading)
                         ScoreBadge(score: r.breakdown.total, large: true)
                     }

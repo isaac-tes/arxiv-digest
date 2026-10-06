@@ -242,7 +242,10 @@ struct DayPicker: View {
                 }
                 .padding(.horizontal, 16)
             }
-            .onAppear { if let selected { proxy.scrollTo(selected, anchor: .center) } }
+            .onAppear { proxy.scrollTo(selected ?? "all", anchor: .center) }
+            .onChange(of: selected) {
+                withAnimation { proxy.scrollTo(selected ?? "all", anchor: .center) }
+            }
         }
     }
 

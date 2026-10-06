@@ -101,8 +101,13 @@ final class AppModel {
         UserDefaults.standard.set(mode.rawValue, forKey: Self.modeDefaultsKey)
         client = Self.makeClient(mode: mode, url: url)
         digest = nil
+        digestError = nil
         selectedDay = nil
         hasLoadedConfig = false
+        config = DigestConfig()
+        savedConfig = DigestConfig()
+        presets = []
+        zoteroAvailability = .unavailable
         await checkConnection()
         await bootstrap()
     }
