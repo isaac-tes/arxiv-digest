@@ -4,7 +4,7 @@ import Foundation
 ///
 /// Stored as a JSON dictionary so it round-trips through `GET/PUT /config`
 /// without the app needing to know every field the backend supports.
-public struct DigestConfig: Codable, Sendable {
+public struct DigestConfig: Codable, Sendable, Equatable {
     public var data: [String: JSONValue]
 
     public init(data: [String: JSONValue] = [:]) {
@@ -50,6 +50,83 @@ public struct DigestConfig: Codable, Sendable {
         (data["feeds"]?.objectValue?.keys).map { Array($0).sorted() } ?? []
     }
 
+    /// Feed name → arXiv listing URL (the GUI's Feeds tab).
+    public var feeds: [String: String] {
+        get { (data["feeds"]?.objectValue ?? [:]).compactMapValues(\.stringValue) }
+        set { data["feeds"] = .object(newValue.mapValues { .string($0) }) }
+    }
+
+    /// Add or replace a feed. A blank URL defaults to the category's `/new`
+    /// listing, the shape the engine's presets use (`_feeds_map`).
+    public mutating func setFeed(name: String, url: String = "") {
+        let n = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !n.isEmpty else { return }
+        let u = url.trimmingCharacters(in: .whitespacesAndNewlines)
+        feeds[n] = u.isEmpty ? Self.listingURL(for: n) : u
+    }
+
+    /// Remove a feed everywhere it is referenced: the feeds map, the subscribed
+    /// feeds (as the GUI's Save feeds does) and its subject bonus (the GUI's
+    /// per-feed fields follow the feeds list).
+    public mutating func removeFeed(_ name: String) {
+        feeds[name] = nil
+        defaultFeeds.removeAll { $0 == name }
+        feedWeights[name] = nil
+    }
+
+    /// Whether a configured feed is fetched (the GUI sidebar's Feeds multiselect).
+    public func isSubscribed(_ name: String) -> Bool { defaultFeeds.contains(name) }
+
+    public mutating func setSubscribed(_ on: Bool, feed name: String) {
+        if on {
+            if !defaultFeeds.contains(name) { defaultFeeds.append(name) }
+        } else {
+            defaultFeeds.removeAll { $0 == name }
+        }
+    }
+
+    public static func listingURL(for category: String) -> String {
+        "https://arxiv.org/list/\(category)/new"
+    }
+
+    /// Per-feed subject bonus (`feed_weights`): points added when the feed name
+    /// appears in a paper's subjects.
+    public var feedWeights: [String: Int] {
+        get { (data["feed_weights"]?.objectValue ?? [:]).compactMapValues(\.intValue) }
+        set { data["feed_weights"] = .object(newValue.mapValues { .int($0) }) }
+    }
+
+    /// Bonus for one feed (0 when unset). Setting 0 removes the entry, as the
+    /// GUI's "Apply weights" drops zero bonuses.
+    public func feedWeight(_ name: String) -> Int { feedWeights[name] ?? 0 }
+
+    public mutating func setFeedWeight(_ value: Int, for name: String) {
+        feedWeights[name] = value == 0 ? nil : value
+    }
+
+    public var includeReplacements: Bool {
+        get { data["include_replacements"]?.boolValue ?? false }
+        set { data["include_replacements"] = .bool(newValue) }
+    }
+
+    // MARK: - Scoring weights (`weights` object, `ScoringWeights` in the engine)
+
+    /// Engine defaults (`arxiv_digest.ScoringWeights`).
+    public static let defaultWeights: [ScoringWeight: Int] = [
+        .coreKeyword: 6, .namedAuthor: 6, .lowPriorityPenalty: -5,
+        .longAbstractBonus: 1, .longAbstractThreshold: 200,
+    ]
+
+    public func weight(_ w: ScoringWeight) -> Int {
+        data["weights"]?.objectValue?[w.rawValue]?.intValue ?? Self.defaultWeights[w]!
+    }
+
+    public mutating func setWeight(_ value: Int, for w: ScoringWeight) {
+        var obj = data["weights"]?.objectValue ?? [:]
+        obj[w.rawValue] = .int(value)
+        data["weights"] = .object(obj)
+    }
+
     // MARK: - Highlight appearance (mirrors the GUI's per-aspect colors/toggles)
 
     /// Per-aspect highlight color as a hex string. Defaults match the GUI's
@@ -59,43 +136,51 @@ public struct DigestConfig: Codable, Sendable {
         case .keyword: return data["color_keyword"]?.stringValue ?? "#388bfd"
         case .lowPriority: return data["color_low_priority"]?.stringValue ?? "#f85149"
         case .author: return data["color_author"]?.stringValue ?? "#3fb950"
+        case .subject: return data["color_subject"]?.stringValue ?? "#a371f7"
         }
     }
 
     public mutating func setColor(_ hex: String, for aspect: HighlightAspect) {
-        switch aspect {
-        case .keyword: data["color_keyword"] = .string(hex)
-        case .lowPriority: data["color_low_priority"] = .string(hex)
-        case .author: data["color_author"] = .string(hex)
-        }
+        data[Self.colorKey(aspect)] = .string(hex)
     }
 
     public var colorSubject: String {
-        get { data["color_subject"]?.stringValue ?? "#a371f7" }
-        set { data["color_subject"] = .string(newValue) }
+        get { color(for: .subject) }
+        set { setColor(newValue, for: .subject) }
     }
 
-    /// Whether an aspect colors the text itself (font) instead of drawing a
-    /// background highlight — the GUI's `color_font_*` toggles.
+    /// Whether an aspect also tints the matched text's font (the GUI's
+    /// `color_font_*` toggles). Defaults follow the engine: on for keywords and
+    /// authors, off for low-priority and subjects.
     public func fontColor(for aspect: HighlightAspect) -> Bool {
-        switch aspect {
-        case .keyword: return data["color_font_keyword"]?.boolValue ?? false
-        case .lowPriority: return data["color_font_low_priority"]?.boolValue ?? false
-        case .author: return data["color_font_author"]?.boolValue ?? false
-        }
+        data[Self.fontKey(aspect)]?.boolValue ?? (aspect == .keyword || aspect == .author)
     }
 
     public mutating func setFontColor(_ on: Bool, for aspect: HighlightAspect) {
-        switch aspect {
-        case .keyword: data["color_font_keyword"] = .bool(on)
-        case .lowPriority: data["color_font_low_priority"] = .bool(on)
-        case .author: data["color_font_author"] = .bool(on)
-        }
+        data[Self.fontKey(aspect)] = .bool(on)
     }
 
     public var colorFontSubject: Bool {
-        get { data["color_font_subject"]?.boolValue ?? false }
-        set { data["color_font_subject"] = .bool(newValue) }
+        get { fontColor(for: .subject) }
+        set { setFontColor(newValue, for: .subject) }
+    }
+
+    private static func colorKey(_ a: HighlightAspect) -> String {
+        switch a {
+        case .keyword: return "color_keyword"
+        case .lowPriority: return "color_low_priority"
+        case .author: return "color_author"
+        case .subject: return "color_subject"
+        }
+    }
+
+    private static func fontKey(_ a: HighlightAspect) -> String {
+        switch a {
+        case .keyword: return "color_font_keyword"
+        case .lowPriority: return "color_font_low_priority"
+        case .author: return "color_font_author"
+        case .subject: return "color_font_subject"
+        }
     }
 
     public var highlightAuthors: Bool {
@@ -113,8 +198,60 @@ public struct DigestConfig: Codable, Sendable {
         set { data["highlight_terms_abstract"] = .bool(newValue) }
     }
 
+    /// Highlight the two-sentence summary on each paper card. Off by default,
+    /// as in the GUI.
+    public var highlightTermsSummary: Bool {
+        get { data["highlight_terms_summary"]?.boolValue ?? false }
+        set { data["highlight_terms_summary"] = .bool(newValue) }
+    }
+
     public var wordBoundaryMatching: Bool {
-        data["word_boundary_matching"]?.boolValue ?? true
+        get { data["word_boundary_matching"]?.boolValue ?? true }
+        set { data["word_boundary_matching"] = .bool(newValue) }
+    }
+
+    // MARK: - Editing helpers
+
+    /// Clean a list-editor result the way the GUI's Save does: trim entries and
+    /// drop blanks. Order is kept.
+    public static func cleaned(_ items: [String]) -> [String] {
+        items.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+    }
+
+    /// Append `item` unless a case-insensitive duplicate exists. Returns false
+    /// when nothing was added (blank or duplicate).
+    @discardableResult
+    public static func append(_ item: String, to list: inout [String]) -> Bool {
+        let t = item.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !t.isEmpty, !list.contains(where: { $0.caseInsensitiveCompare(t) == .orderedSame }) else {
+            return false
+        }
+        list.append(t)
+        return true
+    }
+}
+
+/// The engine's `ScoringWeights` fields, in the GUI's Scoring-tab order.
+public enum ScoringWeight: String, CaseIterable, Sendable, Identifiable {
+    case coreKeyword = "core_keyword"
+    case namedAuthor = "named_author"
+    case lowPriorityPenalty = "low_priority_penalty"
+    case longAbstractBonus = "long_abstract_bonus"
+    case longAbstractThreshold = "long_abstract_threshold"
+
+    public var id: String { rawValue }
+
+    /// The GUI's label: the field name with underscores as spaces.
+    public var label: String { rawValue.replacingOccurrences(of: "_", with: " ") }
+
+    public var help: String {
+        switch self {
+        case .coreKeyword: return "Points per matched core keyword."
+        case .namedAuthor: return "Points per matched named author."
+        case .lowPriorityPenalty: return "Applied once if any low-priority term matches."
+        case .longAbstractBonus: return "Added when the abstract is longer than the threshold."
+        case .longAbstractThreshold: return "Abstract length (characters) for the bonus."
+        }
     }
 }
 
@@ -135,8 +272,11 @@ public enum JSONValue: Codable, Sendable, Equatable {
     }
 
     public var intValue: Int? {
-        if case .int(let i) = self { return i }
-        return nil
+        switch self {
+        case .int(let i): return i
+        case .double(let d) where d == d.rounded() && abs(d) < 1e15: return Int(d)
+        default: return nil
+        }
     }
 
     public var boolValue: Bool? {
@@ -158,13 +298,14 @@ public enum JSONValue: Codable, Sendable, Equatable {
 
     public init(from decoder: Decoder) throws {
         let container = try decoder.singleValueContainer()
+        if container.decodeNil() { self = .null; return }
+        // Bool before numbers: some Foundation versions decode true/false as 1/0.
+        if let b = try? container.decode(Bool.self) { self = .bool(b); return }
         if let s = try? container.decode(String.self) { self = .string(s); return }
         if let i = try? container.decode(Int.self) { self = .int(i); return }
         if let d = try? container.decode(Double.self) { self = .double(d); return }
-        if let b = try? container.decode(Bool.self) { self = .bool(b); return }
         if let arr = try? container.decode([JSONValue].self) { self = .array(arr); return }
         if let obj = try? container.decode([String: JSONValue].self) { self = .object(obj); return }
-        if container.decodeNil() { self = .null; return }
         throw DecodingError.dataCorruptedError(in: container, debugDescription: "Unsupported JSON value")
     }
 

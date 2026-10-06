@@ -4,37 +4,51 @@ import FoundationNetworking
 #endif
 
 /// Errors thrown by the API client.
-public enum APIError: Error, LocalizedError, Sendable {
+public enum APIError: Error, LocalizedError, Sendable, Equatable {
     case invalidURL
     case invalidResponse
+    /// Non-2xx status with the server's message (FastAPI's `detail` when present).
     case http(Int, String)
-    case decoding(Error)
-    case network(Error)
+    case decoding(String)
+    case network(String)
 
     public var errorDescription: String? {
         switch self {
-        case .invalidURL: return "Invalid URL"
-        case .invalidResponse: return "Invalid response from server"
-        case .http(let code, let body): return "Server error (\(code)): \(body)"
-        case .decoding: return "Could not decode the server response"
-        case .network(let err): return "Network error: \(err.localizedDescription)"
+        case .invalidURL: return "Invalid server URL."
+        case .invalidResponse: return "Invalid response from server."
+        case .http(let code, let message):
+            return message.isEmpty ? "Server error (\(code))." : message
+        case .decoding(let what): return "Could not read the server response (\(what))."
+        case .network(let message): return "Can't reach the digest server: \(message)"
         }
+    }
+
+    /// FastAPI error bodies look like `{"detail": "..."}` (or a list of
+    /// validation errors). Fall back to the raw body, trimmed.
+    public static func message(fromBody data: Data) -> String {
+        if let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            if let s = obj["detail"] as? String { return s }
+            if let list = obj["detail"] as? [[String: Any]] {
+                return list.compactMap { $0["msg"] as? String }.joined(separator: "; ")
+            }
+        }
+        let text = String(data: data, encoding: .utf8) ?? ""
+        return String(text.trimmingCharacters(in: .whitespacesAndNewlines).prefix(300))
     }
 }
 
 /// A minimal async/await HTTP client for the digest service.
 ///
-/// Uses `URLSession` + `Codable` (no third-party dependency). The OpenAPI spec
-/// from the backend is the contract this client implements.
+/// Uses `URLSession` + `Codable` (no third-party dependency). The FastAPI
+/// OpenAPI spec is the contract this client implements.
 public struct APIClient: Sendable {
     public let baseURL: URL
     public var authToken: String?
     private let session: URLSession
 
-    /// - Parameter session: inject a custom session (used by tests). When nil,
-    ///   a session with generous timeouts is created — the digest endpoint
-    ///   scrapes several arXiv list pages and can take 30s+, which exceeds
-    ///   `URLSession.shared`'s default 60s request timeout on a slow network.
+    /// - Parameter session: inject a custom session (tests, demo mode). When
+    ///   nil, a session with generous timeouts is created: a cold past-week
+    ///   fetch queries the arXiv export API per category with rate-limit pauses.
     public init(baseURL: URL, authToken: String? = nil, session: URLSession? = nil) {
         self.baseURL = baseURL
         self.authToken = authToken
@@ -42,7 +56,7 @@ public struct APIClient: Sendable {
             self.session = session
         } else {
             let config = URLSessionConfiguration.default
-            config.timeoutIntervalForRequest = 120   // per-request inactivity
+            config.timeoutIntervalForRequest = 180   // per-request inactivity
             config.timeoutIntervalForResource = 300  // whole-transfer ceiling
             #if !canImport(FoundationNetworking)
             config.waitsForConnectivity = true  // unavailable on Linux Foundation
@@ -53,16 +67,12 @@ public struct APIClient: Sendable {
 
     // MARK: - Core request
 
-    private func request<T: Decodable>(
-        _ method: String,
-        _ path: String,
-        query: [URLQueryItem]? = nil,
-        body: (any Encodable)? = nil
-    ) async throws -> T {
+    private func makeRequest(
+        _ method: String, _ path: String, query: [URLQueryItem]?, body: (any Encodable)?
+    ) throws -> URLRequest {
         var components = URLComponents(url: baseURL.appendingPathComponent(path), resolvingAgainstBaseURL: false)
-        components?.queryItems = query
+        if let query, !query.isEmpty { components?.queryItems = query }
         guard let url = components?.url else { throw APIError.invalidURL }
-
         var request = URLRequest(url: url)
         request.httpMethod = method
         request.setValue("application/json", forHTTPHeaderField: "Accept")
@@ -73,57 +83,118 @@ public struct APIClient: Sendable {
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
             request.httpBody = try JSONEncoder().encode(body)
         }
+        return request
+    }
 
+    private func send(
+        _ method: String, _ path: String, query: [URLQueryItem]? = nil, body: (any Encodable)? = nil
+    ) async throws -> Data {
+        let request = try makeRequest(method, path, query: query, body: body)
         let data: Data
         let response: URLResponse
         do {
             (data, response) = try await session.data(for: request)
         } catch {
-            throw APIError.network(error)
+            throw APIError.network(error.localizedDescription)
         }
-
         guard let http = response as? HTTPURLResponse else { throw APIError.invalidResponse }
         guard (200..<300).contains(http.statusCode) else {
-            let bodyText = String(data: data, encoding: .utf8) ?? ""
-            throw APIError.http(http.statusCode, bodyText)
+            throw APIError.http(http.statusCode, APIError.message(fromBody: data))
         }
+        return data
+    }
 
+    private func request<T: Decodable>(
+        _ method: String, _ path: String, query: [URLQueryItem]? = nil, body: (any Encodable)? = nil
+    ) async throws -> T {
+        let data = try await send(method, path, query: query, body: body)
         do {
             return try JSONDecoder().decode(T.self, from: data)
         } catch {
-            throw APIError.decoding(error)
+            throw APIError.decoding(String(describing: T.self))
         }
     }
 
-    // MARK: - Endpoints
+    /// For endpoints that answer 204 No Content.
+    private func requestNoContent(
+        _ method: String, _ path: String, query: [URLQueryItem]? = nil, body: (any Encodable)? = nil
+    ) async throws {
+        _ = try await send(method, path, query: query, body: body)
+    }
+
+    private struct ConfigBody: Codable { let data: [String: JSONValue] }
+
+    // MARK: - Health
 
     public func health() async throws -> [String: String] {
         try await request("GET", "health")
     }
 
-    /// Fetch the ranked digest. `refresh: true` bypasses the server's 1h cache
-    /// (used by pull-to-refresh); the default served-from-cache path keeps
-    /// repeat loads instant since the arXiv scrape is slow.
-    public func fetchDigest(timeframe: String = "pastweek", topN: Int? = nil, feeds: [String]? = nil, refresh: Bool = false) async throws -> Digest {
-        var query: [URLQueryItem] = [URLQueryItem(name: "timeframe", value: timeframe)]
-        if let topN { query.append(URLQueryItem(name: "top_n", value: String(topN))) }
-        if let feeds, !feeds.isEmpty {
-            query.append(URLQueryItem(name: "feeds", value: feeds.joined(separator: ",")))
-        }
-        if refresh { query.append(URLQueryItem(name: "refresh", value: "true")) }
-        return try await request("GET", "digest", query: query)
+    // MARK: - Digest
+
+    /// The ranked digest view (ADR 0008). `nil` parameters fall back to the
+    /// saved config on the server; `day` restricts to one announcement day;
+    /// `refresh: true` bypasses the server's 1 h fetch cache.
+    public func fetchDigest(
+        timeframe: String? = nil,
+        topN: Int? = nil,
+        day: String? = nil,
+        feeds: [String]? = nil,
+        refresh: Bool = false
+    ) async throws -> Digest {
+        try await request("GET", "digest", query: Self.digestQuery(
+            timeframe: timeframe, topN: topN, day: day, feeds: feeds, refresh: refresh))
     }
 
+    static func digestQuery(
+        timeframe: String?, topN: Int?, day: String?, feeds: [String]?, refresh: Bool
+    ) -> [URLQueryItem] {
+        var q: [URLQueryItem] = []
+        if let timeframe { q.append(URLQueryItem(name: "timeframe", value: timeframe)) }
+        if let topN { q.append(URLQueryItem(name: "top_n", value: String(topN))) }
+        if let day { q.append(URLQueryItem(name: "day", value: day)) }
+        if let feeds, !feeds.isEmpty { q.append(URLQueryItem(name: "feeds", value: feeds.joined(separator: ","))) }
+        if refresh { q.append(URLQueryItem(name: "refresh", value: "true")) }
+        return q
+    }
+
+    // MARK: - Removed papers
+
+    public func removedPapers() async throws -> [String] {
+        try await request("GET", "removed")
+    }
+
+    public func removePaper(arxivId: String) async throws {
+        struct Body: Codable { let arxiv_id: String }
+        try await requestNoContent("POST", "removed", body: Body(arxiv_id: arxivId))
+    }
+
+    public func restorePapers(arxivIds: [String]) async throws {
+        struct Body: Codable { let arxiv_ids: [String] }
+        try await requestNoContent("POST", "removed/restore", body: Body(arxiv_ids: arxivIds))
+    }
+
+    // MARK: - Config
+
     public func getConfig() async throws -> DigestConfig {
-        struct ConfigResponse: Codable { let data: [String: JSONValue] }
-        let resp: ConfigResponse = try await request("GET", "config")
+        let resp: ConfigBody = try await request("GET", "config")
         return DigestConfig(data: resp.data)
     }
 
     public func putConfig(_ config: DigestConfig) async throws -> DigestConfig {
-        struct ConfigBody: Codable { let data: [String: JSONValue] }
-        struct ConfigResponse: Codable { let data: [String: JSONValue] }
-        let resp: ConfigResponse = try await request("PUT", "config", body: ConfigBody(data: config.data))
+        let resp: ConfigBody = try await request("PUT", "config", body: ConfigBody(data: config.data))
+        return DigestConfig(data: resp.data)
+    }
+
+    /// Merge only the given fields into the stored config.
+    public func patchConfig(_ fields: [String: JSONValue]) async throws -> DigestConfig {
+        let resp: ConfigBody = try await request("PATCH", "config", body: ConfigBody(data: fields))
+        return DigestConfig(data: resp.data)
+    }
+
+    /// The engine's built-in defaults (for "Reset to defaults").
+    public func defaultConfig() async throws -> DigestConfig {
+        let resp: ConfigBody = try await request("GET", "config/defaults")
         return DigestConfig(data: resp.data)
     }
 
@@ -131,11 +202,29 @@ public struct APIClient: Sendable {
         try await request("GET", "config/presets")
     }
 
-    public func mergePreset(named name: String) async throws -> DigestConfig {
-        struct ConfigResponse: Codable { let data: [String: JSONValue] }
-        let resp: ConfigResponse = try await request("POST", "config/presets/\(name)/merge")
+    public func presetInfo() async throws -> [PresetInfo] {
+        try await request("GET", "config/presets/info")
+    }
+
+    /// GUI "Add preset": union preset `name` into `base` (the working config).
+    /// With `save: false` the server stores nothing.
+    public func mergePreset(named name: String, into base: DigestConfig? = nil, save: Bool = true) async throws -> DigestConfig {
+        let resp: ConfigBody = try await request(
+            "POST", "config/presets/\(name)/merge",
+            query: [URLQueryItem(name: "save", value: save ? "true" : "false")],
+            body: base.map { ConfigBody(data: $0.data) })
         return DigestConfig(data: resp.data)
     }
+
+    /// GUI "Load preset": the preset's config (defaults elsewhere).
+    public func loadPreset(named name: String, save: Bool = true) async throws -> DigestConfig {
+        let resp: ConfigBody = try await request(
+            "POST", "config/presets/\(name)/load",
+            query: [URLQueryItem(name: "save", value: save ? "true" : "false")])
+        return DigestConfig(data: resp.data)
+    }
+
+    // MARK: - Lists / feedback (server endpoints kept; not used by the current UI)
 
     public func fetchLists() async throws -> [SavedList] {
         try await request("GET", "lists")
@@ -148,66 +237,52 @@ public struct APIClient: Sendable {
 
     public func addPaperToList(listID: Int, paper: Paper) async throws -> ListPaper {
         struct Body: Codable {
-            let arxivId: String
+            let arxiv_id: String
             let title: String
             let authors: String
             let link: String
-            enum CodingKeys: String, CodingKey {
-                case arxivId = "arxiv_id"
-                case title, authors, link
-            }
         }
-        let body = Body(arxivId: paper.id, title: paper.title, authors: paper.authors, link: paper.link)
-        return try await request("POST", "lists/\(listID)/papers", body: body)
+        return try await request("POST", "lists/\(listID)/papers",
+                                 body: Body(arxiv_id: paper.id, title: paper.title, authors: paper.authors, link: paper.link))
     }
 
     public func removePaperFromList(listID: Int, arxivId: String) async throws {
-        let _: EmptyResponse = try await request("DELETE", "lists/\(listID)/papers/\(arxivId)")
+        try await requestNoContent("DELETE", "lists/\(listID)/papers/\(arxivId)")
     }
 
     public func recordFeedback(arxivId: String, action: String, signal: String = "keyword") async throws {
-        struct Body: Codable {
-            let arxivId: String
-            let action: String
-            let signal: String
-            enum CodingKeys: String, CodingKey {
-                case arxivId = "arxiv_id"
-                case action, signal
-            }
-        }
-        let _: EmptyResponse = try await request("POST", "feedback", body: Body(arxivId: arxivId, action: action, signal: signal))
+        struct Body: Codable { let arxiv_id: String; let action: String; let signal: String }
+        try await requestNoContent("POST", "feedback", body: Body(arxiv_id: arxivId, action: action, signal: signal))
     }
 
-    /// Score a single paper by arXiv id (or URL). Returns the fetched paper,
-    /// its per-signal breakdown, and — when the paper isn't in the current
-    /// digest — an `absenceReason`. Backs the Score-a-paper tab.
-    public func score(arxivId: String) async throws -> ScoreResult {
+    // MARK: - Score a paper
+
+    /// Score one paper (id or URL) and place it against the digest view given
+    /// by `timeframe` / `topN` / `day` (the Papers tab's current view).
+    public func score(arxivId: String, timeframe: String? = nil, topN: Int? = nil, day: String? = nil) async throws -> ScoreResult {
         struct Body: Codable {
-            let arxivId: String
-            enum CodingKeys: String, CodingKey { case arxivId = "arxiv_id" }
+            let arxiv_id: String
+            let timeframe: String?
+            let top_n: Int?
+            let day: String?
         }
-        return try await request("POST", "score", body: Body(arxivId: arxivId))
+        return try await request("POST", "score",
+                                 body: Body(arxiv_id: arxivId, timeframe: timeframe, top_n: topN, day: day))
     }
+
+    // MARK: - Zotero
 
     public func zoteroStatus() async throws -> [String: Bool] {
         try await request("GET", "zotero/status")
     }
 
-    public func saveToZotero(arxivId: String, mode: ZoteroMode, collectionKey: String? = nil) async throws -> ZoteroSaveResult {
+    public func saveToZotero(arxivId: String, mode: ZoteroMode = .web, collectionKey: String? = nil) async throws -> ZoteroSaveResult {
         struct Body: Codable {
-            let arxivId: String
+            let arxiv_id: String
             let mode: String
-            let collectionKey: String?
-            enum CodingKeys: String, CodingKey {
-                case arxivId = "arxiv_id"
-                case mode
-                case collectionKey = "collection_key"
-            }
+            let collection_key: String?
         }
         return try await request("POST", "zotero/save",
-                                 body: Body(arxivId: arxivId, mode: mode.rawValue, collectionKey: collectionKey))
+                                 body: Body(arxiv_id: arxivId, mode: mode.rawValue, collection_key: collectionKey))
     }
 }
-
-/// Used for endpoints that return an empty body (e.g. 204).
-struct EmptyResponse: Codable {}

@@ -31,7 +31,7 @@ public struct TermHit: Codable, Hashable, Sendable {
 ///
 /// The backend returns `{"signals": {"keyword": {...}}, "total": N}`. The app
 /// renders this as the "why this score?" breakdown.
-public struct ScoreBreakdown: Codable, Sendable {
+public struct ScoreBreakdown: Codable, Hashable, Sendable {
     public let signals: [String: SignalBreakdown]
     public let total: Int
 
@@ -42,7 +42,7 @@ public struct ScoreBreakdown: Codable, Sendable {
 }
 
 /// A single signal's contribution to a paper's score.
-public struct SignalBreakdown: Codable, Sendable {
+public struct SignalBreakdown: Codable, Hashable, Sendable {
     public let keywords: [TermHit]?
     public let authors: [TermHit]?
     public let subjects: [String: Int]?

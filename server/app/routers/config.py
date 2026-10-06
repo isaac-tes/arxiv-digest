@@ -98,30 +98,42 @@ def list_preset_info() -> list[PresetInfo]:
 @router.post("/presets/{name}/merge", response_model=ConfigOut)
 def merge_preset(
     name: str,
+    body: ConfigUpdate | None = None,
+    save: bool = True,
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> ConfigOut:
-    """GUI "Add preset": union the preset into the current config."""
+    """GUI "Add preset": union the preset into a config.
+
+    The base is `body.data` (the app's unsaved working config) when given, else
+    the stored config. With `save=false` nothing is stored, matching the GUI,
+    where Load/Add change only the working config until the user saves.
+    """
     from arxiv_digest import merge_preset as ad_merge_preset
 
+    base = config_from_dict(_hydrate(body.data)) if body is not None else load_user_config(db, user)
     try:
-        merged = ad_merge_preset(load_user_config(db, user), name)
+        merged = asdict(ad_merge_preset(base, name))
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=f"Unknown preset '{name}'") from exc
-    return _store(db, user, asdict(merged))
+    return _store(db, user, merged) if save else ConfigOut(data=merged)
 
 
 @router.post("/presets/{name}/load", response_model=ConfigOut)
 def load_preset(
     name: str,
+    save: bool = True,
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> ConfigOut:
-    """GUI "Load preset": replace the config with the preset (defaults elsewhere)."""
+    """GUI "Load preset": replace the config with the preset (defaults elsewhere).
+
+    With `save=false` the preset config is returned without being stored.
+    """
     from arxiv_digest import preset_config
 
     try:
-        cfg = preset_config(name)
+        data = asdict(preset_config(name))
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=f"Unknown preset '{name}'") from exc
-    return _store(db, user, asdict(cfg))
+    return _store(db, user, data) if save else ConfigOut(data=data)

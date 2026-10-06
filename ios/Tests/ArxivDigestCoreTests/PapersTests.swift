@@ -55,9 +55,14 @@ final class ConfigAppearanceTests: XCTestCase {
 
     func testFontToggleRoundTrip() {
         var cfg = DigestConfig()
-        XCTAssertFalse(cfg.fontColor(for: .keyword))  // default background highlight
-        cfg.setFontColor(true, for: .keyword)
+        // Defaults follow the engine's Config: font tint on for keywords and
+        // authors, off for low-priority and subjects.
         XCTAssertTrue(cfg.fontColor(for: .keyword))
+        XCTAssertTrue(cfg.fontColor(for: .author))
+        XCTAssertFalse(cfg.fontColor(for: .lowPriority))
+        XCTAssertFalse(cfg.colorFontSubject)
+        cfg.setFontColor(false, for: .keyword)
+        XCTAssertFalse(cfg.fontColor(for: .keyword))
     }
 
     func testFeedsRoundTripAndAvailableNames() throws {
@@ -75,19 +80,16 @@ final class ConfigAppearanceTests: XCTestCase {
 
     func testZoteroSaveResultDecoding() throws {
         let json = """
-        {"ok": true, "mode": "deeplink", "message": "Open in Zotero app",
-         "deep_link": "zotero://select/items/2601.1"}
+        {"ok": true, "mode": "web", "message": "Saved to Zotero"}
         """.data(using: .utf8)!
         let r = try JSONDecoder().decode(ZoteroSaveResult.self, from: json)
         XCTAssertTrue(r.ok)
-        XCTAssertEqual(r.mode, "deeplink")
-        XCTAssertEqual(r.deepLink, "zotero://select/items/2601.1")
+        XCTAssertEqual(r.mode, "web")
+        XCTAssertEqual(r.message, "Saved to Zotero")
     }
 
-    // The web-API path is the only one that actually creates a Zotero item;
-    // the server's `deeplink` mode returns a `zotero://select/...` link that can
-    // only select a *pre-existing* item, so we treat "no web API" as unavailable
-    // rather than firing a link that silently saves nothing.
+    // Without a Web API key on the server, the app offers Share to Zotero
+    // (the OS share sheet) instead of a server save.
     func testZoteroPolicyAvailability() {
         XCTAssertEqual(ZoteroPolicy.availability(from: ["web_api_available": true]), .web)
         XCTAssertEqual(ZoteroPolicy.availability(from: ["web_api_available": false]), .unavailable)
@@ -136,28 +138,5 @@ final class APIClientZoteroTests: XCTestCase {
         let result = try await makeClient().saveToZotero(arxivId: "2601.1", mode: .web)
         XCTAssertTrue(result.ok)
         XCTAssertEqual(result.mode, "web")
-        XCTAssertNil(result.deepLink)
-    }
-}
-
-/// Reads a `URLRequest`'s body even when `URLSession` moved it into
-/// `httpBodyStream` (which it does for the streamed POST bodies our client
-/// sends), so tests can assert on the JSON payload.
-extension URLRequest {
-    var bodyData: Data? {
-        if let httpBody { return httpBody }
-        guard let stream = httpBodyStream else { return nil }
-        stream.open()
-        defer { stream.close() }
-        var data = Data()
-        let bufSize = 4096
-        let buffer = UnsafeMutablePointer<UInt8>.allocate(capacity: bufSize)
-        defer { buffer.deallocate() }
-        while stream.hasBytesAvailable {
-            let read = stream.read(buffer, maxLength: bufSize)
-            if read <= 0 { break }
-            data.append(buffer, count: read)
-        }
-        return data
     }
 }

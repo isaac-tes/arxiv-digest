@@ -361,6 +361,17 @@ def test_preset_load_replaces_and_merge_unions(client):
     assert merged["top_n"] == 2  # scalar prefs kept
 
 
+def test_preset_unsaved_merge_uses_working_config_and_stores_nothing(client):
+    name = ad.preset_names()[0]
+    working = {**CONFIG, "core_keywords": ["draft-only"]}
+    merged = client.post(f"/config/presets/{name}/merge", params={"save": "false"}, json={"data": working}).json()["data"]
+    assert merged["core_keywords"][0] == "draft-only"
+    loaded = client.post(f"/config/presets/{name}/load", params={"save": "false"}).json()["data"]
+    assert loaded["core_keywords"] == ad.PRESETS[name]["core_keywords"]
+    # Stored config untouched.
+    assert client.get("/config").json()["data"]["core_keywords"] == ["floquet", "anyon"]
+
+
 def test_unknown_preset_is_404(client):
     assert client.post("/config/presets/nope/load").status_code == 404
     assert client.post("/config/presets/nope/merge").status_code == 404

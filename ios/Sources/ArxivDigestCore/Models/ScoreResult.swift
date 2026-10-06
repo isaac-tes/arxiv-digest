@@ -35,22 +35,43 @@ public struct ScoredPaper: Codable, Identifiable, Hashable, Sendable {
 }
 
 /// The response from `POST /score`: the fetched paper (or nil), its per-signal
-/// breakdown, and — when the paper isn't in the current digest — an
-/// `absenceReason` explaining why (mirrors the GUI Score-a-paper tab).
+/// breakdown, and its place in the current digest view: either the `rank`
+/// the Papers tab shows, or an `absenceReason` (markdown with `**bold**`)
+/// explaining why it is not there (mirrors the GUI Score-a-paper tab).
 public struct ScoreResult: Codable, Sendable {
     public let paper: ScoredPaper?
     public let breakdown: ScoreBreakdown
+    public let rank: Int?
     public let absenceReason: String?
 
     enum CodingKeys: String, CodingKey {
         case paper
         case breakdown
+        case rank
         case absenceReason = "absence_reason"
     }
 
-    public init(paper: ScoredPaper?, breakdown: ScoreBreakdown, absenceReason: String? = nil) {
+    public init(paper: ScoredPaper?, breakdown: ScoreBreakdown, rank: Int? = nil, absenceReason: String? = nil) {
         self.paper = paper
         self.breakdown = breakdown
+        self.rank = rank
         self.absenceReason = absenceReason
+    }
+}
+
+/// A starter preset with its one-line description (`GET /config/presets/info`).
+public struct PresetInfo: Codable, Sendable, Hashable, Identifiable {
+    public let name: String
+    public let description: String
+    public var id: String { name }
+
+    public init(name: String, description: String) {
+        self.name = name
+        self.description = description
+    }
+
+    /// "open-quantum-systems" → "Open Quantum Systems" (the GUI's format_func).
+    public var displayName: String {
+        name.split(separator: "-").map { $0.prefix(1).uppercased() + $0.dropFirst() }.joined(separator: " ")
     }
 }
