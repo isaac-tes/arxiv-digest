@@ -225,6 +225,12 @@ final class AppModel {
     /// Persist the working config, confirm, and re-rank. Keywords/weights only
     /// re-rank the cached fetch; changed feeds fetch those feeds.
     func saveConfig() async {
+        // The engine treats an empty subscription as "use the built-in feeds";
+        // the GUI disables Fetch instead. Refuse rather than surprise.
+        guard !config.defaultFeeds.isEmpty else {
+            showToast("Subscribe to at least one feed before saving (Config → Feeds).", kind: .error)
+            return
+        }
         isSaving = true
         defer { isSaving = false }
         do {

@@ -40,7 +40,7 @@ the existing CLI/GUI. The backend is a shared **FastAPI REST service** so a nati
 | D4 | iOS v1 scope | **Full parity** — digest + config + score-a-paper + Zotero |
 | D5 | Multi-tenant | **From the start** — auth + per-user config isolation |
 | D6 | Scoring engine | **Pluggable pipeline, keyword signal first**; embeddings/anchors/veto later |
-| D7 | Zotero on mobile | **Web API + deep-link to Zotero iOS app** (both) |
+| D7 | Zotero on mobile | **Web API + share sheet to the Zotero iOS app** (both; the deep-link idea was dropped, see ADR 0005 amendment) |
 | D8 | iOS UI | **Hybrid** — swipe-triage primary + settings tab |
 | D9 | Project layout | **Monorepo** — `server/` + `ios/` alongside existing Python |
 | D10 | iOS target/tooling | **iOS 17+, Swift Package Manager** core + thin Xcode app target |
@@ -165,8 +165,8 @@ All endpoints are JSON. Auth-protected endpoints require `Authorization: Bearer 
 ### Zotero
 | Method | Path | Purpose |
 |--------|------|---------|
-| GET | `/zotero/status` | Availability (Web API key present? deep-link supported?) |
-| POST | `/zotero/save` | Body `{arxiv_id, collection_key, mode: web\|deeplink}` → save or return deep-link |
+| GET | `/zotero/status` | Availability (`web_api_available`) |
+| POST | `/zotero/save` | Body `{arxiv_id, collection_key, mode: web}` → save via the Web API |
 
 ---
 
@@ -265,7 +265,7 @@ or the app.
 ### Phase 1 — iOS app v1 (personal, full parity)
 - SPM package + SwiftUI app.
 - Swipe-triage UI + settings tab; digest fetch + breakdown + highlights.
-- Config editing, score-a-paper, Zotero (Web API + deep-link).
+- Config editing, score-a-paper, Zotero (Web API + share sheet).
 - SwiftData offline cache. Run on simulator (Xcode milestone).
 
 ### Phase 2 — Multi-tenant
@@ -292,7 +292,7 @@ The hard-to-reverse decisions are recorded as ADRs in `docs/adr/`:
 - **0002** — FastAPI REST backend + native apps (D1)
 - **0003** — Multi-tenant-ready from the start (D3/D5)
 - **0004** — Pluggable scoring pipeline (D6)
-- **0005** — Zotero Web API + deep-link on mobile (D7)
+- **0005** — Zotero Web API + deep-link on mobile (D7; amended: share sheet instead of deep-link)
 - **0006** — Monorepo layout (D9)
 - **0007** — iOS 17+ / Swift Package Manager (D10)
 
@@ -304,7 +304,7 @@ The hard-to-reverse decisions are recorded as ADRs in `docs/adr/`:
 |------|-----------|
 | arXiv API rate limits / ToS on scraping | Cache aggressively (1h), respect backoff, use the Atom API where possible; monitor usage |
 | iOS App Store review (Zotero key handling) | Store API key in Keychain; document the flow; no private API use |
-| Zotero Web API requires user key setup | Offer deep-link fallback; clear onboarding |
+| Zotero Web API requires user key setup | Share-sheet fallback (Share to Zotero); clear onboarding |
 | Multi-tenant auth complexity | JWT + OAuth2 password flow; keep single-user mode as a no-op auth path |
 | Embedding model cost/latency (Phase 3) | Small open models; compute server-side, cache per paper |
 | Low willingness-to-pay (freemium) | Institutional/lab licensing over individual subs (Phase 5) |
