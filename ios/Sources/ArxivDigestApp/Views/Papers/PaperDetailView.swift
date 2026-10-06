@@ -12,9 +12,13 @@ struct PaperDetailView: View {
 
     @State private var fetched: ScoreResult?
     @State private var isFetching = false
+    @State private var fetchFailed = false
 
     private var config: DigestConfig { model.config }
-    private var abstract: String { fetched?.paper?.abstract ?? paper.fullAbstract }
+    private var abstract: String {
+        if let a = fetched?.paper?.abstract, !a.isEmpty { return a }
+        return paper.fullAbstract
+    }
     private var breakdown: ScoreBreakdown? { paper.breakdown ?? fetched?.breakdown }
 
     var body: some View {
@@ -38,6 +42,12 @@ struct PaperDetailView: View {
                         HStack { ProgressView(); Text("Loading breakdown…").foregroundStyle(.secondary) }
                     } else {
                         Text("Score \(paper.score)").font(.headline)
+                        if fetchFailed {
+                            Button("Couldn't load the breakdown. Try again") {
+                                Task { await loadIfNeeded() }
+                            }
+                            .font(.footnote)
+                        }
                     }
                 }
                 Button(role: .destructive) {
@@ -126,6 +136,11 @@ struct PaperDetailView: View {
         guard paper.breakdown == nil || paper.abstract.isEmpty, fetched == nil, !isFetching else { return }
         isFetching = true
         defer { isFetching = false }
-        if case .success(let r) = await model.score(paper.id) { fetched = r }
+        if case .success(let r) = await model.score(paper.id) {
+            fetched = r
+            fetchFailed = false
+        } else {
+            fetchFailed = true
+        }
     }
 }

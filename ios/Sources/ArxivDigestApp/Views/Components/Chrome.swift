@@ -227,3 +227,21 @@ extension Date {
         return f.localizedString(for: self, relativeTo: Date())
     }
 }
+
+/// Shown when the config couldn't be loaded, so built-in defaults aren't
+/// mistaken for the user's config (saving stays off until it loads).
+struct ConfigLoadBanner: View {
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        if let error = model.configError, !model.hasLoadedConfig {
+            Callout(style: .error) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Couldn't load your config: \(error)")
+                    Button("Retry") { Task { await model.loadConfig() } }
+                        .font(.callout.weight(.semibold))
+                }
+            }
+        }
+    }
+}

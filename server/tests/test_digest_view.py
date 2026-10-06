@@ -408,3 +408,38 @@ def test_score_uses_cached_paper_when_arxiv_is_down(client, monkeypatch):
     resp = client.post("/score", json={"arxiv_id": "2609.77777"})
     assert resp.status_code == 502
     assert "rate-limiting" in resp.json()["detail"]
+
+
+def test_cache_keyed_on_feed_urls_not_just_names(client, _reset):
+    client.get("/digest", params={"timeframe": "today"})
+    feeds = {**FEEDS, "quant-ph": "https://arxiv.org/list/quant-ph.fixed/new"}
+    client.put("/config", json={"data": {**CONFIG, "feeds": feeds}})
+    client.get("/digest", params={"timeframe": "today"})
+    assert _reset["feeds"] == [
+        ["https://arxiv.org/list/quant-ph/new"],
+        ["https://arxiv.org/list/quant-ph.fixed/new"],
+    ]
+
+
+def test_blank_feeds_param_uses_config_feeds(client, _reset):
+    body = client.get("/digest", params={"feeds": ""}).json()
+    assert body["feeds"] == ["quant-ph"]
+    assert _reset["pastweek"] == [["quant-ph"]]
+
+
+def test_empty_fetch_is_not_cached(client, monkeypatch, _reset):
+    monkeypatch.setattr(ad, "fetch_pastweek", lambda *a, **k: [])
+    client.get("/digest")
+    assert digest_router._fetch_cache == {}
+
+
+def test_score_fetches_arxiv_with_normalized_id(client, monkeypatch):
+    seen = []
+
+    def fake(arxiv_id):
+        seen.append(arxiv_id)
+        return None
+
+    monkeypatch.setattr(zb, "fetch_arxiv_atom", fake)
+    client.post("/score", json={"arxiv_id": "https://arxiv.org/abs/2609.55555v3"})
+    assert seen == ["2609.55555"]

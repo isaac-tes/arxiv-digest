@@ -24,6 +24,11 @@ struct SettingsView: View {
                     .pickerStyle(.segmented)
                 }
 
+                if model.configError != nil && !model.hasLoadedConfig {
+                    Section { ConfigLoadBanner() }
+                        .listRowInsets(EdgeInsets())
+                        .listRowBackground(Color.clear)
+                }
                 Section {
                     Toggle("Highlight authors", isOn: $model.config.highlightAuthors)
                     Toggle("Highlight keywords in titles", isOn: $model.config.highlightTermsTitle)

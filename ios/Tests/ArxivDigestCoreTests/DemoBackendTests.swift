@@ -59,6 +59,7 @@ final class DemoBackendTests: XCTestCase {
         XCTAssertEqual(after.papers.map(\.id), Array(topFour.dropFirst()))
         XCTAssertEqual(after.papers[0].id, top.papers[1].id)
         XCTAssertEqual(after.removed.map(\.id), [first.id])
+        XCTAssertEqual(after.removed.first?.rank, 1)  // full-ranking position, like the server
         XCTAssertEqual(after.caption(showing: 3), "Showing 3 of 3 ranked (out of 13 shown / 14 fetched). 1 removed by you.")
         let removedIds = try await client.removedPapers()
         XCTAssertEqual(removedIds, [first.id])

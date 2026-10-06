@@ -53,6 +53,8 @@ final class AppModel {
     var config = DigestConfig()
     private(set) var savedConfig = DigestConfig()
     private(set) var hasLoadedConfig = false
+    /// Why the config could not be loaded (shown on Config / Settings).
+    var configError: String?
     var presets: [PresetInfo] = []
     var isSaving = false
 
@@ -102,6 +104,7 @@ final class AppModel {
         client = Self.makeClient(mode: mode, url: url)
         digest = nil
         digestError = nil
+        configError = nil
         selectedDay = nil
         hasLoadedConfig = false
         config = DigestConfig()
@@ -217,8 +220,9 @@ final class AppModel {
             config = c
             savedConfig = c
             hasLoadedConfig = true
+            configError = nil
         } catch {
-            digestError = error.localizedDescription
+            configError = error.localizedDescription
         }
     }
 
@@ -287,8 +291,12 @@ final class AppModel {
     /// Score against the same view the Papers tab shows (ADR 0008).
     func score(_ input: String) async -> Result<ScoreResult, Error> {
         do {
+            // Before the config loads, let the server use its own (as loadDigest does).
             return .success(try await client.score(
-                arxivId: input, timeframe: savedConfig.timeframe, topN: savedConfig.topN, day: selectedDay))
+                arxivId: input,
+                timeframe: hasLoadedConfig ? savedConfig.timeframe : nil,
+                topN: hasLoadedConfig ? savedConfig.topN : nil,
+                day: selectedDay))
         } catch {
             return .failure(error)
         }

@@ -81,7 +81,7 @@ def score_paper_endpoint(
 
     cfg = load_user_config(db, user)
     timeframe = body.timeframe or cfg.timeframe
-    cached = peek_cache(resolve_feed_names(cfg, None), timeframe)
+    cached = peek_cache(cfg, resolve_feed_names(cfg, None), timeframe)
 
     # A paper already in the cached fetch is scored from it, so Score works
     # while arXiv's export API is rate-limiting. Anything else needs arXiv.
@@ -90,7 +90,7 @@ def score_paper_endpoint(
     entry = None
     if paper is None:
         try:
-            entry = zb.fetch_arxiv_atom(body.arxiv_id)
+            entry = zb.fetch_arxiv_atom(wanted) if wanted else None
         except requests.RequestException as exc:
             raise HTTPException(
                 status_code=502,

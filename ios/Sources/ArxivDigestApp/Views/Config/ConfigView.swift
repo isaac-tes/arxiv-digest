@@ -11,6 +11,11 @@ struct ConfigView: View {
     var body: some View {
         NavigationStack(path: $path) {
             List {
+                if model.configError != nil && !model.hasLoadedConfig {
+                    Section { ConfigLoadBanner() }
+                        .listRowInsets(EdgeInsets())
+                        .listRowBackground(Color.clear)
+                }
                 Section {
                     summary
                 }

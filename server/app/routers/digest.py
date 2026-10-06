@@ -47,9 +47,19 @@ _fetch_cache: dict[tuple, tuple[float, FetchResult]] = {}
 
 
 def resolve_feed_names(cfg, feeds: list[str] | None) -> list[str]:
-    """Requested feeds (or the config's subscribed ones), known names/URLs only."""
-    names = feeds or cfg.default_feeds
+    """Requested feeds (or the config's subscribed ones), known names/URLs only.
+
+    Blank entries are ignored, so `?feeds=` falls back to the config's feeds.
+    """
+    requested = [f.strip() for f in (feeds or []) if f.strip()]
+    names = requested or cfg.default_feeds
     return [n for n in names if n in cfg.feeds or n.startswith(("http://", "https://"))]
+
+
+def _cache_key(cfg, names: list[str], timeframe: str) -> tuple:
+    """Key on the URLs actually fetched, not just feed names: editing a feed's
+    URL, or two users mapping one name to different URLs, must not share a fetch."""
+    return (timeframe, tuple((n, cfg.feeds.get(n, n)) for n in names))
 
 
 def _fetch(cfg, names: list[str], timeframe: str) -> FetchResult:
@@ -73,13 +83,15 @@ def _fetch(cfg, names: list[str], timeframe: str) -> FetchResult:
     return FetchResult(papers=papers, notices=notices)
 
 
+_CACHE_MAX_ENTRIES = 64
+
+
 def cached_fetch(cfg, names: list[str], timeframe: str, refresh: bool = False) -> FetchResult:
-    key = (timeframe, tuple(names))
-    now = time.monotonic()
+    key = _cache_key(cfg, names, timeframe)
     if not refresh:
         with _cache_lock:
             hit = _fetch_cache.get(key)
-            if hit and (now - hit[0]) < _CACHE_TTL_SECONDS:
+            if hit and (time.monotonic() - hit[0]) < _CACHE_TTL_SECONDS:
                 return hit[1]
     try:
         result = _fetch(cfg, names, timeframe)
@@ -88,15 +100,21 @@ def cached_fetch(cfg, names: list[str], timeframe: str, refresh: bool = False) -
             status_code=502,
             detail=f"arXiv fetch failed ({type(exc).__name__}). arXiv may be slow or down; try again in a moment.",
         ) from exc
+    if not result.papers:
+        return result  # never cache an empty fetch (nothing subscribed / arXiv hiccup)
     with _cache_lock:
-        _fetch_cache[key] = (now, result)
+        # Stamp after the fetch: a cold past-week fetch can take 30 s or more.
+        _fetch_cache[key] = (time.monotonic(), result)
+        if len(_fetch_cache) > _CACHE_MAX_ENTRIES:
+            oldest = min(_fetch_cache, key=lambda k: _fetch_cache[k][0])
+            del _fetch_cache[oldest]
     return result
 
 
-def peek_cache(names: list[str], timeframe: str) -> FetchResult | None:
+def peek_cache(cfg, names: list[str], timeframe: str) -> FetchResult | None:
     """The cached fetch for these feeds, if still fresh (never fetches)."""
     with _cache_lock:
-        hit = _fetch_cache.get((timeframe, tuple(names)))
+        hit = _fetch_cache.get(_cache_key(cfg, names, timeframe))
     if hit and (time.monotonic() - hit[0]) < _CACHE_TTL_SECONDS:
         return hit[1]
     return None

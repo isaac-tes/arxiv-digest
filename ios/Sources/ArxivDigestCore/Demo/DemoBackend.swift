@@ -139,10 +139,11 @@ public final class DemoBackend: @unchecked Sendable {
         }
         let ranked = filtered.sorted { ($0.score, $1.title) > ($1.score, $0.title) }
         var entries: [Paper] = [], removedEntries: [Paper] = []
-        for p in ranked {
+        for (i, p) in ranked.enumerated() {
             if entries.count == max(topN, 1) { break }
             if removed.contains(p.id) {
-                removedEntries.append(p.withRank(0))
+                // Like the server: a removed entry keeps its full-ranking position.
+                removedEntries.append(p.withRank(i + 1))
             } else {
                 entries.append(p.withRank(entries.count + 1))
             }
