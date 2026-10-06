@@ -211,6 +211,19 @@ def _hydrate_feed_weights(data: Dict[str, object]) -> Dict[str, int]:
     return fw
 
 
+def _term_list(data: Dict[str, object], key: str, default) -> List[str]:
+    """A keyword/author/low-priority list from a config blob.
+
+    A list that is present is kept as is, even when empty: a user who cleared
+    their authors must not get the built-in defaults back on reload. Only a
+    missing (or null) key falls back to the defaults.
+    """
+    value = data.get(key)
+    if isinstance(value, list):
+        return [str(v) for v in value]
+    return default()
+
+
 @dataclass
 class ScoringWeights:
     core_keyword: int = 6
@@ -310,9 +323,9 @@ class Config:
                 "cond-mat": "https://arxiv.org/list/cond-mat/new",
             },
             default_feeds=default_feeds or list(DEFAULT_FEEDS),
-            core_keywords=list(data.get("core_keywords") or _default_core_keywords()),
-            named_authors=list(data.get("named_authors") or _default_named_authors()),
-            low_priority_kw=list(data.get("low_priority_kw") or _default_low_priority_kw()),
+            core_keywords=_term_list(data, "core_keywords", _default_core_keywords),
+            named_authors=_term_list(data, "named_authors", _default_named_authors),
+            low_priority_kw=_term_list(data, "low_priority_kw", _default_low_priority_kw),
             top_n=int(data.get("top_n") or 20),
             timeframe=str(data.get("timeframe") or "pastweek"),
             include_replacements=bool(data.get("include_replacements", False)),

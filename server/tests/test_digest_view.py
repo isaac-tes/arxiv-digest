@@ -383,3 +383,11 @@ def test_keyword_signal_highlight_uses_author_matching():
     cfg = ad.Config.from_json(CONFIG)
     hl = KeywordSignal().highlight(PAPERS[0], cfg)
     assert hl["authors"] == ["Ada Lovelace"]
+
+
+def test_cleared_author_list_stays_cleared(client):
+    data = client.put("/config", json={"data": {**CONFIG, "named_authors": []}}).json()["data"]
+    assert data["named_authors"] == []
+    assert client.get("/config").json()["data"]["named_authors"] == []
+    top = client.get("/digest").json()["papers"][0]
+    assert top["breakdown"]["signals"]["keyword"]["authors"] == []
