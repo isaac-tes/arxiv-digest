@@ -30,6 +30,8 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.arxivdigest.app
         PRODUCT_NAME: ArxivDigest
+        MARKETING_VERSION: "0.7.0"
+        CURRENT_PROJECT_VERSION: "1"
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_CFBundleDisplayName: arXiv Digest
         INFOPLIST_KEY_UILaunchScreen_Generation: YES

@@ -1,152 +1,131 @@
 import SwiftUI
 import ArxivDigestCore
 
-/// Full paper detail, mirroring the web GUI paper card + its "Why this score?"
-/// and "Full abstract" expanders: highlighted title/authors, subjects, the full
-/// abstract (fetched via `/score`, since the digest only carries a summary), the
-/// per-signal score breakdown, and an arXiv link.
+/// A paper's full card: the GUI card plus its "Why this score?" and
+/// "Full abstract" expanders, opened. The digest already carries the abstract
+/// and breakdown; an older server without them falls back to `/score`.
 struct PaperDetailView: View {
     let paper: Paper
     @Environment(AppModel.self) private var model
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.openURL) private var openURL
 
-    @State private var result: ScoreResult?
-    @State private var isLoading = false
-    @State private var isSavingZotero = false
-    @State private var zoteroAlert: String?
+    @State private var fetched: ScoreResult?
+    @State private var isFetching = false
 
-    private var terms: HighlightTerms {
-        HighlightEngine.matchedTerms(for: paper, config: model.config)
-    }
-
-    /// Prefer the full abstract from /score; fall back to the digest summary.
-    private var abstractText: String {
-        result?.paper?.abstract ?? paper.summary
-    }
+    private var config: DigestConfig { model.config }
+    private var abstract: String { fetched?.paper?.abstract ?? paper.fullAbstract }
+    private var breakdown: ScoreBreakdown? { paper.breakdown ?? fetched?.breakdown }
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                HStack(alignment: .top) {
-                    HighlightedText(
-                        text: paper.title,
-                        keywords: model.config.highlightTermsTitle ? terms.keywords : [],
-                        lowPriority: model.config.highlightTermsTitle ? terms.lowPriority : [],
-                        config: model.config
-                    )
-                    .font(.title2)
-                    .fontWeight(.bold)
-                    Spacer(minLength: 8)
-                    Text("\(paper.score)")
-                        .font(.title3.weight(.bold))
-                        .foregroundStyle(.blue)
-                }
-
-                HighlightedText(
-                    text: paper.authors,
-                    authors: model.config.highlightAuthors ? terms.authors : [],
-                    config: model.config
-                )
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-
-                if !paper.subjects.isEmpty {
-                    Text(paper.subjects)
-                        .font(.caption)
-                        .foregroundStyle(Color(hex: model.config.colorSubject))
-                }
-                if !paper.section.isEmpty {
-                    Text(paper.section).font(.caption2).foregroundStyle(.tertiary)
-                }
-
-                Divider()
-
-                Text("Abstract").font(.headline)
-                if isLoading && result == nil {
-                    HStack { ProgressView(); Text("Loading full abstract…").foregroundStyle(.secondary) }
-                }
-                HighlightedText(
-                    text: abstractText,
-                    keywords: model.config.highlightTermsAbstract ? terms.keywords : [],
-                    lowPriority: model.config.highlightTermsAbstract ? terms.lowPriority : [],
-                    config: model.config
-                )
-                .font(.body)
-
-                Divider()
-
-                Text("Why this score?").font(.headline)
-                if let result {
-                    ScoreBreakdownView(breakdown: result.breakdown, config: model.config)
-                } else if isLoading {
-                    HStack { ProgressView(); Text("Loading breakdown…").foregroundStyle(.secondary) }
-                } else {
-                    Text("Score: \(paper.score)").font(.headline).foregroundStyle(.blue)
-                }
-
-                if let url = URL(string: paper.link) {
-                    Link(destination: url) {
-                        Label("Open on arXiv", systemImage: "safari")
+            VStack(alignment: .leading, spacing: 18) {
+                header
+                actions
+                card("Abstract", systemImage: "text.alignleft") {
+                    if isFetching && paper.abstract.isEmpty {
+                        HStack { ProgressView(); Text("Loading full abstract…").foregroundStyle(.secondary) }
                     }
-                    .padding(.top, 4)
+                    Text(Highlight.terms(abstract, enabled: config.highlightTermsAbstract, config: config))
+                        .font(.body)
+                        .textSelection(.enabled)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
-
-                zoteroSection
+                card("Why this score?", systemImage: "chart.bar.doc.horizontal") {
+                    if let breakdown {
+                        ScoreBreakdownView(breakdown: breakdown, config: config)
+                    } else if isFetching {
+                        HStack { ProgressView(); Text("Loading breakdown…").foregroundStyle(.secondary) }
+                    } else {
+                        Text("Score \(paper.score)").font(.headline)
+                    }
+                }
+                Button(role: .destructive) {
+                    dismiss()
+                    let model = model, paper = paper
+                    Task { await model.remove(paper) }
+                } label: {
+                    Label("Remove from digest", systemImage: "eye.slash")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.large)
+                Text("Removing hides this paper from this and later rankings; the papers below move up one place. Restore it from Removed papers.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
             .padding()
         }
-        .navigationTitle("Paper")
-        #if os(iOS)
+        .navigationTitle("#\(paper.rank)")
         .navigationBarTitleDisplayMode(.inline)
-        #endif
-        .task { await load() }
-        .task { await model.refreshZoteroAvailability() }
-        .alert("Zotero", isPresented: zoteroAlertPresented) {
-            Button("OK", role: .cancel) { zoteroAlert = nil }
-        } message: {
-            Text(zoteroAlert ?? "")
-        }
-    }
-
-    /// "Save to Zotero", shown only when the server has a Web API key. When it
-    /// doesn't, an explanatory row keeps the feature discoverable without firing
-    /// a deep-link that can't actually create an item.
-    @ViewBuilder
-    private var zoteroSection: some View {
-        Divider()
-        switch model.zoteroAvailability {
-        case .web:
-            Button {
-                Task { await saveToZotero() }
-            } label: {
-                if isSavingZotero {
-                    HStack { ProgressView(); Text("Saving to Zotero…") }
-                } else {
-                    Label("Save to Zotero", systemImage: "tray.and.arrow.down")
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                if let url = absURL(paper.link) {
+                    ShareLink(item: url, subject: Text(paper.title)) {
+                        Label("Share", systemImage: "square.and.arrow.up")
+                    }
                 }
             }
-            .disabled(isSavingZotero)
-        case .unavailable:
-            Label("Zotero saving not configured on the server", systemImage: "info.circle")
-                .font(.footnote)
+        }
+        .task { await loadIfNeeded() }
+    }
+
+    private var header: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: 12) {
+                Text(Highlight.terms(paper.title, enabled: config.highlightTermsTitle, config: config))
+                    .font(.title2.weight(.bold))
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                ScoreBadge(score: paper.score, large: true)
+            }
+            Text(Highlight.authors(paper.authors, config: config))
+                .font(.subheadline)
                 .foregroundStyle(.secondary)
+            HStack(spacing: 6) {
+                Text(paper.id).font(.caption.monospaced())
+                if !paper.section.isEmpty {
+                    Text("·")
+                    Text(paper.section).font(.caption)
+                }
+            }
+            .foregroundStyle(.tertiary)
+            if !paper.subjects.isEmpty {
+                (Text("Subjects: ").foregroundStyle(.secondary) + Text(Highlight.subjects(paper.subjects, config: config)))
+                    .font(.caption)
+            }
         }
     }
 
-    private var zoteroAlertPresented: Binding<Bool> {
-        Binding(get: { zoteroAlert != nil }, set: { if !$0 { zoteroAlert = nil } })
+    private var actions: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 10) {
+                if let url = absURL(paper.link) {
+                    Button { openURL(url) } label: { Label("arXiv", systemImage: "safari") }
+                }
+                if let pdf = paper.pdfURL {
+                    Button { openURL(pdf) } label: { Label("PDF", systemImage: "doc.richtext") }
+                }
+                ZoteroButton(arxivId: paper.id, link: paper.link, title: paper.title)
+            }
+            .buttonStyle(.bordered)
+        }
     }
 
-    private func saveToZotero() async {
-        isSavingZotero = true
-        defer { isSavingZotero = false }
-        let result = await model.saveToZotero(arxivId: paper.id)
-        zoteroAlert = result?.message ?? model.errorMessage ?? "Could not save to Zotero."
+    private func card<Content: View>(_ title: String, systemImage: String, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Label(title, systemImage: systemImage).font(.headline)
+            content()
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 
-    private func load() async {
-        guard result == nil, !isLoading else { return }
-        isLoading = true
-        defer { isLoading = false }
-        result = await model.requestScore(arxivId: paper.id)
+    private func loadIfNeeded() async {
+        guard paper.breakdown == nil || paper.abstract.isEmpty, fetched == nil, !isFetching else { return }
+        isFetching = true
+        defer { isFetching = false }
+        if case .success(let r) = await model.score(paper.id) { fetched = r }
     }
 }

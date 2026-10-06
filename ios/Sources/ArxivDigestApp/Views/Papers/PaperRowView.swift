@@ -1,64 +1,57 @@
 import SwiftUI
 import ArxivDigestCore
 
-/// One paper row in the Papers list, mirroring a web-GUI paper card: rank +
-/// score, highlighted title and authors, section, a summary preview, and
-/// subjects. Highlights use the config's per-aspect colors/toggles.
+/// One paper card, mirroring the web GUI's: "rank. title" with highlighted
+/// keywords, highlighted named authors, the section, the two-sentence summary
+/// (highlighted only when "Highlight keywords in summaries" is on), and the
+/// subjects with feed-bonus highlights; the score metric sits on the right.
 struct PaperRowView: View {
     let paper: Paper
     let config: DigestConfig
+    var maxScore: Int = 0
 
-    private var terms: HighlightTerms {
-        HighlightEngine.matchedTerms(for: paper, config: config)
+    private var title: AttributedString {
+        var rank = AttributedString("\(paper.rank). ")
+        rank.foregroundColor = .secondary
+        return rank + Highlight.terms(paper.title, enabled: config.highlightTermsTitle, config: config)
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(alignment: .firstTextBaseline) {
-                Text("\(paper.rank).")
-                    .font(.subheadline.weight(.semibold))
+        HStack(alignment: .top, spacing: 12) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(title)
+                    .font(.headline)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Text(Highlight.authors(paper.authors, config: config))
+                    .font(.subheadline)
                     .foregroundStyle(.secondary)
-                HighlightedText(
-                    text: paper.title,
-                    keywords: config.highlightTermsTitle ? terms.keywords : [],
-                    lowPriority: config.highlightTermsTitle ? terms.lowPriority : [],
-                    config: config
-                )
-                .font(.headline)
-                Spacer(minLength: 8)
-                Text("\(paper.score)")
-                    .font(.subheadline.weight(.bold))
-                    .foregroundStyle(.blue)
-                    .accessibilityLabel("Score \(paper.score)")
+                    .lineLimit(3)
+
+                if !paper.section.isEmpty {
+                    Label(paper.section, systemImage: "calendar")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                        .labelStyle(.titleAndIcon)
+                }
+
+                Text(Highlight.terms(paper.summary, enabled: config.highlightTermsSummary, config: config))
+                    .font(.callout)
+                    .lineLimit(4)
+                    .padding(.top, 2)
+
+                if !paper.subjects.isEmpty {
+                    Text(Highlight.subjects(paper.subjects, config: config))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
 
-            HighlightedText(
-                text: paper.authors,
-                authors: config.highlightAuthors ? terms.authors : [],
-                config: config
-            )
-            .font(.subheadline)
-            .foregroundStyle(.secondary)
-            .lineLimit(2)
-
-            if !paper.section.isEmpty {
-                Text(paper.section)
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
-            }
-
-            Text(paper.summary)
-                .font(.callout)
-                .foregroundStyle(.primary)
-                .lineLimit(3)
-
-            if !paper.subjects.isEmpty {
-                Text(paper.subjects)
-                    .font(.caption)
-                    .foregroundStyle(Color(hex: config.colorSubject))
-                    .lineLimit(1)
-            }
+            ScoreBadge(score: paper.score, maxScore: maxScore)
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, 6)
+        .accessibilityElement(children: .combine)
     }
 }

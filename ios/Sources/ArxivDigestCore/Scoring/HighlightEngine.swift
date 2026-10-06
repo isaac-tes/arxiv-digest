@@ -12,9 +12,7 @@ public enum HighlightEngine {
     static func regex(for term: String, wordBoundary: Bool) -> NSRegularExpression? {
         let trimmed = term.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
-        let escaped = NSRegularExpression.escapedPattern(for: trimmed)
-        let pattern = wordBoundary ? "(?<!\\w)" + escaped + "(?!\\w)" : escaped
-        return try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive])
+        return RegexCache.shared.regex(for: trimmed, wordBoundary: wordBoundary)
     }
 
     /// True if `term` occurs in `text` as a whole token (unless `wordBoundary`
@@ -208,5 +206,26 @@ public struct HighlightTerms: Sendable, Equatable {
         self.authors = authors
         self.lowPriority = lowPriority
         self.subjects = subjects
+    }
+}
+
+/// Compiled term patterns, shared across renders (a list re-highlights every
+/// row on each update). `NSRegularExpression` is safe to use concurrently.
+final class RegexCache: @unchecked Sendable {
+    static let shared = RegexCache()
+    private let lock = NSLock()
+    private var cache: [String: NSRegularExpression] = [:]
+
+    func regex(for term: String, wordBoundary: Bool) -> NSRegularExpression? {
+        let key = (wordBoundary ? "1|" : "0|") + term
+        lock.lock()
+        defer { lock.unlock() }
+        if let hit = cache[key] { return hit }
+        let escaped = NSRegularExpression.escapedPattern(for: term)
+        let pattern = wordBoundary ? "(?<!\\w)" + escaped + "(?!\\w)" : escaped
+        guard let re = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else { return nil }
+        if cache.count > 2_000 { cache.removeAll() }
+        cache[key] = re
+        return re
     }
 }

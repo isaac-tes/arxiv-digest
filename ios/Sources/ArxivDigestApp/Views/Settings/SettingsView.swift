@@ -1,201 +1,179 @@
 import SwiftUI
 import ArxivDigestCore
 
-/// Settings: config editors (keywords/authors/low-priority/scoring) + presets.
+/// Settings: connection (server or demo), appearance, and the GUI sidebar's
+/// Display section (highlight toggles, per-aspect colors and font tints).
+/// Display options are config fields, saved with the same save bar.
 struct SettingsView: View {
     @Environment(AppModel.self) private var model
     @AppStorage("appearanceMode") private var appearanceRaw = AppearanceMode.system.rawValue
     @State private var serverURLText = ""
+    @State private var modeChoice: AppModel.Mode = .server
+    @State private var isConnecting = false
 
     var body: some View {
         @Bindable var model = model
         NavigationStack {
             Form {
+                connectionSection
+
                 Section("Appearance") {
                     Picker("Theme", selection: $appearanceRaw) {
-                        ForEach(AppearanceMode.allCases) { mode in
-                            Text(mode.label).tag(mode.rawValue)
-                        }
+                        ForEach(AppearanceMode.allCases) { Text($0.label).tag($0.rawValue) }
                     }
                     .pickerStyle(.segmented)
                 }
+
                 Section {
+                    Toggle("Highlight authors", isOn: $model.config.highlightAuthors)
                     Toggle("Highlight keywords in titles", isOn: $model.config.highlightTermsTitle)
                     Toggle("Highlight keywords in abstracts", isOn: $model.config.highlightTermsAbstract)
-                    Toggle("Highlight authors", isOn: $model.config.highlightAuthors)
-                    aspectColorRow("Keywords", aspect: .keyword)
-                    aspectColorRow("Low priority", aspect: .lowPriority)
-                    aspectColorRow("Authors", aspect: .author)
-                    ColorPicker("Subjects color", selection: subjectColorBinding, supportsOpacity: false)
-                    Toggle("Subjects: color font not background", isOn: $model.config.colorFontSubject)
+                    Toggle("Highlight keywords in summaries", isOn: $model.config.highlightTermsSummary)
                 } header: {
                     Text("Display")
                 } footer: {
-                    Text("Per-aspect highlight colors for the Papers list. \"Color font\" tints the text instead of drawing a background. Tap Save config to persist.")
+                    Text("Summaries are the two-sentence previews on each paper card; off by default, as in the web GUI.")
                 }
+
                 Section {
-                    TextField("http://127.0.0.1:8000", text: $serverURLText)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                        .keyboardType(.URL)
-                    Button("Connect") {
-                        guard let url = URL(string: serverURLText.trimmingCharacters(in: .whitespaces)) else { return }
-                        Task { await model.updateBaseURL(url) }
+                    ForEach(HighlightAspect.allCases) { aspect in
+                        aspectRow(aspect)
                     }
+                    preview
                 } header: {
-                    Text("Server")
+                    Text("Highlight colors")
                 } footer: {
-                    Text("On a physical device use your Mac's LAN IP (e.g. http://192.168.1.20:8000), not 127.0.0.1.")
+                    Text("“Tint font” also colors the matched text, not just its background. Colors and toggles are saved with your config, shared with the web GUI's profile format.")
                 }
-                Section("Keywords") {
-                    TagEditor(title: "Core keywords", tags: $model.config.coreKeywords)
-                }
-                Section("Authors") {
-                    TagEditor(title: "Named authors", tags: $model.config.namedAuthors)
-                }
-                Section("Low priority") {
-                    TagEditor(title: "Low-priority terms", tags: $model.config.lowPriorityKeywords)
-                }
-                Section("Scoring") {
-                    Stepper(value: $model.config.topN, in: 1...100) {
-                        Text("Top N: \(model.config.topN)")
-                    }
-                    Picker("Timeframe", selection: $model.config.timeframe) {
-                        Text("Today").tag("today")
-                        Text("Past week").tag("pastweek")
-                    }
-                }
-                Section("Starter presets") {
-                    ForEach(model.presets, id: \.self) { name in
-                        Button(name) {
-                            // Merge preset into the current config.
-                            Task { await mergePreset(name) }
+
+                Section("Zotero") {
+                    switch model.zoteroAvailability {
+                    case .web:
+                        Label("Saving via the server's Zotero Web API key", systemImage: "checkmark.seal.fill")
+                            .foregroundStyle(.green)
+                    case .unavailable:
+                        VStack(alignment: .leading, spacing: 4) {
+                            Label("No Zotero key on the server", systemImage: "books.vertical")
+                            Text("Use Share to Zotero: it opens the share sheet, where the Zotero app saves the paper. To save directly, set ZOTERO_API_KEY and ZOTERO_LIBRARY_ID on the server.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
                         }
                     }
                 }
-                Section {
-                    Button("Save config") {
-                        Task { await model.saveConfig() }
+
+                Section("About") {
+                    LabeledContent("Version", value: Self.version)
+                    Link(destination: URL(string: "https://github.com/isaac-tes/arxiv-digest")!) {
+                        Label("Source on GitHub", systemImage: "chevron.left.forwardslash.chevron.right")
                     }
                 }
             }
             .navigationTitle("Settings")
+            .safeAreaInset(edge: .bottom) { if model.isDirty { SaveBar() } }
+            .animation(.default, value: model.isDirty)
             .onAppear {
                 if serverURLText.isEmpty { serverURLText = model.baseURL.absoluteString }
+                modeChoice = model.mode
             }
-            .task {
-                await model.loadConfig()
-                await model.loadPresets()
+            .task { if model.connectionStatus == nil { await model.checkConnection() } }
+        }
+    }
+
+    private var connectionSection: some View {
+        Section {
+            Picker("Source", selection: $modeChoice) {
+                Text("Digest server").tag(AppModel.Mode.server)
+                Text("Demo").tag(AppModel.Mode.demo)
+            }
+            .pickerStyle(.segmented)
+
+            if modeChoice == .server {
+                TextField("http://192.168.1.20:8000", text: $serverURLText)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .keyboardType(.URL)
+            }
+
+            Button {
+                connect()
+            } label: {
+                HStack {
+                    Text(modeChoice == model.mode && modeChoice == .demo ? "Reload demo" : "Connect")
+                    if isConnecting { Spacer(); ProgressView() }
+                }
+            }
+            .disabled(isConnecting || (modeChoice == .server && normalizedURL == nil))
+
+            if let status = model.connectionStatus {
+                Label(status, systemImage: status.hasPrefix("Connected") ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                    .font(.footnote)
+                    .foregroundStyle(status.hasPrefix("Connected") ? .green : .orange)
+            }
+        } header: {
+            Text("Connection")
+        } footer: {
+            if modeChoice == .server {
+                Text("Run the server with `uv run uvicorn app.main:app --host 0.0.0.0` and enter your computer's LAN address. On a physical device, 127.0.0.1 is the phone itself.")
+            } else {
+                Text("Demo mode uses built-in sample papers with invented authors; nothing leaves the device. Scores were computed by the real engine, but they don't change when you edit the config.")
             }
         }
     }
 
-    /// A ColorPicker + "color font" toggle for one highlight aspect, bound to
-    /// the config's per-aspect color/font settings.
-    @ViewBuilder
-    private func aspectColorRow(_ label: String, aspect: HighlightAspect) -> some View {
-        ColorPicker(
-            "\(label) color",
-            selection: Binding(
+    /// The typed URL, with `http://` added when no scheme was given.
+    private var normalizedURL: URL? {
+        let t = serverURLText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !t.isEmpty else { return nil }
+        let withScheme = t.contains("://") ? t : "http://" + t
+        guard let url = URL(string: withScheme), url.host != nil else { return nil }
+        return url
+    }
+
+    private func connect() {
+        let url = modeChoice == .server ? (normalizedURL ?? model.baseURL) : model.baseURL
+        if modeChoice == .server { serverURLText = url.absoluteString }
+        isConnecting = true
+        Task {
+            if modeChoice == .demo { DemoBackend.shared.reset() }
+            await model.connect(mode: modeChoice, url: url)
+            isConnecting = false
+        }
+    }
+
+    private func aspectRow(_ aspect: HighlightAspect) -> some View {
+        HStack {
+            ColorPicker(aspect.label, selection: Binding(
                 get: { Color(hex: model.config.color(for: aspect)) },
-                set: { model.config.setColor($0.hexString, for: aspect) }
-            ),
-            supportsOpacity: false
-        )
-        Toggle(
-            "\(label): color font not background",
-            isOn: Binding(
+                set: { model.config.setColor($0.hexString, for: aspect) }), supportsOpacity: false)
+            Toggle("Tint font", isOn: Binding(
                 get: { model.config.fontColor(for: aspect) },
-                set: { model.config.setFontColor($0, for: aspect) }
-            )
-        )
-    }
-
-    private var subjectColorBinding: Binding<Color> {
-        Binding(
-            get: { Color(hex: model.config.colorSubject) },
-            set: { model.config.colorSubject = $0.hexString }
-        )
-    }
-
-    private func mergePreset(_ name: String) async {
-        await model.mergePreset(named: name)
-    }
-}
-
-/// A simple tag editor: add terms, remove with a swipe or button.
-struct TagEditor: View {
-    let title: String
-    @Binding var tags: [String]
-    @State private var newTag = ""
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                TextField("Add \(title.lowercased())…", text: $newTag)
-                Button("Add") {
-                    let t = newTag.trimmingCharacters(in: .whitespaces)
-                    guard !t.isEmpty, !tags.contains(t) else { return }
-                    tags.append(t)
-                    newTag = ""
-                }
-            }
-            FlowLayout(spacing: 8) {
-                ForEach(tags, id: \.self) { tag in
-                    HStack(spacing: 4) {
-                        Text(tag)
-                        Button {
-                            tags.removeAll { $0 == tag }
-                        } label: {
-                            Image(systemName: "xmark.circle.fill")
-                                .font(.caption)
-                        }
-                    }
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(Capsule().fill(Color.gray.opacity(0.2)))
-                }
-            }
+                set: { model.config.setFontColor($0, for: aspect) }))
+                .toggleStyle(.button)
+                .controlSize(.small)
         }
     }
-}
 
-/// A simple flow layout that wraps tags onto multiple lines.
-struct FlowLayout: Layout {
-    var spacing: CGFloat = 8
-
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        let maxWidth = proposal.width ?? .infinity
-        var x: CGFloat = 0
-        var y: CGFloat = 0
-        var rowHeight: CGFloat = 0
-        for subview in subviews {
-            let size = subview.sizeThatFits(.unspecified)
-            if x + size.width > maxWidth, x > 0 {
-                x = 0
-                y += rowHeight + spacing
-                rowHeight = 0
-            }
-            x += size.width + spacing
-            rowHeight = max(rowHeight, size.height)
+    /// A live sample of every aspect in the current colors.
+    private var preview: some View {
+        let cfg = model.config
+        let text = "Floquet anyons, by Ada Lovelace · photonic · quant-ph"
+        var spans: [HighlightSpan] = []
+        func add(_ needle: String, _ aspect: HighlightAspect) {
+            if let r = text.range(of: needle) { spans.append(HighlightSpan(range: r, aspect: aspect)) }
         }
-        return CGSize(width: maxWidth, height: y + rowHeight)
+        add("Floquet anyons", .keyword)
+        add("Ada Lovelace", .author)
+        add("photonic", .lowPriority)
+        add("quant-ph", .subject)
+        return Text(Highlight.attributed(text, spans: spans, config: cfg))
+            .font(.callout)
+            .padding(.vertical, 4)
     }
 
-    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        var x = bounds.minX
-        var y = bounds.minY
-        var rowHeight: CGFloat = 0
-        for subview in subviews {
-            let size = subview.sizeThatFits(.unspecified)
-            if x + size.width > bounds.maxX, x > bounds.minX {
-                x = bounds.minX
-                y += rowHeight + spacing
-                rowHeight = 0
-            }
-            subview.place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(size))
-            x += size.width + spacing
-            rowHeight = max(rowHeight, size.height)
-        }
+    static var version: String {
+        let info = Bundle.main.infoDictionary
+        let v = info?["CFBundleShortVersionString"] as? String ?? "?"
+        let b = info?["CFBundleVersion"] as? String ?? "?"
+        return "\(v) (\(b))"
     }
 }
