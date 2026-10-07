@@ -160,11 +160,56 @@ Exact diagonalisation confirms it &amp; more.
 """
 
 
+# Modelled on arXiv's /list/<cat>/pastweek page, trimmed, names invented.
+LISTING = """<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><title>Quantum Physics</title>
+<script>var x = "<h3>Mon, 1 Jan 2001</h3>";</script>
+<!-- <h3>Fri, 2 Oct 2026</h3> -->
+</head><body>
+<div id='dlpage'>
+<h1>Quantum Physics</h1>
+<ul><li><a href="#item0">Tue, 6 Oct 2026</a> (showing 3 of 3 entries)</li></ul>
+<dl id='articles'>
+<h3>Tue, 6 Oct 2026 (showing 3 of 3 entries )</h3>
+  <dt>
+    <a name='item1'>[1]</a>
+    <a href ="/abs/2610.00002" title="Abstract" id="2610.00002">
+        arXiv:2610.00002
+      </a>
+    [<a href="/pdf/2610.00002" title="Download PDF" id="pdf-2610.00002">pdf</a>, <a href="/format/2610.00002" title="Other formats">other</a>]
+  </dt>
+  <dd>
+    <div class='meta'>
+      <div class='list-title mathjax'><span class='descriptor'>Title:</span> Invented &amp; Fictional<br/>Results</div>
+      <div class='list-authors'><a href="/a/example_a_1">Ada Example</a>, <a href="/a/okafor_r_1">Ruth Okafor</a></div>
+    </div>
+  </dd>
+  <dt><a href="https://arxiv.org/abs/2610.00003" title="Abstract">arXiv:2610.00003</a></dt>
+  <dd><img src="x.png"><p>No close tags here</dd>
+  <dt><a title="Abstract">ARXIV : 2610.00009</a></dt>
+  <dd></dd>
+<h3>Mon, 5 Oct 2026 (showing first 2 of 4 entries )
+  <a href="/list/quant-ph/pastweek?skip=0&amp;show=2000">all</a></h3>
+  <dt><a title="Abstract" href="/abs/cond-mat/0601001v2">arXiv:cond-mat/0601001</a></dt>
+  <dd></dd>
+  <dl><dt><a href="/abs/2610.00020" title="Abstract">arXiv:2610.00020</a></dt></dl>
+  <dt><a href="/abs/2610.00002" title="Abstract">arXiv:2610.00002</a></dt>
+</dl>
+<h3>Replacement submissions (showing 1 of 1 entries)</h3>
+<dt><a href="/abs/2610.00010" title="Abstract">arXiv:2610.00010</a></dt>
+<div><h3>Sun, 4 Oct 2026</h3><dt><span><a href="/abs/2610.00030" title="Abstract">x</a></span></dt></div>
+<dt><a href="/abs/2610.00031" title="Abstract">arXiv:2610.00031</a></dt>
+</div>
+</body></html>
+"""
+
+
 def build_fetch() -> dict:
     root = ET.fromstring(ATOM.encode())
     total = int(root.find(f"{ad._API_OPENSEARCH}totalResults").text)
     papers = [ad._paper_from_api_entry(e) for e in root.findall(f"{ad._API_ATOM}entry")]
-    return {"atom": ATOM, "total": total, "papers": papers}
+    return {"atom": ATOM, "total": total, "papers": papers,
+            "listing": LISTING, "listing_labels": ad._parse_listing_day_labels(LISTING)}
 
 
 def write(name: str, source: str, value) -> None:

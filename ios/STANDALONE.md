@@ -256,6 +256,6 @@ personal team can't sign it. Don't start this without the user's go-ahead.
 | S3 past-week fetch | done | `Fetch/ArxivFetcher.swift` (HTTPS endpoint for ATS; no HTML fallback, failed feeds become a notice); Atom parse parity in `FetchParityFixture` |
 | S4 storage/defaults/presets | done | `Local/EngineConfig.swift` (hydrate = `Config.from_json`, `merge_preset`, `LocalStore`), generated `EngineDefaults.swift`; config/removed/fetch cache in Application Support/Standalone |
 | S5 score by id | done | `ArxivFetcher.fetchPaper` (id_list, with retry), cached paper first like the server; `LiveSource.notFetchedReason` ports `_not_fetched_reason` (feed list sorted, Python keeps config order); 502 on transport/HTTP errors |
-| S6 day labels | not started | |
+| S6 day labels | done | `ArxivFetcher.listingDayLabels` + minimal `HTMLNode` tree (same h3 → sibling dt walk as BeautifulSoup); one plain GET per fetched feed, API label kept on failure; parity on an invented listing page |
 | S7 today feed | needs decision | |
 | S8 iCloud sync | deferred | |

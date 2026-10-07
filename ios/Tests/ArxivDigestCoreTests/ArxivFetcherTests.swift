@@ -11,6 +11,8 @@ final class ArxivFetcherTests: XCTestCase {
         let atom: String
         let total: Int
         let papers: [RawPaper]
+        let listing: String
+        let listing_labels: [String: String]
     }
 
     private let expected = try! JSONDecoder().decode(Expected.self, from: Data(FetchParityFixture.json.utf8))
@@ -115,6 +117,7 @@ final class ArxivFetcherTests: XCTestCase {
 
     func testPastweekDedupesAcrossFeedsAndPaces() async throws {
         MockURLProtocol.handler = { r in
+            if r.url!.path.hasPrefix("/list/") { return (Self.response(r, 404), Data()) }
             let q = Self.query(r)["search_query"]!
             let ids = q.hasPrefix("cat:cond-mat ") ? ["2610.00001", "2610.00002"] : ["2610.00002", "2610.00003"]
             return (Self.response(r), Self.page(total: 2, ids: ids))
@@ -127,7 +130,7 @@ final class ArxivFetcherTests: XCTestCase {
 
     func testPastweekReportsFailureAsNotice() async throws {
         MockURLProtocol.handler = { r in
-            if Self.query(r)["search_query"]!.hasPrefix("cat:quant-ph ") {
+            if Self.query(r)["search_query"]?.hasPrefix("cat:quant-ph ") ?? false {
                 return (Self.response(r), Self.page(total: 1, ids: ["2610.00001"]))
             }
             throw URLError(.timedOut)
@@ -163,5 +166,29 @@ extension ArxivFetcherTests {
         XCTAssertEqual(Self.query(requests.values[0])["max_results"], "1")
         let missing = try await fetcher.fetchPaper("2601.00001")
         XCTAssertNil(missing)
+    }
+}
+
+/// Announcement-day labels from the HTML listing (S6).
+extension ArxivFetcherTests {
+    func testListingLabelsMatchEngineParser() {
+        XCTAssertEqual(ArxivFetcher.listingDayLabels(Data(expected.listing.utf8)), expected.listing_labels)
+    }
+
+    func testPastweekRelabelsFromListingAndKeepsAPILabelOnFailure() async throws {
+        let listing = Data(expected.listing.utf8)
+        let requests = Recorder<String>()
+        MockURLProtocol.handler = { r in
+            requests.add(r.url!.absoluteString)
+            if r.url!.path == "/list/quant-ph/pastweek" { return (Self.response(r), listing) }
+            if r.url!.path.hasPrefix("/list/") { return (Self.response(r, 503), Data()) }
+            let q = Self.query(r)["search_query"]!
+            let ids = q.hasPrefix("cat:quant-ph ") ? ["2610.00002", "2610.00003"] : ["2610.00040"]
+            return (Self.response(r), Self.page(total: ids.count, ids: ids))
+        }
+        let result = try await fetcher.fetchPastweek(["quant-ph", "cond-mat.quant-gas"])
+        XCTAssertEqual(result.papers.map(\.section), ["Mon, 05 Oct 2026", "Tue, 06 Oct 2026", "Mon, 05 Oct 2026"])
+        XCTAssertTrue(requests.values.contains("https://arxiv.org/list/quant-ph/pastweek?show=2000"))
+        XCTAssertTrue(requests.values.contains("https://arxiv.org/list/cond-mat.quant-gas/pastweek?show=2000"))
     }
 }

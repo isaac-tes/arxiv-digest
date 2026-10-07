@@ -60,6 +60,15 @@ public struct ArxivFetcher: Sendable {
             }
             if i < names.count - 1 { try await sleep(Self.rateLimit) }
         }
+        // The API's `published` is the submission time, not arXiv's announcement
+        // day; relabel from each fetched feed's listing, keeping the API label
+        // when a page fails (`fetch_pastweek`'s reconciliation).
+        var labels: [String: String] = [:]
+        for name in names where !failed.contains(name) {
+            if let page = try? await listingPage(name) { labels.merge(Self.listingDayLabels(page)) { _, new in new } }
+        }
+        for i in papers.indices { if let label = labels[papers[i].id] { papers[i].section = label } }
+
         let notices = failed.isEmpty ? [] : [
             "arXiv export API was rate-limited or timed out; could not fetch: \(failed.joined(separator: ", ")). "
                 + "Pull to refresh to try again.",
@@ -121,6 +130,58 @@ public struct ArxivFetcher: Sendable {
             try await sleep(delay)
         }
         throw lastError
+    }
+
+    // MARK: - Listing day labels
+
+    /// `_fetch_listing_day_labels`'s request: one plain GET, no retry.
+    func listingPage(_ category: String) async throws -> Data {
+        let name = category.addingPercentEncoding(withAllowedCharacters: .alphanumerics.union(CharacterSet(charactersIn: ".-_~"))) ?? category
+        var request = URLRequest(url: URL(string: "https://arxiv.org/list/\(name)/pastweek?show=2000")!, timeoutInterval: 60)
+        request.setValue(Self.userAgent, forHTTPHeaderField: "User-Agent")
+        let (data, response) = try await session.data(for: request)
+        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+        guard (200..<300).contains(status) else { throw HTTPStatusError(status: status) }
+        return data
+    }
+
+    /// Port of `_parse_listing_day_labels`: arXiv id → day of the `<h3>` whose
+    /// following sibling `<dt>` holds the id's Abstract link. Later headers win.
+    public static func listingDayLabels(_ data: Data) -> [String: String] {
+        let root = HTMLNode.parse(String(decoding: data, as: UTF8.self))
+        let headers = root.descendants.filter { $0.name == "h3" }
+        var labels: [String: String] = [:]
+        for (i, h3) in headers.enumerated() {
+            guard let parent = h3.parent, let label = DigestRouter.dayLabel(h3.text(separator: " ")) else { continue }
+            let day = canonicalDayLabel(label)
+            let stop = i + 1 < headers.count ? headers[i + 1] : nil
+            let start = parent.children.firstIndex { $0 === h3 }! + 1
+            for node in parent.children[start...] {
+                if node === stop { break }
+                guard node.name == "dt",
+                      let a = node.descendants.first(where: { $0.name == "a" && $0.attributes["title"] == "Abstract" })
+                else { continue }
+                let href = a.attributes["href"] ?? ""
+                let raw = href.contains("/abs/")
+                    ? String(href[href.range(of: "/abs/", options: .backwards)!.upperBound...])
+                    : a.text(separator: "")
+                let id = raw.replacingOccurrences(of: "^\\s*arxiv\\s*:\\s*", with: "", options: [.regularExpression, .caseInsensitive])
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                if !id.isEmpty { labels[id] = day }
+            }
+        }
+        return labels
+    }
+
+    /// `_canonical_day_label`: "Mon, 5 Oct 2026" → "Mon, 05 Oct 2026".
+    static func canonicalDayLabel(_ label: String) -> String {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.timeZone = TimeZone(identifier: "UTC")
+        f.dateFormat = "EEE, d MMM yyyy"
+        guard let date = f.date(from: label) else { return label }
+        f.dateFormat = "EEE, dd MMM yyyy"
+        return f.string(from: date)
     }
 
     // MARK: - Atom parsing
