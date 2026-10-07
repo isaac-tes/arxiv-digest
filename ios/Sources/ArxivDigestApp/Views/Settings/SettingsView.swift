@@ -1,7 +1,7 @@
 import SwiftUI
 import ArxivDigestCore
 
-/// Settings: connection (server or demo), appearance, and the GUI sidebar's
+/// Settings: connection (server, on this device, or demo), appearance, and the GUI sidebar's
 /// Display section (highlight toggles, per-aspect colors and font tints).
 /// Display options are config fields, saved with the same save bar.
 struct SettingsView: View {
@@ -87,7 +87,8 @@ struct SettingsView: View {
     private var connectionSection: some View {
         Section {
             Picker("Source", selection: $modeChoice) {
-                Text("Digest server").tag(AppModel.Mode.server)
+                Text("Server").tag(AppModel.Mode.server)
+                Text("On this device").tag(AppModel.Mode.standalone)
                 Text("Demo").tag(AppModel.Mode.demo)
             }
             .pickerStyle(.segmented)
@@ -117,9 +118,12 @@ struct SettingsView: View {
         } header: {
             Text("Connection")
         } footer: {
-            if modeChoice == .server {
+            switch modeChoice {
+            case .server:
                 Text("Run the server with `uv run uvicorn app.main:app --host 0.0.0.0` and enter your computer's LAN address. On a physical device, 127.0.0.1 is the phone itself.")
-            } else {
+            case .standalone:
+                Text("Fetches the past week from arXiv directly and scores papers on this phone; the first load takes about 10–40 s. Config and removed papers stay on this device and aren't synced.")
+            case .demo:
                 Text("Demo mode uses built-in sample papers with invented authors; nothing leaves the device. Scores were computed by the real engine, but they don't change when you edit the config.")
             }
         }

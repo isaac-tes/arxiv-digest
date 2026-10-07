@@ -46,7 +46,7 @@ this branch: Actions → latest run → artifact **ios-screenshots**. Locally:
 
 ### Launch options (screenshots / quick checks)
 
-`-demo`, `-tab papers|score|config|settings`, `-open-paper <rank>`,
+`-demo`, `-standalone`, `-tab papers|score|config|settings`, `-open-paper <rank>`,
 `-score <id-or-url>`, `-config-page keywords|authors|low-priority|feeds|scoring|presets`,
 `-remove <rank>`, `-day <n>` (n-th available day), `-dirty` (fake unsaved edit).
 

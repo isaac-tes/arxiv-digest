@@ -26,7 +26,7 @@ struct Toast: Identifiable, Equatable {
 final class AppModel {
     // MARK: Connection
 
-    enum Mode: String { case server, demo }
+    enum Mode: String { case server, demo, standalone }
 
     static let baseURLDefaultsKey = "serverBaseURL"
     static let modeDefaultsKey = "connectionMode"
@@ -69,7 +69,7 @@ final class AppModel {
     init(launch: LaunchOptions = .current) {
         let defaults = UserDefaults.standard
         let storedMode = Mode(rawValue: defaults.string(forKey: Self.modeDefaultsKey) ?? "") ?? .server
-        let mode: Mode = launch.demo ? .demo : storedMode
+        let mode: Mode = launch.standalone ? .standalone : launch.demo ? .demo : storedMode
         let url = defaults.string(forKey: Self.baseURLDefaultsKey).flatMap(URL.init(string:))
             ?? URL(string: Self.defaultBaseURL)!
         self.mode = mode
@@ -81,6 +81,7 @@ final class AppModel {
         switch mode {
         case .server: return APIClient(baseURL: url)
         case .demo: return APIClient(baseURL: DemoURLProtocol.baseURL, session: DemoURLProtocol.makeSession())
+        case .standalone: return APIClient(baseURL: LocalURLProtocol.baseURL, session: LocalURLProtocol.makeSession())
         }
     }
 

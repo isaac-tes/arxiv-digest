@@ -45,4 +45,19 @@ public enum Scorer {
     public static func score(paper: RawPaper, config: DigestConfig) -> Int {
         explain(paper: paper, config: config).total
     }
+
+    private static let whitespace = try! NSRegularExpression(pattern: "\\s+")
+    private static let sentenceEnd = try! NSRegularExpression(pattern: "(?<=[.!?]) ")
+
+    /// The engine's `summarize`: the first two sentences, whitespace collapsed.
+    public static func summarize(_ text: String) -> String {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleaned = whitespace.stringByReplacingMatches(
+            in: trimmed, range: NSRange(trimmed.startIndex..., in: trimmed), withTemplate: " ")
+        guard !cleaned.isEmpty else { return "(No abstract available.)" }
+        // After collapsing, every break is one space, so splitting on it is `re.split`.
+        let marked = sentenceEnd.stringByReplacingMatches(
+            in: cleaned, range: NSRange(cleaned.startIndex..., in: cleaned), withTemplate: "\u{0}")
+        return marked.split(separator: "\u{0}", omittingEmptySubsequences: false).prefix(2).joined(separator: " ")
+    }
 }

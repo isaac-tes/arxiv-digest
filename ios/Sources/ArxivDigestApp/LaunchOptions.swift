@@ -6,6 +6,8 @@ import Foundation
 struct LaunchOptions {
     /// Force demo mode for this launch (does not change the saved preference).
     var demo = false
+    /// Force Standalone mode (on-device fetch and scoring) for this launch.
+    var standalone = false
     /// Initial tab.
     var tab: AppTab?
     /// Push the detail of the paper at this 1-based rank.
@@ -28,6 +30,7 @@ struct LaunchOptions {
         while let arg = it.next() {
             switch arg {
             case "-demo": demo = true
+            case "-standalone": standalone = true
             case "-dirty": dirty = true
             case "-tab": tab = it.next().flatMap(AppTab.init(rawValue:))
             case "-open-paper": openPaperRank = it.next().flatMap(Int.init)
