@@ -61,7 +61,7 @@ public actor LiveSource: DigestSource {
             } catch let e as RouterError {
                 throw e
             } catch {
-                throw RouterError(502, "arXiv fetch failed (\(type(of: error))). arXiv may be slow or down; try again in a moment.")
+                throw RouterError(502, "arXiv fetch failed (\(Self.errorName(error))). arXiv may be slow or down; try again in a moment.")
             }
             // Never cache an empty fetch (nothing subscribed / arXiv hiccup).
             if let raw, !raw.papers.isEmpty { cache[Self.key(feeds)] = raw }
@@ -88,7 +88,7 @@ public actor LiveSource: DigestSource {
                 guard error is URLError || error is ArxivFetcher.HTTPStatusError else {
                     return nil  // malformed feed etc. -> not found, like the server
                 }
-                throw RouterError(502, "Could not reach arXiv (\(type(of: error))); it may be rate-limiting. Try again in a moment.")
+                throw RouterError(502, "Could not reach arXiv (\(Self.errorName(error))); it may be rate-limiting. Try again in a moment.")
             }
             guard let found else { return nil }
             paper = found.paper
@@ -103,6 +103,16 @@ public actor LiveSource: DigestSource {
                                subjects: p.subjects, section: p.section, abstract: p.abstract),
             breakdown: Scorer.explain(paper: p, config: config),
             notFetchedReason: reason)
+    }
+
+    /// The error's kind for messages: `type(of:)` reads `NSError` for a
+    /// bridged `URLError` on Apple platforms.
+    static func errorName(_ error: Error) -> String {
+        switch error {
+        case is URLError: return "URLError"
+        case is ArxivFetcher.HTTPStatusError: return "HTTPError"
+        default: return String(describing: type(of: error))
+        }
     }
 
     /// Port of the server's `score._not_fetched_reason`.
