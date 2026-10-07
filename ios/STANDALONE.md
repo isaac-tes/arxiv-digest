@@ -36,7 +36,7 @@ uv sync --group dev && uv run pytest                  # root suite (~290 tests, 
 # Swift side: Swift 6.2 toolchain without sudo
 #   swiftly (https://www.swift.org/install/linux/) installs into $HOME, or
 #   use the official tarball and add its usr/bin to PATH.
-cd ios && swift test                                  # Core suite (66 tests today)
+cd ios && swift test                                  # Core suite
 ```
 
 - Don't use `sudo`, cron, or background daemons on that machine; none are needed.
@@ -251,7 +251,7 @@ personal team can't sign it. Don't start this without the user's go-ahead.
 
 | Step | Status | Commit / notes |
 |---|---|---|
-| S1 scorer + parity | not started | |
+| S1 scorer + parity | done | `Scorer.swift`, `RawPaper`; 30 parity cases from `make_parity_fixture.py` |
 | S2 router + mode | not started | |
 | S3 past-week fetch | not started | |
 | S4 storage/defaults/presets | not started | |
