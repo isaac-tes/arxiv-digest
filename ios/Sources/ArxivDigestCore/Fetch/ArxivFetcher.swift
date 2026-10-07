@@ -79,20 +79,27 @@ public struct ArxivFetcher: Sendable {
     /// `fetch_feed_api`: papers in `category` submitted within [start, end].
     public func fetchCategory(_ category: String, start: Date, end: Date,
                               pageSize: Int = 500, maxResults: Int = 2000) async throws -> [RawPaper] {
+        try await fetchCategoryEntries(category, start: start, end: end, pageSize: pageSize, maxResults: maxResults)
+            .map(\.paper)
+    }
+
+    /// `fetchCategory` with each paper's `arxiv:primary_category`.
+    func fetchCategoryEntries(_ category: String, start: Date, end: Date, pageSize: Int = 500,
+                              maxResults: Int = 2000) async throws -> [(paper: RawPaper, primary: String)] {
         let f = DateFormatter()
         f.locale = Locale(identifier: "en_US_POSIX")
         f.timeZone = TimeZone(identifier: "UTC")
         f.dateFormat = "yyyyMMddHHmm"
         let query = "cat:\(category) AND submittedDate:[\(f.string(from: start)) TO \(f.string(from: end))]"
-        var papers: [RawPaper] = []
+        var papers: [(paper: RawPaper, primary: String)] = []
         var offset = 0
         while true {
             let data = try await get([
                 "search_query": query, "start": "\(offset)", "max_results": "\(pageSize)",
                 "sortBy": "submittedDate", "sortOrder": "descending",
             ])
-            let (total, entries) = try Self.parse(data)
-            papers += entries
+            let (total, entries) = try Self.parseEntries(data)
+            papers += entries.map { ($0.paper, $0.primary) }
             if entries.isEmpty || papers.count >= total || papers.count >= maxResults { break }
             offset += pageSize
             try await sleep(Self.rateLimit)
@@ -193,7 +200,7 @@ public struct ArxivFetcher: Sendable {
         return (total, entries.map(\.paper))
     }
 
-    static func parseEntries(_ data: Data) throws -> (total: Int, entries: [(paper: RawPaper, published: String)]) {
+    static func parseEntries(_ data: Data) throws -> (total: Int, entries: [AtomEntry]) {
         let delegate = AtomParser()
         let parser = XMLParser(data: data)
         parser.shouldProcessNamespaces = true
@@ -208,7 +215,7 @@ public struct ArxivFetcher: Sendable {
         let data = try await get(["id_list": id, "max_results": "1"])
         guard let (_, entries) = try? Self.parseEntries(data), let first = entries.first,
               !first.paper.id.isEmpty else { return nil }  // arXiv's error entry has no /abs/ id
-        return first
+        return (first.paper, first.published)
     }
 
     /// "Thu, 20 Aug 2026" in UTC (`_api_day_label`).
@@ -222,6 +229,13 @@ public struct ArxivFetcher: Sendable {
     }
 }
 
+/// One export-API entry: the engine's paper dict plus what it drops.
+struct AtomEntry {
+    let paper: RawPaper
+    let published: String
+    let primary: String
+}
+
 /// SAX state for an export-API page. Only Atom-namespace children of
 /// `<entry>` count (like ElementTree's `entry.find(atom + tag)`), so
 /// `arxiv:primary_category` or `arxiv:affiliation` never leak in.
@@ -230,13 +244,14 @@ private final class AtomParser: NSObject, XMLParserDelegate {
     static let opensearch = "http://a9.com/-/spec/opensearch/1.1/"
 
     var total = 0
-    var entries: [(paper: RawPaper, published: String)] = []
+    var entries: [AtomEntry] = []
 
     private var path: [String] = []
     private var text = ""
     private var fields: [String: String] = [:]
     private var authors: [String] = []
     private var categories: [String] = []
+    private var primary = ""
 
     func parser(_ parser: XMLParser, didStartElement name: String, namespaceURI: String?,
                 qualifiedName: String?, attributes: [String: String] = [:]) {
@@ -244,9 +259,11 @@ private final class AtomParser: NSObject, XMLParserDelegate {
         path.append(tag)
         text = ""
         if path == ["feed", "entry"] {
-            fields = [:]; authors = []; categories = []
+            fields = [:]; authors = []; categories = []; primary = ""
         } else if path == ["feed", "entry", "category"], let term = attributes["term"], !term.isEmpty {
             categories.append(term)
+        } else if path == ["feed", "entry", "http://arxiv.org/schemas/atom|primary_category"] {
+            primary = attributes["term"] ?? ""
         }
     }
 
@@ -264,7 +281,7 @@ private final class AtomParser: NSObject, XMLParserDelegate {
         case let p where p.count == 3 && p[1] == "entry" && ["id", "title", "summary", "published"].contains(p[2]):
             if fields[p[2]] == nil { fields[p[2]] = trimmed }  // first match, like find()
         case ["feed", "entry"]:
-            entries.append((paper(), fields["published"] ?? ""))
+            entries.append(AtomEntry(paper: paper(), published: fields["published"] ?? "", primary: primary))
         default:
             break
         }

@@ -43,7 +43,7 @@ In Xcode: scheme **ArxivDigestApp**, pick an iPhone simulator, **Run** (⌘R).
   trust the developer profile on the phone: Settings → General → VPN & Device
   Management), and enter the Mac's LAN address, e.g. `http://192.168.1.20:8000`.
 
-Tests: `cd ios && swift test` (Core, 97 tests, also on Linux), `cd server && uv run pytest`
+Tests: `cd ios && swift test` (Core, 103 tests, also on Linux), `cd server && uv run pytest`
 (48), `uv run pytest` at the root (290). Parity fixtures + engine defaults:
 `uv run python ios/scripts/make_parity_fixture.py`.
 
@@ -53,7 +53,7 @@ this branch: Actions → latest run → artifact **ios-screenshots**. Locally:
 
 ### Launch options (screenshots / quick checks)
 
-`-demo`, `-standalone`, `-tab papers|score|config|settings`, `-open-paper <rank>`,
+`-demo`, `-standalone`, `-today-source listing|api`, `-tab papers|score|config|settings`, `-open-paper <rank>`,
 `-score <id-or-url>`, `-config-page keywords|authors|low-priority|feeds|scoring|presets`,
 `-remove <rank>`, `-day <n>` (n-th available day), `-dirty` (fake unsaved edit).
 
@@ -95,8 +95,9 @@ per user; presets cover starting points), the GUI's "Clear fetch cache" button
 
 ## Remaining work
 
-- **Standalone mode**: MVP (S1–S6) landed; verify on the phone, then decide S7
-  (today feed) and S8 (iCloud config sync). Progress and checklist:
+- **Standalone mode**: MVP (S1–S6) landed, and S7 (today feed) is built two ways
+  behind a Settings switch; verify on the phone, pick an S7 variant, decide S8
+  (iCloud config sync). Progress and checklist:
   [`STANDALONE.md`](STANDALONE.md); decision: ADR 0009. Beads epic [`e85`].
 - **Per-user Zotero key** [`d5q`]: needs an encrypted credential column, an
   endpoint, and a Settings field. Until then Save to Zotero needs

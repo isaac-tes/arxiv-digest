@@ -32,13 +32,13 @@ final class StandaloneTests: XCTestCase {
     }
 
     func testHealthSaysStandalone() async throws {
-        install { _, _ in .init(papers: Self.papers) }
+        install { _, _, _ in .init(papers: Self.papers) }
         let h = try await client.health()
         XCTAssertEqual(h["mode"], "standalone")
     }
 
     func testScoresReactToConfigEdits() async throws {
-        install { _, _ in .init(papers: Self.papers) }
+        install { _, _, _ in .init(papers: Self.papers) }
         let first = try await client.fetchDigest(topN: 10)
         XCTAssertEqual(first.papers.map(\.id), ["2610.00001", "2610.00002"])
         XCTAssertEqual(first.papers[0].score, 6)
@@ -56,7 +56,7 @@ final class StandaloneTests: XCTestCase {
 
     func testFetchIsCachedUntilRefresh() async throws {
         let calls = Counter()
-        install { _, _ in calls.bump(); return .init(papers: Self.papers) }
+        install { _, _, _ in calls.bump(); return .init(papers: Self.papers) }
         _ = try await client.fetchDigest()
         _ = try await client.fetchDigest()
         XCTAssertEqual(calls.value, 1)
@@ -65,7 +65,7 @@ final class StandaloneTests: XCTestCase {
     }
 
     func testScoreUsesCachedFetch() async throws {
-        install { _, _ in .init(papers: Self.papers) }
+        install { _, _, _ in .init(papers: Self.papers) }
         let early = try await client.score(arxivId: "2610.00002")
         XCTAssertNil(early.paper)
         _ = try await client.fetchDigest(topN: 1)
@@ -74,18 +74,28 @@ final class StandaloneTests: XCTestCase {
         XCTAssertEqual(below.absenceReason, "This paper **was** fetched but ranked below your top-1 cutoff.")
     }
 
-    func testTodayIsNotAvailable() async throws {
-        install { _, _ in .init(papers: Self.papers) }
-        do {
-            _ = try await client.fetchDigest(timeframe: "today")
-            XCTFail("expected 422")
-        } catch {
-            XCTAssertEqual(error as? APIError, .http(422, LiveSource.todayUnavailable))
+    func testTodayIsFetchedAndCachedApartFromPastweek() async throws {
+        let timeframes = Recorder<String>()
+        install { timeframe, _, _ in
+            timeframes.add(timeframe)
+            guard timeframe == "today" else { return .init(papers: Self.papers) }
+            var replaced = Self.papers[1]
+            replaced.section = "Replacement submissions (showing 1 of 1 entries)"
+            var new = Self.papers[0]
+            new.section = "New submissions (showing 1 of 1 entries)"
+            return .init(papers: [new, replaced])
         }
+        let today = try await client.fetchDigest(timeframe: "today", topN: 10)
+        XCTAssertEqual(today.papers.map(\.id), ["2610.00001"])  // replacement hidden
+        XCTAssertEqual(today.hiddenByFilters, 1)
+        XCTAssertEqual(today.availableDays, [])
+        _ = try await client.fetchDigest(timeframe: "pastweek")
+        _ = try await client.fetchDigest(timeframe: "today")
+        XCTAssertEqual(timeframes.values, ["today", "pastweek"])
     }
 
     func testFetchFailureIs502() async throws {
-        install { _, _ in throw URLError(.timedOut) }
+        install { _, _, _ in throw URLError(.timedOut) }
         do {
             _ = try await client.fetchDigest()
             XCTFail("expected 502")
@@ -96,7 +106,7 @@ final class StandaloneTests: XCTestCase {
     }
 
     func testZoteroWebAPIUnavailable() async throws {
-        install { _, _ in .init(papers: []) }
+        install { _, _, _ in .init(papers: []) }
         let status = try await client.zoteroStatus()
         XCTAssertEqual(ZoteroPolicy.availability(from: status), .unavailable)
     }
@@ -136,7 +146,7 @@ final class StandaloneScoreTests: XCTestCase {
         cfg.feeds = ["quant-ph": DigestConfig.listingURL(for: "quant-ph")]
         cfg.defaultFeeds = ["quant-ph"]
         StandaloneBackend.shared.install(DigestRouter(
-            source: LiveSource(fetcher: { _, _ in .init(papers: StandaloneTests.papers) }, fetchPaper: fetchPaper),
+            source: LiveSource(fetcher: { _, _, _ in .init(papers: StandaloneTests.papers) }, fetchPaper: fetchPaper),
             config: cfg.data, defaults: cfg.data, presets: [:]))
         return APIClient(baseURL: LocalURLProtocol.baseURL, session: LocalURLProtocol.makeSession())
     }

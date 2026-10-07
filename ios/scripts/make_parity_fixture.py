@@ -204,6 +204,117 @@ LISTING = """<!DOCTYPE html>
 """
 
 
+# Modelled on arXiv's /list/<cat>/new page (2026 markup), trimmed, names invented.
+NEW_PAGE = """<!DOCTYPE html>
+<html lang="en"><head><title>Quantum Physics new submissions</title>
+<script>document.write("<h3>Fake</h3><dt>x</dt>");</script></head><body>
+<div id='dlpage'>
+<h1>Quantum Physics</h1>
+<h3>Showing new listings for Tuesday, 6 October 2026</h3>
+<dl id='articles'>
+<h3>New submissions (showing 3 of 3 entries)</h3>
+<dt>
+  <a name='item1'>[1]</a>
+  <a href ="/abs/2610.00007" title="Abstract" id="2610.00007">
+    arXiv:2610.00007
+  </a>
+  [<a href="/pdf/2610.00007" title="Download PDF" id="pdf-2610.00007">pdf</a>, <a href="https://arxiv.org/html/2610.00007v1" title="View HTML">html</a>]
+</dt>
+<dd>
+  <div class='meta'>
+    <div class='list-title mathjax'><span class='descriptor'>Title:</span>
+      Floquet Anyons &amp; Fictional&nbsp;Lattices: a &#x27;test&#39; &lt;case&gt;
+    </div>
+    <div class='list-authors'><a href="https://arxiv.org/a/castellanos_m_1" rel="nofollow">Mira Castellanos</a>, <a href="https://arxiv.org/a/okafor_r_1">Ruth Okafor</a></div>
+    <div class='list-comments mathjax'><span class='descriptor'>Comments:</span> 12 pages, 4 figures</div>
+    <div class='list-subjects'><span class='descriptor'>Subjects:</span>
+      <span class="primary-subject">Quantum Physics (quant-ph)</span>; Quantum Gases (cond-mat.quant-gas)
+    </div>
+    <p class='mathjax'>
+      We show that periodic driving stabilises anyons in a $2$D lattice.
+      Exact diagonalisation confirms it.
+    </p>
+  </div>
+</dd>
+<dt><a href="/abs/2610.00008" title="Abstract">arXiv:2610.00008</a></dt>
+<dd>
+  <div class='meta'>
+    <div class="list-title"><span class='descriptor'>Title:</span> No inline abstract</div>
+    <div class='list-authors'><a>Søren Ødegård</a></div>
+    <div class='list-subjects'><span class='descriptor'>Subjects:</span> Quantum Physics (quant-ph)</div>
+    <p>short</p>
+    <p>Abstract: A fallback paragraph that is long enough to count.</p>
+  </div>
+</dd>
+<dt><a name='item3'>[3]</a> no abstract link here</dt>
+<dd><div class='list-title'>Skipped</div></dd>
+<h3>Cross submissions (showing 1 of 1 entries)</h3>
+<dt><a href="/abs/2610.00009" title="Abstract">arXiv:2610.00009</a></dt>
+<dd>
+  <div class='meta'>
+    <div class='list-title mathjax'><span class='descriptor'>Title:</span> Cross-listed paper</div>
+    <div class='list-authors'><a>Ada Example</a>, <a>Wei Li</a></div>
+    <div class='list-subjects'><span class='descriptor'>Subjects:</span> <span class="primary-subject">Optics (physics.optics)</span>; Quantum Physics (quant-ph)</div>
+    <p class='mathjax'>Abstract: Light in waveguides.</p>
+  </div>
+</dd>
+<h3>Replacement submissions (showing 2 of 2 entries)</h3>
+<dt><a href="/abs/2609.00001" title="Abstract">arXiv:2609.00001</a></dt>
+<dd>
+  <div class='meta'>
+    <div class='list-title mathjax'><span class='descriptor'>Title:</span> Replaced paper</div>
+    <div class='list-authors'><a>Ruth Okafor</a></div>
+    <div class='list-subjects'><span class='descriptor'>Subjects:</span> Quantum Physics (quant-ph)</div>
+  </div>
+</dd>
+<dt><a href="/abs/2609.00002" title="Abstract">arXiv:2609.00002</a></dt>
+</dl>
+</div>
+</body></html>
+"""
+
+ABS_PAGE = """<html><body><div id="abs">
+<h1 class="title mathjax"><span class="descriptor">Title:</span>No inline abstract</h1>
+<blockquote class="abstract mathjax">
+  <span class="descriptor">Abstract:</span>Back-filled abstract
+  with <a href="https://example.invalid">a link</a> &amp; an entity.
+</blockquote>
+</div></body></html>
+"""
+
+ABS_PAGE_NEW_LAYOUT = """<html><body>
+<div class="abstract"><span class="descriptor">Abstract:</span> Newer layout abstract.</div>
+</body></html>"""
+
+
+class _Resp:
+    def __init__(self, text: str):
+        self.text = text
+        self.content = text.encode()
+        self.status_code = 200
+
+    def raise_for_status(self) -> None:
+        pass
+
+
+def build_today() -> dict:
+    pages = {"/list/": NEW_PAGE, "/abs/2610.00008": ABS_PAGE, "/abs/2610.00010": ABS_PAGE_NEW_LAYOUT}
+    original = ad.requests.get
+    ad.requests.get = lambda url, **kw: _Resp(next((v for k, v in pages.items() if k in url), "<html></html>"))
+    try:
+        papers = ad.fetch_feed("https://arxiv.org/list/quant-ph/new", backfill=False)
+        abstracts = {i: ad.fetch_abstract(i) for i in ("2610.00008", "2610.00010", "2610.00011")}
+    finally:
+        ad.requests.get = original
+    return {
+        "new_page": NEW_PAGE,
+        "papers": papers,
+        "categories": [ad.section_category(p["section"]) for p in papers],
+        "abs_pages": {"2610.00008": ABS_PAGE, "2610.00010": ABS_PAGE_NEW_LAYOUT, "2610.00011": "<html></html>"},
+        "abstracts": abstracts,
+    }
+
+
 def build_fetch() -> dict:
     root = ET.fromstring(ATOM.encode())
     total = int(root.find(f"{ad._API_OPENSEARCH}totalResults").text)
@@ -293,6 +404,7 @@ def main() -> None:
     write("ScoringParityFixture", "arxiv_digest.explain_score", build())
     write("FetchParityFixture", "arxiv_digest._paper_from_api_entry", build_fetch())
     write("ConfigParityFixture", "arxiv_digest.Config.from_json / merge_preset", build_config())
+    write("TodayParityFixture", "arxiv_digest.fetch_feed / fetch_abstract", build_today())
     write_defaults()
 
 

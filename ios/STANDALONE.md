@@ -257,7 +257,7 @@ personal team can't sign it. Don't start this without the user's go-ahead.
 | S4 storage/defaults/presets | done | `Local/EngineConfig.swift` (hydrate = `Config.from_json`, `merge_preset`, `LocalStore`), generated `EngineDefaults.swift`; config/removed/fetch cache in Application Support/Standalone |
 | S5 score by id | done | `ArxivFetcher.fetchPaper` (id_list, with retry), cached paper first like the server; `LiveSource.notFetchedReason` ports `_not_fetched_reason` (feed list sorted, Python keeps config order); 502 on transport/HTTP errors |
 | S6 day labels | done | `ArxivFetcher.listingDayLabels` + minimal `HTMLNode` tree (same h3 → sibling dt walk as BeautifulSoup); one plain GET per fetched feed, API label kept on failure; parity on an invented listing page |
-| S7 today feed | needs decision | |
+| S7 today feed | both built, **pick one** | (a) `fetchTodayListing`: port of `fetch_feed` + `fetch_abstract` (parity: `TodayParityFixture`); (b) `fetchTodayAPI`: export API over the last announcement window (`announcementWindow`), New/Cross from `arxiv:primary_category`, no replacements. Settings → *Today on this device* switches (default (a)); `-today-source listing\|api` |
 | S8 iCloud sync | deferred | |
 
 Session log (2026-10-07, Linux, Swift 6.2 tarball in `~/.local/swift`): baseline
@@ -280,8 +280,12 @@ Deliberate, small, and marked `ponytail:` in the code:
 - **HTML entities** in listing pages stay undecoded (ids and day labels have none).
 - **Score-a-paper by id retries** 429/5xx like the past-week fetch; the server's
   `fetch_arxiv_atom` makes one request.
-- **Today is not available**: `/digest?timeframe=today` answers 422 with
-  `LiveSource.todayUnavailable` until S7 is decided.
+- **Today (a)** back-fills missing abstracts once over the deduplicated set
+  (the engine back-fills per feed: same result, fewer requests). Only common
+  named HTML entities are decoded (`HTMLNode.unescape`).
+- **Today (b)** has no Python counterpart: it is new behaviour, tested on its
+  own. Its window ignores arXiv holidays, sections are plain
+  "New submissions" / "Cross submissions", and it never has replacements.
 - **Demo** keeps storing configs as sent (no hydration); the router's preset
   merge now uses the engine's `merge_preset` port for both modes (same result
   on the demo's presets; `DemoBackendTests` unchanged and green).
@@ -308,4 +312,9 @@ real arXiv or the device. Please check:
    message.
 6. Settings → Zotero shows Share to Zotero only (no Web API key on the device).
 7. Config → Starter presets: Load / Add show the engine's three presets.
-8. Timeframe "today" (Papers ⋯ menu) shows the 422 message, not a crash.
+8. **S7 comparison.** Papers ⋯ → timeframe *today*, then Settings → *Today on
+   this device* → switch between **arXiv listing** (a) and **Export API** (b);
+   the digest reloads each time (each source is cached separately for an
+   hour). Compare count, New/Cross split, missing papers, and load time
+   against arxiv.org/list/<feed>/new. Tell me which to keep and I'll delete
+   the other (or keep (b) as a fallback when the listing fails).

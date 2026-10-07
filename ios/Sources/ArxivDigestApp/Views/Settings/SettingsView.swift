@@ -17,6 +17,8 @@ struct SettingsView: View {
             Form {
                 connectionSection
 
+                if model.mode == .standalone { todaySourceSection }
+
                 Section("Appearance") {
                     Picker("Theme", selection: $appearanceRaw) {
                         ForEach(AppearanceMode.allCases) { Text($0.label).tag($0.rawValue) }
@@ -125,6 +127,27 @@ struct SettingsView: View {
                 Text("Fetches the past week from arXiv directly and scores papers on this phone; the first load takes about 10–40 s. Config and removed papers stay on this device and aren't synced.")
             case .demo:
                 Text("Demo mode uses built-in sample papers with invented authors; nothing leaves the device. Scores were computed by the real engine, but they don't change when you edit the config.")
+            }
+        }
+    }
+
+    /// Standalone only: how the "today" timeframe is fetched (kept switchable
+    /// until one is chosen, STANDALONE.md S7).
+    private var todaySourceSection: some View {
+        Section {
+            Picker("Today's papers from", selection: Binding(
+                get: { model.todaySource },
+                set: { source in Task { await model.setTodaySource(source) } })) {
+                ForEach(TodaySource.allCases, id: \.self) { Text($0.label).tag($0) }
+            }
+        } header: {
+            Text("Today on this device")
+        } footer: {
+            switch model.todaySource {
+            case .listing:
+                Text("Reads arXiv's /new pages like the digest server: New, Cross and Replacement sections.")
+            case .api:
+                Text("Asks the export API for the latest announcement batch; cross-lists come from the primary category, and there are no replacements.")
             }
         }
     }

@@ -64,7 +64,7 @@ final class StandaloneStoreTests: XCTestCase {
         super.tearDown()
     }
 
-    private func client(fetcher: @escaping LiveSource.Fetcher = { _, _ in .init(papers: StandaloneTests.papers) }) -> APIClient {
+    private func client(fetcher: @escaping LiveSource.Fetcher = { _, _, _ in .init(papers: StandaloneTests.papers) }) -> APIClient {
         StandaloneBackend.shared.install(StandaloneBackend.makeRouter(store: LocalStore(directory: dir), fetcher: fetcher))
         return APIClient(baseURL: LocalURLProtocol.baseURL, session: LocalURLProtocol.makeSession())
     }
@@ -93,7 +93,7 @@ final class StandaloneStoreTests: XCTestCase {
         _ = try await api.fetchDigest()
         try await api.removePaper(arxivId: "2610.00001")
 
-        api = client(fetcher: { _, _ in throw URLError(.notConnectedToInternet) })
+        api = client(fetcher: { _, _, _ in throw URLError(.notConnectedToInternet) })
         let reloaded = try await api.getConfig()
         XCTAssertEqual(reloaded.coreKeywords, [])
         XCTAssertEqual(reloaded.namedAuthors, ["okafor"])

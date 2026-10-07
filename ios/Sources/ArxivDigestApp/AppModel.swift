@@ -31,12 +31,15 @@ final class AppModel {
     static let baseURLDefaultsKey = "serverBaseURL"
     static let modeDefaultsKey = "connectionMode"
     static let defaultBaseURL = "http://127.0.0.1:8000"
+    static let todaySourceDefaultsKey = "standaloneTodaySource"
 
     private(set) var mode: Mode
     private(set) var baseURL: URL
     private(set) var client: APIClient
     /// "Connected · local" / an error, from the last health check.
     var connectionStatus: String?
+    /// How Standalone mode fetches "today" (STANDALONE.md S7; both kept for comparison).
+    private(set) var todaySource: TodaySource
 
     // MARK: Digest
 
@@ -75,6 +78,18 @@ final class AppModel {
         self.mode = mode
         self.baseURL = url
         self.client = Self.makeClient(mode: mode, url: url)
+        let today = launch.todaySource
+            ?? TodaySource(rawValue: defaults.string(forKey: Self.todaySourceDefaultsKey) ?? "") ?? .listing
+        self.todaySource = today
+        StandaloneBackend.shared.setTodaySource(today)
+    }
+
+    /// Switch Standalone's "today" source and reload if it is showing.
+    func setTodaySource(_ source: TodaySource) async {
+        todaySource = source
+        UserDefaults.standard.set(source.rawValue, forKey: Self.todaySourceDefaultsKey)
+        StandaloneBackend.shared.setTodaySource(source)
+        if mode == .standalone && savedConfig.timeframe == "today" { await loadDigest() }
     }
 
     private static func makeClient(mode: Mode, url: URL) -> APIClient {

@@ -8,6 +8,8 @@ struct LaunchOptions {
     var demo = false
     /// Force Standalone mode (on-device fetch and scoring) for this launch.
     var standalone = false
+    /// Standalone's "today" source: `listing` (HTML /new) or `api` (export API).
+    var todaySource: TodaySource?
     /// Initial tab.
     var tab: AppTab?
     /// Push the detail of the paper at this 1-based rank.
@@ -31,6 +33,7 @@ struct LaunchOptions {
             switch arg {
             case "-demo": demo = true
             case "-standalone": standalone = true
+            case "-today-source": todaySource = it.next().flatMap(TodaySource.init(rawValue:))
             case "-dirty": dirty = true
             case "-tab": tab = it.next().flatMap(AppTab.init(rawValue:))
             case "-open-paper": openPaperRank = it.next().flatMap(Int.init)
