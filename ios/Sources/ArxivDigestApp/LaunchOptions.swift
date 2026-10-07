@@ -1,4 +1,5 @@
 import Foundation
+import ArxivDigestCore
 
 /// Command-line launch options, used by `ios/scripts/screenshots.sh` to open
 /// a specific screen deterministically (e.g. `xcrun simctl launch … -demo
