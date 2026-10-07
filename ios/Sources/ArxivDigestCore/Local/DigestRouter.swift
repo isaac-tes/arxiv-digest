@@ -66,19 +66,35 @@ public actor DigestRouter {
         public let body: Data
     }
 
+    /// Validates and fills a config like the server's `_hydrate` (nil: store as sent).
+    public typealias Hydrate = @Sendable ([String: JSONValue]) throws -> [String: JSONValue]
+
     private let source: any DigestSource
     private let defaults: [String: JSONValue]
     private let presets: [String: Preset]
-    private var config: [String: JSONValue]
-    private var removed: [String]
+    private let hydrate: Hydrate?
+    private let store: LocalStore?
+    private var config: [String: JSONValue] { didSet { store?.save(config, to: "config.json") } }
+    private var removed: [String] { didSet { store?.save(removed, to: "removed.json") } }
 
     public init(source: any DigestSource, config: [String: JSONValue], defaults: [String: JSONValue],
-                presets: [String: Preset], removed: [String] = []) {
+                presets: [String: Preset], removed: [String] = [], hydrate: Hydrate? = nil, store: LocalStore? = nil) {
         self.source = source
         self.config = config
         self.defaults = defaults
         self.presets = presets
         self.removed = removed
+        self.hydrate = hydrate
+        self.store = store
+    }
+
+    private func hydrated(_ data: [String: JSONValue]) throws -> [String: JSONValue] {
+        guard let hydrate else { return data }
+        do {
+            return try hydrate(data)
+        } catch {
+            throw RouterError(422, "Invalid config: \(error)")
+        }
     }
 
     // MARK: - Routing
@@ -114,17 +130,17 @@ public actor DigestRouter {
             case ("GET", ["config", "defaults"]):
                 return configResponse(defaults)
             case ("PUT", ["config"]):
-                config = decodeConfig(body) ?? config
+                config = try hydrated(decodeConfig(body) ?? config)
                 return configResponse(config)
             case ("PATCH", ["config"]):
-                config.merge(decodeConfig(body) ?? [:]) { _, new in new }
+                config = try hydrated(config.merging(decodeConfig(body) ?? [:]) { _, new in new })
                 return configResponse(config)
             case ("GET", ["config", "presets"]):
                 return ok(presets.keys.sorted())
             case ("GET", ["config", "presets", "info"]):
                 return ok(presets.keys.sorted().map { ["name": $0, "description": presets[$0]!.description] })
             case ("POST", let p) where p.count == 4 && p[0] == "config" && p[1] == "presets":
-                return preset(name: p[2], action: p[3], save: query["save"] != "false", body: body)
+                return try preset(name: p[2], action: p[3], save: query["save"] != "false", body: body)
             case ("POST", ["score"]):
                 return try await score(json ?? [:])
             case ("GET", ["zotero", "status"]):
@@ -276,21 +292,14 @@ public actor DigestRouter {
         return encode(ScoreResult(paper: scored, breakdown: breakdown, absenceReason: reason))
     }
 
-    private func preset(name: String, action: String, save: Bool, body: Data?) -> Response {
+    private func preset(name: String, action: String, save: Bool, body: Data?) throws -> Response {
         guard let preset = presets[name] else { return error(404, "Unknown preset '\(name)'") }
-        var result: [String: JSONValue]
+        let result: [String: JSONValue]
         switch action {
         case "load":
             result = preset.config
         case "merge":
-            var base = DigestConfig(data: decodeConfig(body) ?? config)
-            let p = DigestConfig(data: preset.config)
-            for kw in p.coreKeywords { DigestConfig.append(kw, to: &base.coreKeywords) }
-            for a in p.namedAuthors { DigestConfig.append(a, to: &base.namedAuthors) }
-            for f in p.defaultFeeds { DigestConfig.append(f, to: &base.defaultFeeds) }
-            base.feeds.merge(p.feeds) { _, new in new }
-            base.feedWeights.merge(p.feedWeights) { _, new in new }
-            result = base.data
+            result = EngineConfig.merge(try decodeConfig(body).map(hydrated) ?? config, preset: preset.config)
         default:
             return error(404, "Not found")
         }

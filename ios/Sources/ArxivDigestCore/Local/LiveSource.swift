@@ -30,11 +30,14 @@ public actor LiveSource: DigestSource {
 
     private let fetcher: Fetcher
     private let now: @Sendable () -> Date
-    private var cache: [String: RawFetch] = [:]
+    private let store: LocalStore?
+    private var cache: [String: RawFetch] { didSet { store?.save(cache, to: "fetch-cache.json") } }
 
-    public init(fetcher: @escaping Fetcher, now: @escaping @Sendable () -> Date = Date.init) {
+    public init(fetcher: @escaping Fetcher, now: @escaping @Sendable () -> Date = Date.init, store: LocalStore? = nil) {
         self.fetcher = fetcher
         self.now = now
+        self.store = store
+        cache = store?.load([String: RawFetch].self, from: "fetch-cache.json") ?? [:]
     }
 
     private static func key(_ feeds: [String]) -> String { feeds.joined(separator: ",") }
@@ -98,13 +101,21 @@ public final class StandaloneBackend: @unchecked Sendable {
     public static let shared = StandaloneBackend()
 
     private let lock = NSLock()
-    // ponytail: the demo's invented config until on-device storage (S4) lands.
-    private var current = DigestRouter(
-        source: LiveSource(fetcher: { feeds, _ in try await ArxivFetcher().fetchPastweek(feeds) }),
-        config: DemoBackend.fixture.config, defaults: DemoBackend.fixture.config,
-        presets: DemoBackend.fixture.presets)
+    private lazy var current = Self.makeRouter(
+        store: .standard, fetcher: { feeds, _ in try await ArxivFetcher().fetchPastweek(feeds) })
 
     public var router: DigestRouter { lock.withLock { current } }
+
+    /// A router over `store`: the saved config (first run: the engine's
+    /// defaults), removed papers and fetch cache, with the engine's presets.
+    public static func makeRouter(store: LocalStore, fetcher: @escaping LiveSource.Fetcher) -> DigestRouter {
+        DigestRouter(
+            source: LiveSource(fetcher: fetcher, store: store),
+            config: store.load([String: JSONValue].self, from: "config.json") ?? EngineConfig.defaults,
+            defaults: EngineConfig.defaults, presets: EngineConfig.presets,
+            removed: store.load([String].self, from: "removed.json") ?? [],
+            hydrate: EngineConfig.hydrate, store: store)
+    }
 
     /// Replace the router (tests inject a fetcher this way).
     public func install(_ router: DigestRouter) {
