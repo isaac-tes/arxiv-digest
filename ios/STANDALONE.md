@@ -318,3 +318,35 @@ real arXiv or the device. Please check:
    hour). Compare count, New/Cross split, missing papers, and load time
    against arxiv.org/list/<feed>/new. Tell me which to keep and I'll delete
    the other (or keep (b) as a fallback when the listing fails).
+
+## 11. Handoff to the Mac agent
+
+State at `7fa722e` (2026-10-07): S1–S7 on `feat/swift_ios`, CI green (Linux +
+macOS `swift test`, app build, screenshots, server tests). Nothing has run
+against real arXiv or a device yet. That is the Mac session's job.
+
+Do, in order:
+
+1. `git fetch && git switch feat/swift_ios && git pull` (or `wt switch`), then
+   `cd ios && xcodegen generate && open ArxivDigest.xcodeproj`. Close beads
+   `e85.1`–`e85.6` locally once checked; `e85.7` stays open until the user picks.
+2. Baseline: `cd ios && swift test` (103), `uv run pytest` (290),
+   `cd server && uv run pytest` (48). Check the parity fixtures regenerate cleanly:
+   `uv run python ios/scripts/make_parity_fixture.py && git diff --exit-code ios/`.
+3. Run on the simulator with `-standalone`, then on the user's iPhone, and work
+   through §10 with the user. Fix anything that breaks (Core first, with a
+   test; app-target edits stay small). Likely spots: first-load time vs the
+   300 s session timeout (`RouterURLProtocol.makeSession`), the three-way
+   Connection picker fitting on a small phone, Settings' *Today on this
+   device* picker reloading the digest.
+4. S7: once the user picks (a) listing or (b) export API, delete the other
+   (`TodaySource`, `fetchTodayAPI`/`announcementWindow` or
+   `fetchTodayListing`/`parseListing`, their tests, the Settings section and
+   `-today-source`), or keep (b) as a fallback when the listing fails if the
+   user asks for that. Update §8 and `HANDOFF.md`.
+5. Ask the user before S8 (iCloud needs a paid developer account), before
+   changing the server's JSON contract, and before changing Demo mode.
+
+Rules carry over from §6: no live network in tests, invented names in
+fixtures, Conventional Commits, push and check `gh run list --branch feat/swift_ios`,
+never push beads/Dolt data (`refs/dolt/data` stays off GitHub).
