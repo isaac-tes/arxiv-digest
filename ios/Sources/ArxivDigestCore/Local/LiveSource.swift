@@ -98,9 +98,9 @@ public final class StandaloneBackend: @unchecked Sendable {
     public static let shared = StandaloneBackend()
 
     private let lock = NSLock()
-    // ponytail: until S3/S4 land, a stub fetch and the demo's invented config.
+    // ponytail: the demo's invented config until on-device storage (S4) lands.
     private var current = DigestRouter(
-        source: LiveSource(fetcher: { _, _ in .init(papers: []) }),
+        source: LiveSource(fetcher: { feeds, _ in try await ArxivFetcher().fetchPastweek(feeds) }),
         config: DemoBackend.fixture.config, defaults: DemoBackend.fixture.config,
         presets: DemoBackend.fixture.presets)
 
