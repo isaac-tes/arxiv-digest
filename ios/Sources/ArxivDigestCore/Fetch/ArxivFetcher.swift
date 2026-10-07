@@ -128,12 +128,26 @@ public struct ArxivFetcher: Sendable {
     /// The page's `opensearch:totalResults` and its entries as engine paper
     /// dicts (`_paper_from_api_entry`).
     public static func parse(_ data: Data) throws -> (total: Int, papers: [RawPaper]) {
+        let (total, entries) = try parseEntries(data)
+        return (total, entries.map(\.paper))
+    }
+
+    static func parseEntries(_ data: Data) throws -> (total: Int, entries: [(paper: RawPaper, published: String)]) {
         let delegate = AtomParser()
         let parser = XMLParser(data: data)
         parser.shouldProcessNamespaces = true
         parser.delegate = delegate
         guard parser.parse() else { throw parser.parserError ?? URLError(.cannotParseResponse) }
-        return (delegate.total, delegate.papers)
+        return (delegate.total, delegate.entries)
+    }
+
+    /// One paper by id (`zotero_bridge.fetch_arxiv_atom` + `_paper_from_api_entry`),
+    /// with its `published` timestamp; nil when arXiv has no such paper.
+    public func fetchPaper(_ id: String) async throws -> (paper: RawPaper, published: String)? {
+        let data = try await get(["id_list": id, "max_results": "1"])
+        guard let (_, entries) = try? Self.parseEntries(data), let first = entries.first,
+              !first.paper.id.isEmpty else { return nil }  // arXiv's error entry has no /abs/ id
+        return first
     }
 
     /// "Thu, 20 Aug 2026" in UTC (`_api_day_label`).
@@ -155,7 +169,7 @@ private final class AtomParser: NSObject, XMLParserDelegate {
     static let opensearch = "http://a9.com/-/spec/opensearch/1.1/"
 
     var total = 0
-    var papers: [RawPaper] = []
+    var entries: [(paper: RawPaper, published: String)] = []
 
     private var path: [String] = []
     private var text = ""
@@ -189,7 +203,7 @@ private final class AtomParser: NSObject, XMLParserDelegate {
         case let p where p.count == 3 && p[1] == "entry" && ["id", "title", "summary", "published"].contains(p[2]):
             if fields[p[2]] == nil { fields[p[2]] = trimmed }  // first match, like find()
         case ["feed", "entry"]:
-            papers.append(paper())
+            entries.append((paper(), fields["published"] ?? ""))
         default:
             break
         }

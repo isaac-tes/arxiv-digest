@@ -61,7 +61,7 @@ struct DemoSource: DigestSource {
         SourceFetch(papers: papers(timeframe))
     }
 
-    func lookup(id: String, timeframe: String, config: DigestConfig) async throws -> SourceLookup? {
+    func lookup(id: String, timeframe: String, feeds: [String], config: DigestConfig) async throws -> SourceLookup? {
         let f = DemoBackend.fixture
         guard let p = (f.pastweek + f.today).first(where: { $0.id == id }) else { return nil }
         return SourceLookup(

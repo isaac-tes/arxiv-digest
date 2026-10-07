@@ -44,7 +44,8 @@ public protocol DigestSource: Sendable {
     func fetch(timeframe: String, feeds: [String], config: DigestConfig, refresh: Bool) async throws -> SourceFetch
     /// The current fetch without fetching (the server's `peek_cache`).
     func cached(timeframe: String, feeds: [String], config: DigestConfig) async -> SourceFetch?
-    func lookup(id: String, timeframe: String, config: DigestConfig) async throws -> SourceLookup?
+    /// The paper for Score-a-paper: from the current fetch, else looked up.
+    func lookup(id: String, timeframe: String, feeds: [String], config: DigestConfig) async throws -> SourceLookup?
 }
 
 /// The digest service's endpoints answered in-process (Demo and Standalone
@@ -259,7 +260,7 @@ public actor DigestRouter {
         let timeframe = body["timeframe"] as? String ?? cfg.timeframe
         let topN = body["top_n"] as? Int ?? cfg.topN
         let names = feedNames(nil)
-        guard let found = try await source.lookup(id: id, timeframe: timeframe, config: cfg) else {
+        guard let found = try await source.lookup(id: id, timeframe: timeframe, feeds: names, config: cfg) else {
             return encode(ScoreResult(paper: nil, breakdown: ScoreBreakdown(signals: [:], total: 0),
                                       absenceReason: "Paper not found"))
         }

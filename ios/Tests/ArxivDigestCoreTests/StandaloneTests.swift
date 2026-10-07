@@ -127,3 +127,75 @@ final class Counter: @unchecked Sendable {
     var value: Int { lock.withLock { n } }
     func bump() { lock.withLock { n += 1 } }
 }
+
+/// Score-a-paper for a paper outside the cached fetch (S5).
+final class StandaloneScoreTests: XCTestCase {
+    private func client(fetchPaper: @escaping LiveSource.PaperFetcher) -> APIClient {
+        var cfg = DigestConfig(data: EngineConfig.defaults)
+        cfg.namedAuthors = ["okafor"]
+        cfg.feeds = ["quant-ph": DigestConfig.listingURL(for: "quant-ph")]
+        cfg.defaultFeeds = ["quant-ph"]
+        StandaloneBackend.shared.install(DigestRouter(
+            source: LiveSource(fetcher: { _, _ in .init(papers: StandaloneTests.papers) }, fetchPaper: fetchPaper),
+            config: cfg.data, defaults: cfg.data, presets: [:]))
+        return APIClient(baseURL: LocalURLProtocol.baseURL, session: LocalURLProtocol.makeSession())
+    }
+
+    static let outside = RawPaper(id: "2609.99999", title: "Plain title", authors: "Ruth Okafor", abstract: "A.",
+                                  subjects: "math.CO", link: "https://arxiv.org/abs/2609.99999", section: "Sun, 20 Sep 2026")
+
+    func testUnfetchedPaperIsScoredWithEngineReason() async throws {
+        let api = client { id in id == "2609.99999" ? (Self.outside, "2026-09-20T10:00:00Z") : nil }
+        let early = try await api.score(arxivId: "2609.99999")
+        XCTAssertEqual(early.absenceReason, "Load the digest first to compare this paper against it.")
+        XCTAssertEqual(early.breakdown.total, 6)
+
+        _ = try await api.fetchDigest()
+        let r = try await api.score(arxivId: "https://arxiv.org/abs/2609.99999v2")
+        XCTAssertEqual(r.paper?.section, "Sun, 20 Sep 2026")
+        XCTAssertEqual(r.absenceReason,
+            "This paper was **not in the fetched set**. Deterministic check: it was submitted on **2026-09-20**, "
+                + "but the fetched feed only covers **2026-10-05, 2026-10-06**; its categories (**math.CO**) are "
+                + "**not among your subscribed feeds** (quant-ph).")
+        let missing = try await api.score(arxivId: "2601.00001")
+        XCTAssertEqual(missing.absenceReason, "Paper not found")
+    }
+
+    func testCachedPaperNeedsNoNetwork() async throws {
+        let api = client { _ in throw URLError(.notConnectedToInternet) }
+        _ = try await api.fetchDigest()
+        let r = try await api.score(arxivId: "2610.00002")
+        XCTAssertNotNil(r.rank)
+    }
+
+    func testNetworkFailureIs502() async throws {
+        let api = client { _ in throw URLError(.notConnectedToInternet) }
+        do {
+            _ = try await api.score(arxivId: "2609.99999")
+            XCTFail("expected 502")
+        } catch {
+            XCTAssertEqual(error as? APIError,
+                           .http(502, "Could not reach arXiv (URLError); it may be rate-limiting. Try again in a moment."))
+        }
+    }
+
+    /// Expected strings from the server's `score._not_fetched_reason`.
+    func testNotFetchedReasonMatchesServer() {
+        let days = ["Tue, 06 Oct 2026", "Mon, 05 Oct 2026"]
+        XCTAssertEqual(
+            LiveSource.notFetchedReason(published: "2026-09-20T10:00:00Z", categories: ["cond-mat.str-el", "quant-ph"],
+                                        fetchedSections: days, feedNames: ["quant-ph", "cond-mat.quant-gas"]),
+            "This paper was **not in the fetched set**. Deterministic check: it was submitted on **2026-09-20**, but the fetched feed only covers **2026-10-05, 2026-10-06**; its categories (**quant-ph**) overlap your subscribed feeds.")
+        XCTAssertEqual(
+            LiveSource.notFetchedReason(published: "2026-10-05T23:00:00Z", categories: ["math.CO"],
+                                        fetchedSections: days, feedNames: ["quant-ph"]),
+            "This paper was **not in the fetched set**. Deterministic check: it was submitted on **2026-10-05**, which IS within the fetched days — so it was likely not yet listed in the feed pages when you fetched; its categories (**math.CO**) are **not among your subscribed feeds** (quant-ph).")
+        XCTAssertEqual(
+            LiveSource.notFetchedReason(published: "", categories: [], fetchedSections: [], feedNames: []),
+            "This paper was **not in the fetched set**. Deterministic check: its categories (**unknown**) are **not among your subscribed feeds** (none).")
+        XCTAssertEqual(
+            LiveSource.notFetchedReason(published: "2026-10-05T23:00:00Z", categories: ["QUANT-PH.x"],
+                                        fetchedSections: [], feedNames: ["quant-ph"]),
+            "This paper was **not in the fetched set**. Deterministic check: it was submitted on **2026-10-05**; its categories (**QUANT-PH.x**) overlap your subscribed feeds.")
+    }
+}

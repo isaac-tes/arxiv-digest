@@ -255,7 +255,7 @@ personal team can't sign it. Don't start this without the user's go-ahead.
 | S2 router + mode | done | `Local/DigestRouter.swift` (actor, shared by Demo + Standalone), `LiveSource` (stub fetcher until S3, demo config until S4), `LocalURLProtocol`, Settings → On this device, `-standalone` |
 | S3 past-week fetch | done | `Fetch/ArxivFetcher.swift` (HTTPS endpoint for ATS; no HTML fallback, failed feeds become a notice); Atom parse parity in `FetchParityFixture` |
 | S4 storage/defaults/presets | done | `Local/EngineConfig.swift` (hydrate = `Config.from_json`, `merge_preset`, `LocalStore`), generated `EngineDefaults.swift`; config/removed/fetch cache in Application Support/Standalone |
-| S5 score by id | not started | |
+| S5 score by id | done | `ArxivFetcher.fetchPaper` (id_list, with retry), cached paper first like the server; `LiveSource.notFetchedReason` ports `_not_fetched_reason` (feed list sorted, Python keeps config order); 502 on transport/HTTP errors |
 | S6 day labels | not started | |
 | S7 today feed | needs decision | |
 | S8 iCloud sync | deferred | |

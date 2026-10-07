@@ -147,3 +147,21 @@ final class Recorder<T>: @unchecked Sendable {
     var values: [T] { lock.withLock { items } }
     func add(_ v: T) { lock.withLock { items.append(v) } }
 }
+
+extension ArxivFetcherTests {
+    func testFetchPaperByID() async throws {
+        let requests = Recorder<URLRequest>()
+        let atom = Data(expected.atom.utf8)
+        MockURLProtocol.handler = { r in
+            requests.add(r)
+            let id = Self.query(r)["id_list"]!
+            return (Self.response(r), id == "2610.01234" ? atom : Self.page(total: 0, ids: []))
+        }
+        let found = try await fetcher.fetchPaper("2610.01234")
+        XCTAssertEqual(found?.paper, expected.papers[0])
+        XCTAssertEqual(found?.published, "2026-10-05T23:30:00Z")
+        XCTAssertEqual(Self.query(requests.values[0])["max_results"], "1")
+        let missing = try await fetcher.fetchPaper("2601.00001")
+        XCTAssertNil(missing)
+    }
+}
