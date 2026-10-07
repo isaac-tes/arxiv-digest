@@ -12,7 +12,10 @@ The app is a **thin client** of the FastAPI **digest service** (`server/`), whic
 wraps the same `arxiv_digest.py` engine as the CLI and GUI (ADR 0002). The server
 computes the Papers view: filters, day, removed papers, top-N (ADR 0008). The app
 renders it and edits config. **Demo mode** serves an engine-generated sample
-digest in-process, so the app also runs with no server.
+digest in-process, so the app also runs with no server. **Standalone mode**
+(Settings → On this device, ADR 0009) answers the same endpoints in-process
+from a live arXiv fetch scored on the phone (Swift port pinned to the engine by
+parity fixtures); see [`STANDALONE.md`](STANDALONE.md).
 
 ## Try it on a Mac (Xcode installed)
 
@@ -26,6 +29,9 @@ In Xcode: scheme **ArxivDigestApp**, pick an iPhone simulator, **Run** (⌘R).
 
 - **No server needed:** Settings → Connection → **Demo** → Reload demo. Or edit
   the scheme (Product → Scheme → Edit Scheme → Run → Arguments) and add `-demo`.
+- **Real digest, no server:** Settings → Connection → **On this device** →
+  Connect (or `-standalone`). The first past-week load fetches arXiv from the
+  phone (~10–40 s); later loads within the hour use the on-device cache.
 - **Real digest on the simulator:** in a second terminal
   `cd server && uv sync && uv run uvicorn app.main:app` (listens on
   127.0.0.1:8000), then Settings → Digest server → `http://127.0.0.1:8000` →
@@ -37,8 +43,9 @@ In Xcode: scheme **ArxivDigestApp**, pick an iPhone simulator, **Run** (⌘R).
   trust the developer profile on the phone: Settings → General → VPN & Device
   Management), and enter the Mac's LAN address, e.g. `http://192.168.1.20:8000`.
 
-Tests: `cd ios && swift test` (Core, 66 tests, also on Linux), `cd server && uv run pytest`
-(43), `uv run pytest` at the root (290).
+Tests: `cd ios && swift test` (Core, 97 tests, also on Linux), `cd server && uv run pytest`
+(48), `uv run pytest` at the root (290). Parity fixtures + engine defaults:
+`uv run python ios/scripts/make_parity_fixture.py`.
 
 Screenshots are produced by CI (`.github/workflows/ios.yml`) on every push to
 this branch: Actions → latest run → artifact **ios-screenshots**. Locally:
@@ -88,12 +95,9 @@ per user; presets cover starting points), the GUI's "Clear fetch cache" button
 
 ## Remaining work
 
-- **Standalone mode** (next feature): app fetches + scores on the device, no
-  server. Full plan, steps S1–S8, and Linux setup: [`STANDALONE.md`](STANDALONE.md);
-  decision: ADR 0009. Beads epic [`e85`].
-- **Stopgap until then** (Mac only): run the server on the Mac at login with a
-  user LaunchAgent (`~/Library/LaunchAgents`, no sudo) plus Tailscale on Mac +
-  phone. Not written yet.
+- **Standalone mode**: MVP (S1–S6) landed; verify on the phone, then decide S7
+  (today feed) and S8 (iCloud config sync). Progress and checklist:
+  [`STANDALONE.md`](STANDALONE.md); decision: ADR 0009. Beads epic [`e85`].
 - **Per-user Zotero key** [`d5q`]: needs an encrypted credential column, an
   endpoint, and a Settings field. Until then Save to Zotero needs
   `ZOTERO_API_KEY` + `ZOTERO_LIBRARY_ID` on the server; Share to Zotero works without.
@@ -111,6 +115,9 @@ per user; presets cover starting points), the GUI's "Clear fetch cache" button
 
 - Core logic that can be unit-tested goes in `ArxivDigestCore` with a test;
   views stay thin. New app-target files are picked up by `xcodegen generate`.
+- `ios/scripts/make_parity_fixture.py` regenerates Standalone's parity fixtures
+  and `EngineDefaults.swift` (defaults + presets); run it after changing the
+  engine's scoring, config hydration, presets or parsers.
 - `ios/scripts/make_demo_fixture.py` regenerates the demo fixture from the
   engine; run it after changing scoring, and keep invented names only.
 - Conventional Commits per `CONTRIBUTING.md`. Don't push beads/Dolt data to the

@@ -259,3 +259,53 @@ personal team can't sign it. Don't start this without the user's go-ahead.
 | S6 day labels | done | `ArxivFetcher.listingDayLabels` + minimal `HTMLNode` tree (same h3 → sibling dt walk as BeautifulSoup); one plain GET per fetched feed, API label kept on failure; parity on an invented listing page |
 | S7 today feed | needs decision | |
 | S8 iCloud sync | deferred | |
+
+Session log (2026-10-07, Linux, Swift 6.2 tarball in `~/.local/swift`): baseline
+was root 290 / server 48 / Swift 66; now Swift 97. One commit per step plus
+`fix(ios): name arXiv errors the same on macOS and Linux` (the macOS CI job caught
+a bridged `URLError` reporting as `NSError`).
+
+## 9. Known differences from the Python engine
+
+Deliberate, small, and marked `ponytail:` in the code:
+
+- **Export API over HTTPS** (`https://export.arxiv.org`); the engine uses plain
+  HTTP, which App Transport Security blocks.
+- **No HTML `/pastweek` fallback.** When the API fails for a feed, that feed and
+  the rest are skipped and a notice says which ("Pull to refresh to try again").
+- **Dict order.** Swift dictionaries are unordered, so two places sort feed names
+  where Python keeps config order: `default_feeds` rebuilt from `feeds` when a
+  config has no `default_feeds` key at all, and the subscribed-feed list in the
+  "not among your subscribed feeds (…)" sentence.
+- **HTML entities** in listing pages stay undecoded (ids and day labels have none).
+- **Score-a-paper by id retries** 429/5xx like the past-week fetch; the server's
+  `fetch_arxiv_atom` makes one request.
+- **Today is not available**: `/digest?timeframe=today` answers 422 with
+  `LiveSource.todayUnavailable` until S7 is decided.
+- **Demo** keeps storing configs as sent (no hydration); the router's preset
+  merge now uses the engine's `merge_preset` port for both modes (same result
+  on the demo's presets; `DemoBackendTests` unchanged and green).
+
+Python quirk worth knowing (ported as is, not "fixed"): `Config.from_json`
+coerces with `bool()`, so a JSON string `"false"` hydrates to `true`; and the
+listing parser keeps a version suffix (`/abs/…v2`) in the id, so such a link
+never relabels its paper.
+
+## 10. Verify on the Mac / iPhone
+
+CI builds the app and runs `swift test` on macOS, but nothing exercises the
+real arXiv or the device. Please check:
+
+1. Settings → Connection → **On this device** → Connect: label reads
+   "Connected · standalone mode"; the segmented control's three labels fit.
+2. Papers loads a real past week (first load ~10–40 s, spinner, no timeout); day
+   chips show arXiv's announcement days; pull to refresh refetches.
+3. Edit keywords/authors/weights → Save → ranking changes without a refetch.
+4. Remove / Undo / Restore, top-N, day picker behave like Server mode; removals
+   and config survive an app relaunch (Application Support/Standalone).
+5. Score tab: a paper from the list shows its rank; an old paper (e.g. a 2020
+   id) shows the "not in the fetched set" reason; airplane mode shows the 502
+   message.
+6. Settings → Zotero shows Share to Zotero only (no Web API key on the device).
+7. Config → Starter presets: Load / Add show the engine's three presets.
+8. Timeframe "today" (Papers ⋯ menu) shows the 422 message, not a crash.
