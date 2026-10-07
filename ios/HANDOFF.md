@@ -1,6 +1,6 @@
 # iOS app — session handoff
 
-_Last updated: 2026-10-06 · branch `feat/swift_ios`_
+_Last updated: 2026-10-07 · branch `feat/swift_ios`_
 
 Living handoff for the native iOS app: what exists, how to run it, what's left.
 Decisions live in ADRs (`docs/adr/`), terms in `CONTEXT.md`. Beads data is
@@ -88,6 +88,12 @@ per user; presets cover starting points), the GUI's "Clear fetch cache" button
 
 ## Remaining work
 
+- **Standalone mode** (next feature): app fetches + scores on the device, no
+  server. Full plan, steps S1–S8, and Linux setup: [`STANDALONE.md`](STANDALONE.md);
+  decision: ADR 0009. Beads epic [`e85`].
+- **Stopgap until then** (Mac only): run the server on the Mac at login with a
+  user LaunchAgent (`~/Library/LaunchAgents`, no sudo) plus Tailscale on Mac +
+  phone. Not written yet.
 - **Per-user Zotero key** [`d5q`]: needs an encrypted credential column, an
   endpoint, and a Settings field. Until then Save to Zotero needs
   `ZOTERO_API_KEY` + `ZOTERO_LIBRARY_ID` on the server; Share to Zotero works without.

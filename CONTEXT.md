@@ -122,6 +122,11 @@ discussions.
   with no digest service. For trying the UI and producing screenshots; its
   rankings do not react to config edits.
 
+- **Standalone mode** — a run of the app that fetches the past week from the arXiv
+  export API and scores papers on the device, with no digest service (ADR 0009).
+  Single-device: config and removed papers live on the phone. Distinct from
+  **Demo mode** (fixed sample) and **Server mode** (synced via the digest service).
+
 - **Offline cache** — the app's local (SwiftData) copy of the last digest, saved
   papers, and PDFs, so the app works without a connection. The server remains the
   source of truth; the cache is a convenience.
