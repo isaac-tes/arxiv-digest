@@ -92,8 +92,8 @@ app build + screenshots (artifact **ios-screenshots**).
 ## 2. Run and verify
 
 ```bash
-uv sync --group dev && uv run pytest                 # root: 319 tests
-cd server && uv sync --extra dev && uv run pytest    # server: 54
+uv sync --group dev && uv run pytest                 # root: 327 tests
+cd server && uv sync --extra dev && uv run pytest    # server: 55
 cd ios && swift test                                 # Core: 124 (also on Linux)
 uv run mkdocs build --strict                         # docs
 uv run python ios/scripts/make_parity_fixture.py && git diff --exit-code ios/   # parity
