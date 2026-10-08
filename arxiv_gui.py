@@ -383,6 +383,33 @@ def _render_zotero_save_button(arxiv_id: str, title: str, scope: str = "card") -
     _tick_or_popover()
 
 
+def _add_named_author(name: str) -> None:
+    """Append to the working config's named authors (case-insensitive dedupe)."""
+    name = name.strip()
+    if not name or name.lower() in {a.lower() for a in cfg().named_authors}:
+        return
+    cfg().named_authors.append(name)
+    _reset_widget_state("editor_named_authors")
+    st.toast(f"Added {name} to highlighted authors - Save to apply")
+
+
+def _render_add_author(authors: str, scope: str = "card", paper_id: str = "") -> None:
+    """Popover listing the paper's authors not yet highlighted; one click adds."""
+    named = {a.lower() for a in cfg().named_authors}
+    addable = [a.strip() for a in authors.split(",") if a.strip() and a.strip().lower() not in named]
+    if not addable:
+        return
+    with st.popover("Add author", width="stretch"):
+        st.caption("Add to highlighted authors (Save to keep).")
+        for i, name in enumerate(addable):
+            st.button(
+                name,
+                key=f"add_author_{scope}_{paper_id}_{i}_{name}",
+                on_click=_add_named_author,
+                args=(name,),
+            )
+
+
 # ────────────────────────── Fetching with cache ──────────────────────────
 
 def _pastweek_feeds_to_fetch(feeds_key: Tuple[Tuple[str, str], ...]) -> list[str]:
@@ -1173,6 +1200,7 @@ def render_papers_tab():
             with score_col:
                 st.metric("Score", e["score"])
                 _render_zotero_save_button(e["id"], e["title"])
+                _render_add_author(e["authors"], paper_id=e["id"])
             with remove_col:
                 st.button(
                     "✕",

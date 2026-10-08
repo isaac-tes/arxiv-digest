@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Add author from a paper**: an *Add author* popover on each GUI paper card (and the Score result) and an authors menu in the iOS paper detail append that paper's author to the highlighted authors. It edits the working config only; Save applies it.
 - **iOS app reaches parity with the web GUI** (`ios/`, branch `feat/swift_ios`). Four tabs:
   - **Papers**: the ranked digest for the saved timeframe and Top N, a day picker for past-week fetches, search over title/authors/abstract, swipe (or long-press) to remove a paper with Undo, a *Removed papers* section with Restore / Restore all, fetch notices, and Markdown/JSON export in the GUI's formats. Cards highlight keywords, named authors and feed-bonus subjects the way the GUI does.
   - **Score**: paste an arXiv link or id; shows the score, breakdown, and either the rank in the Papers view or the GUI's reason it is absent (below the cutoff, removed, a replacement, another day, or never fetched).

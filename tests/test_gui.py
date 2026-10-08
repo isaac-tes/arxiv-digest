@@ -1457,3 +1457,26 @@ def test_score_tab_zotero_button_does_not_clash_with_card_issue_8(monkeypatch, t
     at = _score_tab_app(monkeypatch, tmp_path, [_card_paper("2609.00001", "A new paper")])
     _score(at, "2609.00001")
     assert not list(at.exception), [e.value for e in at.exception]
+
+
+def test_add_author_popover_offers_only_unnamed_and_dedupes():
+    from streamlit.testing.v1 import AppTest
+
+    at = AppTest.from_file("tests/fixtures/add_author_app.py").run(timeout=15)
+    assert not list(at.exception)
+    assert [b.label for b in at.button] == ["Bob Jones", "Carol Wu"]
+
+    at.session_state["editor_named_authors"] = {"stale": True}
+    at.button[0].click()
+    at.run(timeout=15)
+    assert at.session_state["cfg"].named_authors == ["alice smith", "Bob Jones"]
+    assert "editor_named_authors" not in at.session_state
+    assert [b.label for b in at.button] == ["Carol Wu"]
+
+
+def test_add_named_author_ignores_case_insensitive_duplicate():
+    import arxiv_gui
+
+    arxiv_gui.st.session_state.cfg = arxiv_gui.ad.Config(named_authors=["Bob Jones"])
+    arxiv_gui._add_named_author("BOB JONES")
+    assert arxiv_gui.cfg().named_authors == ["Bob Jones"]
