@@ -122,7 +122,7 @@ public class RouterURLProtocol: URLProtocol, @unchecked Sendable {
 private struct UncheckedBox<T>: @unchecked Sendable { let value: T }
 
 /// Demo mode's requests → `DemoBackend.shared`.
-public final class DemoURLProtocol: RouterURLProtocol {
+public final class DemoURLProtocol: RouterURLProtocol, @unchecked Sendable {
     override class var router: DigestRouter { DemoBackend.shared.router }
     override public class var baseURL: URL { URL(string: "https://demo.arxiv-digest.invalid")! }
 }

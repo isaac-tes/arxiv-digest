@@ -224,7 +224,7 @@ public final class StandaloneBackend: @unchecked Sendable {
 }
 
 /// Standalone mode's requests → `StandaloneBackend.shared`.
-public final class LocalURLProtocol: RouterURLProtocol {
+public final class LocalURLProtocol: RouterURLProtocol, @unchecked Sendable {
     override class var router: DigestRouter { StandaloneBackend.shared.router }
     override public class var baseURL: URL { URL(string: "https://device.arxiv-digest.invalid")! }
 }

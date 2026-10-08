@@ -37,6 +37,8 @@ targets:
         INFOPLIST_KEY_CFBundleDisplayName: arXiv Digest
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         INFOPLIST_KEY_UISupportedInterfaceOrientations: "UIInterfaceOrientationPortrait"
+        # Portrait-only on iPad too, which iPad multitasking requires to be full screen.
+        INFOPLIST_KEY_UIRequiresFullScreen: YES
         SWIFT_VERSION: "5.0"
         TARGETED_DEVICE_FAMILY: "1,2"
         CODE_SIGN_STYLE: Automatic
