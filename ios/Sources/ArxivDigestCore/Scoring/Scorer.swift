@@ -47,17 +47,39 @@ public enum Scorer {
     }
 
     private static let whitespace = try! NSRegularExpression(pattern: "\\s+")
-    private static let sentenceEnd = try! NSRegularExpression(pattern: "(?<=[.!?]) ")
+    /// The engine's `_ABBREVIATIONS`: words ending in "." that don't end a sentence.
+    private static let abbreviations: Set<String> = Set(
+        ("al e.g i.e cf vs fig figs eq eqs ref refs sec secs no vol nat phys rev lett " +
+         "commun sci natl acad proc approx resp dr prof").split(separator: " ").map(String.init))
 
     /// The engine's `summarize`: the first two sentences, whitespace collapsed.
+    /// No split inside balanced parentheses, after a known abbreviation, or
+    /// after a single-letter initial ("Roy et al. (Nat. Commun. 17)").
     public static func summarize(_ text: String) -> String {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         let cleaned = whitespace.stringByReplacingMatches(
             in: trimmed, range: NSRange(trimmed.startIndex..., in: trimmed), withTemplate: " ")
         guard !cleaned.isEmpty else { return "(No abstract available.)" }
-        // After collapsing, every break is one space, so splitting on it is `re.split`.
-        let marked = sentenceEnd.stringByReplacingMatches(
-            in: cleaned, range: NSRange(cleaned.startIndex..., in: cleaned), withTemplate: "\u{0}")
-        return marked.split(separator: "\u{0}", omittingEmptySubsequences: false).prefix(2).joined(separator: " ")
+        let c = Array(cleaned)
+        let trackParens = c.filter { $0 == "(" }.count == c.filter { $0 == ")" }.count
+        var sentences: [String] = []
+        var start = 0, depth = 0
+        for (i, ch) in c.enumerated() {
+            if ch == "(" && trackParens {
+                depth += 1
+            } else if ch == ")" && trackParens {
+                depth = max(depth - 1, 0)
+            } else if ".!?".contains(ch), depth == 0, i + 1 < c.count, c[i + 1] == " " {
+                let word = String(c[start..<i]).split(separator: " ", omittingEmptySubsequences: false).last.map(String.init) ?? ""
+                if ch == ".", abbreviations.contains(word.lowercased()) || (word.count == 1 && word.first!.isLetter) {
+                    continue
+                }
+                sentences.append(String(c[start...i]))
+                start = i + 2
+                if sentences.count == 2 { break }
+            }
+        }
+        if sentences.count < 2, start < c.count { sentences.append(String(c[start...])) }
+        return sentences.prefix(2).joined(separator: " ")
     }
 }

@@ -31,6 +31,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`GET /config` returns the effective config** with every field filled in; invalid configs are rejected with 422.
 
 ### Fixed
+- **GUI: inline LaTeX in paper titles and full abstracts** (e.g. `$\mathbb{Z}_N$`) now renders; it showed as raw `$...$` because the card text sat inside a `<div>`, where Streamlit's Markdown (and its KaTeX) doesn't run. Math is kept verbatim (no highlight inside it), and stray Markdown characters outside math stay literal.
+- **Card summaries no longer stop mid-citation**: the two-sentence summary split at "et al." / "Nat." (e.g. "A recent experiment by Roy et al. (Nat."). Sentences now don't end inside parentheses, after common abbreviations (et al., Fig., Eq., Nat., Phys. Rev., e.g., …) or after an initial. Same rule in the iOS app.
 - **A cleared keyword, author or low-priority list stays cleared.** Loading a config or profile whose list was saved empty used to bring back the built-in defaults; now only a missing list does.
 - **Zotero saves from the service** put given names and surnames in the right fields (they were swapped).
 - **Named authors highlight like they score** in the service and the app (middle initials tolerated).

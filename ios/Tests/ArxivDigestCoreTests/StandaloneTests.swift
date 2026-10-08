@@ -119,8 +119,15 @@ final class EngineTextParityTests: XCTestCase {
         XCTAssertEqual(Scorer.summarize("   "), "(No abstract available.)")
         XCTAssertEqual(Scorer.summarize("One. Two!  Three?\nFour."), "One. Two!")
         XCTAssertEqual(Scorer.summarize("No terminal punctuation here"), "No terminal punctuation here")
-        XCTAssertEqual(Scorer.summarize("e.g. this.  And\tthat. More."), "e.g. this.")
+        XCTAssertEqual(Scorer.summarize("e.g. this.  And\tthat. More."), "e.g. this. And that.")
         XCTAssertEqual(Scorer.summarize("Ends with dot."), "Ends with dot.")
+        // Citations, abbreviations, initials and parentheses don't end a sentence.
+        XCTAssertEqual(
+            Scorer.summarize("A recent experiment by Roy et al. (Nat. Commun. 17, 2853 (2026)) demonstrated a plateau. We prove a theorem. The corollary."),
+            "A recent experiment by Roy et al. (Nat. Commun. 17, 2853 (2026)) demonstrated a plateau. We prove a theorem.")
+        XCTAssertEqual(Scorer.summarize("Work by J. Smith shows it. Second. Third."), "Work by J. Smith shows it. Second.")
+        XCTAssertEqual(Scorer.summarize("Unbalanced (paren. Still one. Two. Three."), "Unbalanced (paren. Still one.")
+        XCTAssertEqual(Scorer.summarize("Trailing abbrev et al."), "Trailing abbrev et al.")
     }
 
     func testAvailableDayLabels() {

@@ -83,6 +83,23 @@ final class StandaloneStoreTests: XCTestCase {
         XCTAssertEqual(unchanged.data, EngineConfig.defaults)
     }
 
+    /// Every Display toggle (incl. "Highlight keywords in summaries") survives
+    /// Save and a relaunch.
+    func testDisplayTogglesPersistAcrossLaunches() async throws {
+        var api = client()
+        var cfg = try await api.getConfig()
+        XCTAssertFalse(cfg.highlightTermsSummary)
+        cfg.highlightTermsSummary = true
+        cfg.highlightAuthors = false
+        let saved = try await api.putConfig(cfg)
+        XCTAssertTrue(saved.highlightTermsSummary)
+
+        api = client()
+        let reloaded = try await api.getConfig()
+        XCTAssertTrue(reloaded.highlightTermsSummary)
+        XCTAssertFalse(reloaded.highlightAuthors)
+    }
+
     func testConfigAndRemovalsPersistAcrossLaunches() async throws {
         var api = client()
         var cfg = try await api.getConfig()
