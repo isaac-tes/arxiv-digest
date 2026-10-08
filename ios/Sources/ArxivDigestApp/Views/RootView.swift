@@ -41,6 +41,11 @@ struct RootView: View {
             }
         }
         .animation(.spring(duration: 0.35), value: model.toast)
+        // A config .json opened from AirDrop / Files: import it and show Config.
+        .onOpenURL { url in
+            guard url.isFileURL, let data = try? Data(contentsOf: url) else { return }
+            if model.importConfig(from: data) { tab = .config }
+        }
         .task {
             KaTeXWebView.prewarm()  // KaTeX loaded before the first paper page
             await model.bootstrap()

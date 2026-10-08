@@ -13,12 +13,9 @@ To share keywords, authors, feeds, weights and removed papers between devices
 the same `arxiv_digest.py` engine as the CLI and GUI) somewhere all of them can
 reach, and switch each device to **Server**.
 
-!!! note "What does not sync yet"
-    The web GUI (`arxiv-gui`) keeps its own `arxiv_config.json` / profiles and
-    does not read the server's config. You can **seed** the server from a GUI
-    profile once (step 3), but later edits don't flow back. **On this device**
-    data also stays on the phone: switching to Server starts from the server's
-    config.
+!!! tip "No server? Copy one file instead"
+    In **On this device** mode nothing is synced, but you can move the config by
+    hand as a single JSON file, both ways (see [Copy the config file](#copy-the-config-file-without-a-server)).
 
 ---
 
@@ -120,10 +117,29 @@ step 4 and the **access token** → **Connect**. The status line reads
 The token is stored in the iOS Keychain. Allow **Local Network** access when iOS
 asks (needed for LAN addresses).
 
-**Mac**: on Apple-silicon Macs the iOS app also runs as a Mac app. In Xcode,
-open `ios/ArxivDigest.xcodeproj`, choose the destination **My Mac (Designed for
-iPad)**, run it, and connect it to the same URL. (Not yet tested on this
-project; report problems.)
+**Web GUI (`arxiv-gui`, two-way)**: sidebar → **🔄 Sync with server** → enter
+the URL and the access token → **Connect**. The first time it asks once whose
+config both sides should use: **Use server's** or **Upload mine**. After that:
+
+- every GUI session starts from the server's config and removed papers;
+  **⬇ Download** refreshes them;
+- **⬆ Save to server**, saving a profile, and *Write project config* upload the
+  config; removing or restoring a paper goes to the server straight away;
+- if the server can't be reached the GUI keeps working from its local copy
+  (`arxiv_config.json`, which the `arxiv-digest` CLI also reads) and shows
+  *Offline*; save again once the server is back.
+
+The address and token are stored in `~/.arxiv_scraper/sync.json` (readable only
+by you); `ARXIV_DIGEST_SERVER` / `ARXIV_DIGEST_TOKEN` override them. **Stop
+syncing** goes back to local-only.
+
+Named profiles stay on your computer: loading one and saving it sends it to the
+server as the shared config.
+
+**Mac app (optional)**: on Apple-silicon Macs the iOS app also runs as a Mac
+app. In Xcode, open `ios/ArxivDigest.xcodeproj`, choose the destination **My Mac
+(Designed for iPad)**, run it, and connect it to the same URL. (Not yet tested
+on this project; report problems.)
 
 Now a keyword added on the phone, a removal on the Mac, or a preset loaded on
 either is saved to the server and shows on the other device after its next load
@@ -176,6 +192,30 @@ cd server && uv sync
 
 Everything is in `server/digest.db`. Copy it while the server is stopped, e.g.
 `cp server/digest.db ~/digest-backup-$(date +%F).db`.
+
+## Copy the config file (without a server)
+
+For **On this device** mode, or to move settings once: the config is a single
+JSON file with the same format everywhere.
+
+**Mac → iPhone**
+
+1. GUI → **Profiles** tab → **Export** next to a saved profile (save the current
+   config as a profile first if needed). This downloads `<name>.json`.
+2. AirDrop the file to the iPhone and choose **arXiv Digest**, or save it to
+   Files and use the app's Settings → **Config file** → **Import config…**.
+3. The app opens **Config** with the imported settings; tap **Save**.
+
+**iPhone → Mac**
+
+1. App → Settings → **Config file** → **Export config** → AirDrop to the Mac
+   (it arrives in Downloads as `arxiv-digest-config.json`).
+2. GUI → **Profiles** tab → **Import profile from JSON** → pick the file.
+3. Save it as a profile, or **Write project config** (and, if you sync,
+   **⬆ Save to server**).
+
+An import replaces the whole config (keywords, authors, feeds, weights, colors)
+and isn't kept until you save. Removed papers aren't part of the file.
 
 ---
 

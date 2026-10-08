@@ -1,5 +1,6 @@
 import SwiftUI
 import ArxivDigestCore
+import UniformTypeIdentifiers
 
 /// Settings: connection (server, on this device, or demo), appearance, and the GUI sidebar's
 /// Display section (highlight toggles, per-aspect colors and font tints).
@@ -12,12 +13,15 @@ struct SettingsView: View {
     @State private var modeChoice: AppModel.Mode = .server
     @State private var isConnecting = false
     @State private var accessTokenText = ""
+    @State private var isImporting = false
 
     var body: some View {
         @Bindable var model = model
         NavigationStack {
             Form {
                 connectionSection
+
+                if model.mode != .demo { configFileSection }
 
                 Section("Appearance") {
                     Picker("Theme", selection: $appearanceRaw) {
@@ -141,6 +145,42 @@ struct SettingsView: View {
                 Text("Demo mode uses built-in sample papers with invented authors; nothing leaves the device. Scores were computed by the real engine, but they don't change when you edit the config.")
             }
         }
+    }
+
+    /// Copy the config between devices as one JSON file (same format as the
+    /// Mac GUI's Profiles → Export / Import profile from JSON).
+    private var configFileSection: some View {
+        Section {
+            if let file = configExportFile {
+                ShareLink(item: file, preview: SharePreview("arXiv Digest config")) {
+                    Label("Export config", systemImage: "square.and.arrow.up")
+                }
+            }
+            Button {
+                isImporting = true
+            } label: {
+                Label("Import config…", systemImage: "square.and.arrow.down")
+            }
+            .fileImporter(isPresented: $isImporting, allowedContentTypes: [.json]) { result in
+                guard case .success(let url) = result else { return }
+                let scoped = url.startAccessingSecurityScopedResource()
+                defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+                if let data = try? Data(contentsOf: url) { model.importConfig(from: data) }
+            }
+        } header: {
+            Text("Config file")
+        } footer: {
+            Text("Share the current config as a JSON file (AirDrop it to your Mac and use the GUI's Profiles → Import profile from JSON), or import one exported by the GUI (Profiles → Export) or another device. An import replaces the config and is saved when you tap Save.")
+        }
+    }
+
+    /// The working config written to a temporary `.json` for the share sheet.
+    private var configExportFile: URL? {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(ConfigFile.fileName)
+        guard let data = try? ConfigFile.write(model.config), (try? data.write(to: url, options: .atomic)) != nil else {
+            return nil
+        }
+        return url
     }
 
     /// The typed URL, with `http://` added when no scheme was given.

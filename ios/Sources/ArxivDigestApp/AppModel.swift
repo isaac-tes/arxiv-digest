@@ -332,6 +332,25 @@ final class AppModel {
         }
     }
 
+    /// Replace the working config with a config file (from the Mac GUI or
+    /// another device). Unsaved until Save, like the GUI's import. Returns
+    /// whether it worked; errors show as a toast.
+    @discardableResult
+    func importConfig(from data: Data) -> Bool {
+        guard mode != .demo else {
+            showToast("Demo mode can't import a config. Switch to On this device or Server.", kind: .info)
+            return false
+        }
+        do {
+            config = try ConfigFile.read(data)
+            showToast("Config imported - Save to apply")
+            return true
+        } catch {
+            showToast(error.localizedDescription, kind: .error)
+            return false
+        }
+    }
+
     /// Adds to the working config only; Save persists it.
     func addNamedAuthor(_ name: String) {
         guard DigestConfig.append(name, to: &config.namedAuthors) else { return }

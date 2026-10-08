@@ -29,6 +29,16 @@ targets:
         type: folder
     dependencies:
       - package: ArxivDigestCore
+    # Merged with the generated Info.plist keys below. Declares JSON so a config
+    # file AirDropped from the Mac (or tapped in Files) can open in the app.
+    info:
+      path: Sources/ArxivDigestApp/Info.plist
+      properties:
+        CFBundleDocumentTypes:
+          - CFBundleTypeName: arXiv Digest config
+            LSHandlerRank: Alternate
+            LSItemContentTypes: [public.json]
+        LSSupportsOpeningDocumentsInPlace: false
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.arxivdigest.app
