@@ -1,114 +1,186 @@
-# Deploying the digest service
+# Share settings across devices (digest server)
 
-The iOS/Android apps are thin clients; the FastAPI **digest service** (`server/`)
-holds the whole fetch/score/highlight engine. This is how to run it somewhere
-always-on so the app works without your laptop.
+The iOS app has three connection modes (Settings → Connection):
 
-## Two modes (`server/app/settings.py`)
+| Mode | Where config + removed papers live | Synced? | Needs a server? |
+|---|---|---|---|
+| **On this device** (default) | on the phone | no | no |
+| **Server** | on the digest server | **yes**: every device pointing at the same server shares them | yes |
+| **Demo** | in memory (sample papers) | no | no |
 
-| | `local` (default) | `remote` |
-|---|---|---|
-| Auth | **no-op** — a default user is auto-created; no login | JWT (OAuth2 password flow) |
-| DB | SQLite file (`server/digest.db`) | Postgres (`DIGEST_DATABASE_URL`) |
-| Use | personal / single-user, LAN or private network | public / multi-user |
+To share keywords, authors, feeds, weights and removed papers between devices
+(iPhone, iPad, a Mac), run the **digest server** (`server/`, a FastAPI app around
+the same `arxiv_digest.py` engine as the CLI and GUI) somewhere all of them can
+reach, and switch each device to **Server**.
 
-Selected by `DIGEST_MODE`. Everything else has a working default, so
-`uvicorn app.main:app` runs out of the box in `local` mode.
+!!! note "What does not sync yet"
+    The web GUI (`arxiv-gui`) keeps its own `arxiv_config.json` / profiles and
+    does not read the server's config. You can **seed** the server from a GUI
+    profile once (step 3), but later edits don't flow back. **On this device**
+    data also stays on the phone: switching to Server starts from the server's
+    config.
 
-> **Never expose `local` mode to the public internet** — it has no auth by design.
-> Fine on your home LAN or a private network (Tailscale). For public, use `remote`.
+---
 
-## Important: clone the whole repo, not just `server/`
+## 1. Requirements
 
-The server imports the shared engine (`arxiv_digest.py`) from the **repo root** via
-a `sys.path` insert (`REPO_ROOT` in `server/app/settings.py`). The `server/`
-directory alone will not run — keep it nested inside a full checkout.
+- Python 3.12+ and [uv](https://docs.astral.sh/uv/) (installs into your home
+  directory, no root needed):
+  ```bash
+  curl -LsSf https://astral.sh/uv/install.sh | sh
+  ```
+- The **whole repository**, not just `server/`: the server imports the engine
+  (`arxiv_digest.py`) from the repo root.
+  ```bash
+  git clone https://github.com/isaac-tes/arxiv-digest.git
+  cd arxiv-digest
+  git switch feat/swift_ios   # until the iOS work is merged into main
+  ```
 
-## Personal deploy on an always-on Linux box (local mode)
+## 2. Start the server
 
 ```bash
-# 1. Install uv (Python package manager) if missing
-curl -LsSf https://astral.sh/uv/install.sh | sh
-
-# 2. Clone the WHOLE repo
-git clone <your-repo-url> arxiv_scraper_cli
-cd arxiv_scraper_cli/server
-
-# 3. Install deps into a project venv
+cd server
 uv sync
-
-# 4. Run (local mode is the default)
-uv run uvicorn app.main:app --host 0.0.0.0 --port 8000
+uv run uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
-Verify from another machine on the network:
+Check it from the same machine:
 
 ```bash
-curl http://<box-ip>:8000/health     # -> {"status":"ok","mode":"local"}
+curl http://127.0.0.1:8000/health      # {"status":"ok","mode":"local"}
 ```
 
-### Keep it running across reboots/crashes — systemd
+- `--host 127.0.0.1` accepts connections from this machine only. To let other
+  devices on your network in, use `--host 0.0.0.0` (see the warning in step 4).
+- The first past-week load fetches from arXiv (~20–40 s); later loads come from
+  the server's 1 h cache.
+- Stop it with `Ctrl-C`. Your config and removed papers are kept in
+  `server/digest.db` (SQLite), so restarting doesn't lose them.
 
-A template unit lives at `deploy/arxiv-digest.service` (repo root).
-Fill in `<youruser>` and the checkout path, then:
+## 3. Optional: start from your GUI settings
+
+Point the server at a saved GUI profile; it is used as the config for a user who
+has none stored yet:
 
 ```bash
-sudo cp deploy/arxiv-digest.service /etc/systemd/system/arxiv-digest.service
-# edit User=, WorkingDirectory=, ExecStart= paths to match your box
-sudo systemctl daemon-reload
-sudo systemctl enable --now arxiv-digest
-systemctl status arxiv-digest
+DIGEST_DEFAULT_CONFIG_PATH=~/.arxiv_scraper/profiles/<name>.json \
+  uv run uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
-Update later:
+This seeds the server once. Edits made later in the app are stored on the
+server and don't change the profile file.
 
+## 4. Make it reachable from your devices
+
+Pick the first option that fits:
+
+| Setup | Server command | URL to enter on each device |
+|---|---|---|
+| **Same Wi-Fi at home** (Mac or Linux box) | `--host 0.0.0.0` | `http://<server-LAN-IP>:8000` |
+| **From anywhere, private**: [Tailscale](https://tailscale.com) on the server and every device | `--host 0.0.0.0` | `http://<server-tailscale-IP>:8000` |
+| **Remote Linux machine, Mac only**: SSH tunnel | `--host 127.0.0.1` | on the Mac: `ssh -N -L 8000:127.0.0.1:8000 you@host`, then `http://127.0.0.1:8000` |
+
+Find the LAN IP with `ipconfig getifaddr en0` (Mac) or `hostname -I` (Linux).
+If a device can't connect, open `http://<url>/health` in its browser first;
+firewalls and guest/eduroam networks that isolate devices are the usual cause.
+
+!!! warning "The default server has no login"
+    It runs in `local` mode: no authentication, one shared user. Expose it only
+    on networks you trust (home Wi-Fi, Tailscale, an SSH tunnel), never directly
+    on the public internet. See [Going public](#going-public-remote-mode).
+
+## 5. Connect each device
+
+**iPhone / iPad**: Settings → Connection → **Server** → enter the URL from
+step 4 → **Connect**. The status line reads *Connected · local mode*. Allow
+**Local Network** access when iOS asks (needed for LAN addresses).
+
+**Mac**: on Apple-silicon Macs the iOS app also runs as a Mac app. In Xcode,
+open `ios/ArxivDigest.xcodeproj`, choose the destination **My Mac (Designed for
+iPad)**, run it, and connect it to the same URL. (Not yet tested on this
+project; report problems.)
+
+Now a keyword added on the phone, a removal on the Mac, or a preset loaded on
+either is saved to the server and shows on the other device after its next load
+(pull to refresh).
+
+## 6. Keep it running
+
+=== "Linux with sudo (systemd)"
+
+    A template unit is in `deploy/arxiv-digest.service`. Fill in `<youruser>`
+    and the checkout path, then:
+
+    ```bash
+    sudo cp deploy/arxiv-digest.service /etc/systemd/system/
+    sudo systemctl daemon-reload
+    sudo systemctl enable --now arxiv-digest
+    systemctl status arxiv-digest
+    ```
+
+    Without root but with user lingering enabled (`loginctl enable-linger $USER`,
+    which some distributions allow without sudo), copy the unit to
+    `~/.config/systemd/user/`, remove its `User=` line, and use
+    `systemctl --user enable --now arxiv-digest`.
+
+=== "Linux without root (tmux)"
+
+    Check first that long-running processes are allowed on the machine.
+
+    ```bash
+    tmux new -s digest
+    cd ~/arxiv-digest/server && uv run uvicorn app.main:app --host 127.0.0.1 --port 8000
+    # detach: Ctrl-b then d · reattach: tmux attach -t digest
+    ```
+
+    tmux sessions don't survive a reboot; start it again afterwards.
+
+=== "Mac (while logged in)"
+
+    Run the step 2 command in a Terminal window, or in a
+    `tmux`/`screen` session. The Mac must be awake for other devices to sync.
+
+**Updating**:
 ```bash
-cd ~/arxiv_scraper_cli && git pull && sudo systemctl restart arxiv-digest
+cd ~/arxiv-digest && git pull
+cd server && uv sync
+# then restart: Ctrl-C and rerun, or `sudo systemctl restart arxiv-digest`
 ```
 
-## Reaching it from your phone — pick one
+## 7. Back up
 
-- **Same home Wi-Fi:** point the app's Settings → Server at `http://<box-lan-ip>:8000`.
-  Open the port if a firewall is on: `sudo ufw allow 8000`.
-- **From anywhere, private (recommended for personal use):** install
-  [Tailscale](https://tailscale.com) on the box and the phone; point the app at the
-  box's Tailscale IP, e.g. `http://100.x.y.z:8000`. No public exposure, no TLS, no
-  port-forwarding.
-- **From anywhere, public:** put a reverse proxy with automatic HTTPS in front
-  (Caddy is ~2 lines for a domain) and port-forward 80/443. Only do this together
-  with the `remote`-mode hardening below.
+Everything is in `server/digest.db`. Copy it while the server is stopped, e.g.
+`cp server/digest.db ~/digest-backup-$(date +%F).db`.
 
-## Going public (`remote` mode) — checklist
+---
+
+## Reference
+
+### Server settings (environment variables)
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `DIGEST_MODE` | `local` | `local`: no auth, SQLite. `remote`: JWT login, multi-user |
+| `DIGEST_DATABASE_URL` | `sqlite:///./digest.db` | Database (Postgres for `remote`) |
+| `DIGEST_DEFAULT_CONFIG_PATH` | – | GUI profile used for users without a stored config |
+| `DIGEST_JWT_SECRET` | `dev-secret-change-me` | **Change** in `remote` mode |
+| `DIGEST_CORS_ORIGINS` | `["*"]` | Allowed browser origins |
+| `ZOTERO_API_KEY`, `ZOTERO_LIBRARY_ID` | – | Enable *Save to Zotero* from the app via the Zotero Web API |
+
+Without the Zotero variables the app offers **Share to Zotero** (the iOS share
+sheet hands the paper to the Zotero app), and everything else works.
+
+### Going public (`remote` mode)
 
 ```bash
 export DIGEST_MODE=remote
-export DIGEST_JWT_SECRET="$(openssl rand -hex 32)"     # never ship the default
+export DIGEST_JWT_SECRET="$(openssl rand -hex 32)"
 export DIGEST_DATABASE_URL="postgresql+psycopg://user:pass@host/db"
-# optionally lock CORS instead of the "*" default:
 export DIGEST_CORS_ORIGINS='["https://yourapp.example"]'
 ```
 
-- Change `jwt_secret` off `dev-secret-change-me` (above).
-- Add a **caching layer** for arXiv fetches so N users don't trigger N scrapes —
-  arXiv may throttle/block a server IP that scrapes aggressively. Treat this as a
-  prerequisite, not a nice-to-have.
-- Users register via `POST /auth/register` and log in via `POST /auth/token`; the
-  app stores the bearer token (see `AuthStore` on the client).
-
-## Optional: Zotero web-save
-
-Set these in the environment (or the systemd unit) to enable "Save to Zotero"
-(web mode) in the app:
-
-```bash
-export ZOTERO_API_KEY=...
-export ZOTERO_LIBRARY_ID=...
-```
-
-Without them the app shows "Zotero saving not configured on the server" and every
-other feature still works.
-
-## Data / backups
-
-`local` mode keeps everything in `server/digest.db` (your config, lists,
-feedback). Back it up if that state matters. `remote` mode keeps it in Postgres.
+Users register with `POST /auth/register` and log in with `POST /auth/token`.
+The iOS app has no login screen yet, so `remote` mode isn't usable from the
+app today. Put HTTPS in front (e.g. Caddy) before exposing it, and expect arXiv
+to rate-limit a busy shared server; the server caches fetches for an hour.

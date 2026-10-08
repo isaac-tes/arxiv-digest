@@ -102,10 +102,11 @@ It checks the latest release tag on GitHub and reinstalls the `arxiv-digest` /
 prints the exact command to run, because the running `.exe` would lock the
 upgrade.
 
-You'll also get a one-line notice at the end of normal digest runs when a newer
-release is out (checked against the GitHub releases API at most once a day,
-cached in `~/.arxiv_scraper/update_check.json`, silent when offline). Suppress
-it with `--no-update-check`.
+You'll also get a one-line notice at the end of normal digest runs, and when
+starting `arxiv-gui` (in the terminal and as a small note in the GUI sidebar),
+when a newer release is out (checked against the GitHub releases API at most
+once a day, cached in `~/.arxiv_scraper/update_check.json`, silent when
+offline). Suppress the CLI notice with `--no-update-check`.
 
 Prefer updating from your clone (e.g. to track a branch or an unreleased
 commit)?
@@ -121,6 +122,8 @@ uv tool install '.[gui]' --reinstall   # rebuild the arxiv-digest / arxiv-gui to
 > **Why `--reinstall`?** `uv tool` installs into an isolated environment that does **not** auto-track your clone, so `git pull` alone won't update the `arxiv-digest` / `arxiv-gui` commands. The reinstall rebuilds them. (If you `uv run` from the clone instead of installing as a tool, just `git pull` is enough.)
 
 ---
+
+**📱 iPhone / iPad app (preview, branch `feat/swift_ios`)**: works on its own ("On this device"), or shares your settings across devices through a small self-hosted server. See [Share settings across devices](docs/deploy.md).
 
 **👋 Most people should use the web app.** It runs in your browser, shows each paper's keyword / author / subject hits highlighted in color, explains *why* it scored what it did, and offers one-click **Save to Zotero**. The CLI is there for those who want a scriptable, terminal-first digest sharing the exact same preferences and config.
 
