@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- **Two-way settings sync for the GUI**: sidebar *Sync with server* shares config and removed papers with the iPhone app and other computers through the digest server (first connection asks whose config wins; offline it keeps a local copy). Settings in `~/.arxiv_scraper/sync.json` or `ARXIV_DIGEST_SERVER` / `ARXIV_DIGEST_TOKEN`.
+- **Two-way settings sync for the GUI**: sidebar *Sync with server* shares config and removed papers with the iPhone app and other computers through the digest server (first connection asks whose config wins; offline it keeps a local copy and sends the changes made meanwhile with the next save or GUI start, so they aren't lost). Settings in `~/.arxiv_scraper/sync.json` or `ARXIV_DIGEST_SERVER` / `ARXIV_DIGEST_TOKEN`.
 - **iOS config file import/export**: Settings → *Config file* exports the config as JSON (share sheet / AirDrop) and imports one from Files or AirDrop, in the same format as the GUI's profile Export / Import, so a config moves between Mac and iPhone as one file.
 - **Update notice for `arxiv-gui`**: launching the GUI prints the same one-line "newer release available, run `arxiv-digest update`" notice as the CLI, and the GUI sidebar shows a small note under the title. Both use the existing release check, which asks GitHub at most once a day and stays silent offline.
 - **iOS Standalone mode ("On this device")**, now the default for new installs: the app fetches the past week from the arXiv export API and today's `/new` listing, scores on the phone with a Swift port of the engine (parity-tested against the Python engine), and keeps config and removed papers on the device. No server needed (ADR 0009).

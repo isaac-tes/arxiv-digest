@@ -7,6 +7,7 @@ while ranking, so the papers below move up one place.
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Response
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ..auth import get_current_user
@@ -34,15 +35,12 @@ def remove_paper(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> Response:
-    """Hide a paper. Idempotent: removing it twice is not an error."""
-    exists = (
-        db.query(RemovedPaper)
-        .filter(RemovedPaper.user_id == user.id, RemovedPaper.arxiv_id == body.arxiv_id)
-        .first()
-    )
-    if exists is None:
-        db.add(RemovedPaper(user_id=user.id, arxiv_id=body.arxiv_id))
+    """Hide a paper. Idempotent: removing it twice (even at once) is not an error."""
+    db.add(RemovedPaper(user_id=user.id, arxiv_id=body.arxiv_id))
+    try:
         db.commit()
+    except IntegrityError:  # already removed (uq_removed_paper)
+        db.rollback()
     return Response(status_code=204)
 
 

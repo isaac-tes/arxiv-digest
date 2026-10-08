@@ -1,7 +1,8 @@
 """Runtime settings for the digest service.
 
 The same code runs in two modes (ADR 0003):
-- **local**: SQLite, single-user, no-op auth (development / personal use).
+- **local**: SQLite, single shared user, no accounts; guarded by
+  ``DIGEST_ACCESS_TOKEN`` or else this machine only (``security.py``).
 - **remote**: Postgres, multi-user, JWT auth (deployable / public).
 
 Mode is selected by the ``DIGEST_MODE`` env var; everything else has a sensible

@@ -105,6 +105,31 @@ def test_errors_become_syncerror(monkeypatch):
         sc.SyncClient(sc.SyncSettings(server="http://box:8000")).get_config()
 
 
+class HtmlResp(FakeResp):
+    def json(self):
+        raise ValueError("not JSON")
+
+
+@pytest.mark.parametrize("resp", [HtmlResp(200), FakeResp(200, {"no": "data"}), FakeResp(200, ["a list"])])
+def test_unexpected_reply_becomes_syncerror(monkeypatch, resp):
+    """A captive portal or the wrong host answering 200 must not crash the GUI."""
+    monkeypatch.setattr(sc.requests, "request", lambda *a, **k: resp)
+    client = sc.SyncClient(sc.SyncSettings(server="http://box:8000"))
+    with pytest.raises(sc.SyncError, match="unexpected reply"):
+        client.get_config()
+
+
+def test_unexpected_removed_reply_becomes_syncerror(monkeypatch):
+    monkeypatch.setattr(sc.requests, "request", lambda *a, **k: HtmlResp(200))
+    with pytest.raises(sc.SyncError, match="unexpected reply"):
+        sc.SyncClient(sc.SyncSettings(server="http://box:8000")).get_removed()
+
+
+def test_pending_flag_roundtrips(settings_file):
+    sc.save_settings(sc.SyncSettings(server="http://box:8000", initialized=True, pending=True))
+    assert sc.load_settings().pending
+
+
 # ── GUI wiring (AppTest, fake in-memory server) ───────────────────────────────
 
 
@@ -115,10 +140,13 @@ def fake_server(monkeypatch, tmp_path):
 
     import arxiv_digest as ad
 
-    state ={"config": {**asdict(ad.Config()), "core_keywords": ["from-server"]}, "removed": ["2601.0009"]}
+    state = {"config": {**asdict(ad.Config()), "core_keywords": ["from-server"]}, "removed": ["2601.0009"],
+             "down": False}
 
     def fake(method, url, headers=None, json=None, timeout=None):
         path = url.split("8000/", 1)[1]
+        if state["down"]:
+            raise requests.ConnectionError("down")
         if headers.get("Authorization") != "Bearer tok":
             return FakeResp(401, {"detail": "Missing or wrong access token."})
         if (method, path) == ("GET", "config"):
@@ -199,3 +227,51 @@ def test_gui_offline_keeps_local_copy(fake_server):
     at = _app().run(timeout=15)
     assert at.session_state["cfg"].core_keywords == ["local-copy"]
     assert any("Offline" in w.value for w in at.sidebar.warning)
+
+
+def test_gui_offline_save_is_pushed_next_session(fake_server):
+    """A save while the server is down is not lost: the next session pushes it first."""
+    sc.save_settings(sc.SyncSettings(server="http://box:8000", token="tok", initialized=True))
+    fake_server["down"] = True
+    at = _app().run(timeout=15)
+    at.session_state["cfg"].core_keywords = ["offline-edit"]
+    at.button(key="sync_up").click().run(timeout=15)
+    assert sc.load_settings().pending
+    # The paper removed offline went to the local list only.
+    fake_server["paths"]["removed"].parent.mkdir(parents=True, exist_ok=True)
+    fake_server["paths"]["removed"].write_text(json.dumps(["2601.0042"]))
+    fake_server["paths"]["config"].write_text(json.dumps({"core_keywords": ["offline-edit"]}))
+
+    fake_server["down"] = False
+    at = _app().run(timeout=15)
+    assert at.session_state["cfg"].core_keywords == ["offline-edit"]
+    assert fake_server["config"]["core_keywords"] == ["offline-edit"]
+    assert fake_server["removed"] == ["2601.0042"]
+    assert json.loads(fake_server["paths"]["removed"].read_text()) == ["2601.0042"]
+    assert not sc.load_settings().pending
+
+
+def test_gui_upload_mine_offline_finishes_later(fake_server):
+    """'Upload mine' that can't reach the server stays decided and retries, never half-applies."""
+    sc.save_settings(sc.SyncSettings(server="http://box:8000", token="tok"))
+    fake_server["paths"]["config"].write_text(json.dumps({"core_keywords": ["mine"]}))
+    fake_server["down"] = True
+    at = _app().run(timeout=15)
+    at.button(key="sync_upload_mine").click().run(timeout=15)
+    s = sc.load_settings()
+    assert s.initialized and s.pending
+    assert any("Offline" in w.value for w in at.sidebar.warning)
+
+    fake_server["down"] = False
+    _app().run(timeout=15)
+    assert fake_server["config"]["core_keywords"] == ["mine"]
+    assert fake_server["removed"] == []
+    assert not sc.load_settings().pending
+
+
+def test_gui_bad_server_reply_does_not_crash(fake_server, monkeypatch):
+    monkeypatch.setattr(sc.requests, "request", lambda *a, **k: HtmlResp(200))
+    sc.save_settings(sc.SyncSettings(server="http://box:8000", token="tok", initialized=True))
+    at = _app().run(timeout=15)
+    assert not at.exception
+    assert any("unexpected reply" in w.value for w in at.sidebar.warning)

@@ -1,6 +1,6 @@
 # Handoff — `feat/swift_ios` (iOS app, digest server, GUI sync)
 
-_Last updated: 2026-10-08 · branch `feat/swift_ios` · ~47 commits ahead of `main` (v0.6.3)_
+_Last updated: 2026-10-08 · branch `feat/swift_ios` · based on `main` (v0.6.3)_
 
 Start here for the next round. It covers **everything this branch changes
 compared with `main`**, how to run and verify it, and what's left. Decisions live

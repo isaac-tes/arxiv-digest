@@ -126,7 +126,9 @@ config both sides should use: **Use server's** or **Upload mine**. After that:
   config; removing or restoring a paper goes to the server straight away;
 - if the server can't be reached the GUI keeps working from its local copy
   (`arxiv_config.json`, which the `arxiv-digest` CLI also reads) and shows
-  *Offline*; save again once the server is back.
+  *Offline*. Changes made meanwhile (config, removed and restored papers) go
+  to the server with the next save or the next GUI start, before anything is
+  downloaded; **⬇ Download** instead drops them in favour of the server's.
 
 The address and token are stored in `~/.arxiv_scraper/sync.json` (readable only
 by you); `ARXIV_DIGEST_SERVER` / `ARXIV_DIGEST_TOKEN` override them. **Stop
@@ -224,7 +226,7 @@ and isn't kept until you save. Removed papers aren't part of the file.
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `DIGEST_MODE` | `local` | `local`: no auth, SQLite. `remote`: JWT login, multi-user |
+| `DIGEST_MODE` | `local` | `local`: one shared user, SQLite, access token (or this machine only). `remote`: JWT login, multi-user |
 | `DIGEST_DATABASE_URL` | `sqlite:///./digest.db` | Database (Postgres for `remote`) |
 | `DIGEST_DEFAULT_CONFIG_PATH` | – | GUI profile used for users without a stored config |
 | `DIGEST_JWT_SECRET` | `dev-secret-change-me` | **Change** in `remote` mode |

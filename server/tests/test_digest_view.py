@@ -208,6 +208,11 @@ def test_remove_moves_next_paper_up_and_restore_brings_it_back(client, _reset):
     assert ids(client.get("/digest").json()["papers"]) == ["2609.00001", "2609.00002"]
 
 
+def test_remove_rejects_ids_longer_than_the_column(client, _reset):
+    assert client.post("/removed", json={"arxiv_id": "x" * 65}).status_code == 422
+    assert client.get("/removed").json() == []
+
+
 def test_removed_list_only_shows_papers_that_would_be_in_ranking(client):
     client.post("/removed", json={"arxiv_id": "2609.00004"})  # ranked last, outside top 2
     body = client.get("/digest").json()

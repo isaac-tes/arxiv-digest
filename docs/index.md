@@ -81,7 +81,7 @@ as a tool:
 
 ```bash
 uv sync --group dev                      # CLI + GUI + tests + docs
-uv run pytest -q                         # full test suite, ~2s, no network
+uv run pytest -q                         # full test suite, ~10s, no network
 uv run streamlit run arxiv_gui.py        # GUI in browser at localhost:8501
 ```
 
@@ -350,7 +350,7 @@ Scalar weights live in `weights`; subject scoring in `feed_weights`, both config
 
 ```bash
 uv sync --group test
-uv run pytest             # full suite (~1s, no network)
+uv run pytest             # full suite (~10s, no network)
 uv run pytest -k weight   # filter by name
 ```
 

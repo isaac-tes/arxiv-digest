@@ -85,7 +85,7 @@ class ScoreResponse(BaseModel):
 
 # ── Removed papers ──────────────────────────────────────────────────────────
 class RemoveRequest(BaseModel):
-    arxiv_id: str = Field(min_length=1)
+    arxiv_id: str = Field(min_length=1, max_length=64)  # RemovedPaper.arxiv_id column
 
 
 class RestoreRequest(BaseModel):

@@ -69,7 +69,7 @@ def get_current_user(
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
         return user
 
-    # Local mode: no-op auth.
+    # Local mode: no accounts, one shared user (access is guarded in security.py).
     user = db.query(User).order_by(User.id).first()
     if user is None:
         user = User(email="local@digest.local", hashed_password=hash_password("local"))

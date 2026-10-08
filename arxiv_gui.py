@@ -15,7 +15,7 @@ import re
 import tempfile
 import threading
 import time
-from dataclasses import asdict, fields
+from dataclasses import asdict, fields, replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Iterable, Tuple
@@ -577,7 +577,9 @@ def _reset_widget_state(*keys: str) -> None:
 # Two-way sync (docs/deploy.md): the server is the source of truth. The GUI
 # downloads config + removed papers at session start and on request, and
 # uploads on Save / Write project config / remove / restore. Offline it keeps
-# working from the local copy (arxiv_config.json / removal files) and says so.
+# working from the local copy (arxiv_config.json / removal files), says so, and
+# marks the settings `pending`: the next upload or session start then pushes
+# everything before anything is downloaded, so offline changes aren't lost.
 
 def _sync_settings() -> sync_client.SyncSettings:
     return sync_client.load_settings()
@@ -597,8 +599,36 @@ def _sync_call(action) -> bool:
     return True
 
 
+def _sync_push(c: sync_client.SyncClient) -> None:
+    """Make the server match this computer: config, then removed papers.
+
+    Only the differences are sent, so a push cut off halfway is finished by the next one.
+    """
+    try:
+        with _removed_ids_lock():
+            local = _read_removed_ids(loaded_profile())
+    except (OSError, ValueError) as exc:  # never push an unreadable list as "nothing removed"
+        raise sync_client.SyncError(f"Can't read {removed_papers_path(loaded_profile())} ({exc}).") from exc
+    c.put_config(cfg())
+    server = c.get_removed()
+    if server - local:
+        c.restore(sorted(server - local))
+    for arxiv_id in sorted(local - server):
+        c.remove(arxiv_id)
+
+
+def _sync_write(action) -> None:
+    """Send a local change; if that fails, push everything on the next try."""
+    s = _sync_settings()
+    if not (s.enabled and s.initialized):
+        return
+    ok = _sync_call(_sync_push if s.pending else action)
+    if s.pending == ok:  # just went offline, or just caught up
+        sync_client.save_settings(replace(s, pending=not ok))
+
+
 def _sync_upload_config() -> None:
-    _sync_call(lambda c: c.put_config(cfg()))
+    _sync_write(lambda c: c.put_config(cfg()))
 
 
 def _sync_download() -> bool:
@@ -612,11 +642,13 @@ def _sync_download() -> bool:
         return False
     st.session_state.cfg = got["cfg"]
     _reset_widget_state()
-    got["cfg"].dump(PROJECT_CONFIG)  # offline copy, and what the CLI reads
     try:
+        got["cfg"].dump(PROJECT_CONFIG)  # offline copy, and what the CLI reads
         save_removed_ids(loaded_profile(), got["removed"])
-    except (OSError, ValueError):
-        pass
+    except (OSError, ValueError) as exc:
+        st.toast(f"Synced, but couldn't write the local copy ({exc}).", icon="⚠️")
+    if (s := _sync_settings()).pending:
+        sync_client.save_settings(replace(s, pending=False))  # the server's version won
     return True
 
 
@@ -639,17 +671,14 @@ def render_sync_section() -> None:
             st.info("First connection: whose config should both sides use?")
             c1, c2 = st.columns(2)
             if c1.button("Use server's", key="sync_use_server", width="stretch"):
-                sync_client.save_settings(sync_client.SyncSettings(s.server, s.token, initialized=True))
+                sync_client.save_settings(replace(s, initialized=True))
                 if not _sync_download():
                     sync_client.save_settings(s)  # stay undecided until it works
                 st.rerun()
             if c2.button("Upload mine", key="sync_upload_mine", width="stretch"):
-                sync_client.save_settings(sync_client.SyncSettings(s.server, s.token, initialized=True))
-                ok = _sync_call(lambda c: (c.put_config(cfg()),
-                                           c.restore(sorted(c.get_removed())),
-                                           [c.remove(i) for i in sorted(load_removed_ids(loaded_profile()))]))
-                if not ok:
-                    sync_client.save_settings(s)
+                # Decided now; if the push fails, `pending` finishes it on the next try.
+                sync_client.save_settings(replace(s, initialized=True, pending=True))
+                _sync_write(_sync_push)
                 st.rerun()
         else:
             c1, c2 = st.columns(2)
@@ -662,15 +691,20 @@ def render_sync_section() -> None:
                 st.session_state.sync_error = None
                 st.rerun()
         if err := st.session_state.get("sync_error"):
-            st.warning(f"Offline: {err} Using the local copy; save again once the server is back.")
+            st.warning(f"Offline: {err} Using the local copy; your changes go to the server "
+                       "with the next save or the next start of the GUI.")
 
 
 def _sync_on_session_start() -> None:
-    """Once per browser session: take the server's config if sync is on."""
+    """Once per browser session: take the server's config if sync is on,
+    after sending any changes made offline."""
     if st.session_state.get("sync_started"):
         return
     st.session_state.sync_started = True
-    _sync_download()
+    if _sync_settings().pending:
+        _sync_write(_sync_push)
+    else:
+        _sync_download()
 
 
 def render_sidebar():
@@ -1133,12 +1167,12 @@ def _remove_paper(arxiv_id: str) -> None:
     place and the first one past the top-N cutoff takes the freed slot.
     """
     _update_removed_ids_or_warn(loaded_profile(), add={arxiv_id})
-    _sync_call(lambda c: c.remove(arxiv_id))
+    _sync_write(lambda c: c.remove(arxiv_id))
 
 
 def _restore_papers(arxiv_ids: list[str]) -> None:
     _update_removed_ids_or_warn(loaded_profile(), discard=arxiv_ids)
-    _sync_call(lambda c: c.restore(arxiv_ids))
+    _sync_write(lambda c: c.restore(arxiv_ids))
 
 
 def _render_removed_papers(removed: list[dict]) -> None:

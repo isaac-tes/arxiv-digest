@@ -26,12 +26,17 @@ class SyncError(Exception):
     """The server couldn't be reached or refused the request."""
 
 
+BAD_REPLY = "The sync server sent an unexpected reply; check the server address."
+
+
 @dataclass
 class SyncSettings:
     server: str = ""
     token: str = ""
     # Set once the user chose "use server's" / "upload mine" on first connect.
     initialized: bool = False
+    # Local changes the server hasn't got yet (saved offline): push before pulling.
+    pending: bool = False
 
     @property
     def enabled(self) -> bool:
@@ -47,6 +52,7 @@ def load_settings() -> SyncSettings:
         server=str(raw.get("server", "")),
         token=str(raw.get("token", "")),
         initialized=bool(raw.get("initialized", False)),
+        pending=bool(raw.get("pending", False)),
     )
     s.server = os.environ.get("ARXIV_DIGEST_SERVER", s.server)
     s.token = os.environ.get("ARXIV_DIGEST_TOKEN", s.token)
@@ -84,16 +90,25 @@ class SyncClient:
             except (ValueError, AttributeError):
                 detail = ""
             raise SyncError(str(detail) or f"Sync server error ({resp.status_code}).")
-        return None if resp.status_code == 204 else resp.json()
+        try:
+            return None if resp.status_code == 204 else resp.json()
+        except ValueError as exc:  # e.g. a captive portal's HTML page
+            raise SyncError(BAD_REPLY) from exc
 
     def get_config(self) -> ad.Config:
-        return ad.Config.from_json(self._call("GET", "config")["data"])
+        try:
+            return ad.Config.from_json(self._call("GET", "config")["data"])
+        except (KeyError, TypeError, ValueError, AttributeError) as exc:
+            raise SyncError(BAD_REPLY) from exc
 
     def put_config(self, cfg: ad.Config) -> None:
         self._call("PUT", "config", {"data": asdict(cfg)})
 
     def get_removed(self) -> set[str]:
-        return set(self._call("GET", "removed"))
+        got = self._call("GET", "removed")
+        if not isinstance(got, list):
+            raise SyncError(BAD_REPLY)
+        return set(got)
 
     def remove(self, arxiv_id: str) -> None:
         self._call("POST", "removed", {"arxiv_id": arxiv_id})

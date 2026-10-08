@@ -17,11 +17,8 @@ class Base(DeclarativeBase):
 
 
 def _engine_url() -> str:
-    settings = get_settings()
-    if settings.is_remote:
-        return settings.database_url
-    # Local mode: SQLite file next to the server package.
-    return settings.database_url
+    # Local mode defaults to a SQLite file next to the server package.
+    return get_settings().database_url
 
 
 engine = create_engine(_engine_url(), connect_args={"check_same_thread": False} if "sqlite" in _engine_url() else {})
