@@ -58,3 +58,14 @@ def _offline_update_check(monkeypatch, tmp_path):
 
     monkeypatch.setattr(update_check, "CACHE_PATH", tmp_path / "update_check.json")
     monkeypatch.setattr(update_check.urllib.request, "urlopen", offline)
+
+
+@pytest.fixture(autouse=True)
+def _no_real_sync(monkeypatch, tmp_path):
+    """Never read the user's ~/.arxiv_scraper/sync.json or sync env vars, so no
+    test talks to a real digest server; sync tests set their own settings."""
+    import sync_client
+
+    monkeypatch.setattr(sync_client, "SETTINGS_PATH", tmp_path / "sync-settings.json")
+    monkeypatch.delenv("ARXIV_DIGEST_SERVER", raising=False)
+    monkeypatch.delenv("ARXIV_DIGEST_TOKEN", raising=False)

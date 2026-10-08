@@ -24,6 +24,7 @@ import pandas as pd
 import streamlit as st
 
 import arxiv_digest as ad
+import sync_client
 import update_check
 import zotero_bridge as zb
 
@@ -571,6 +572,107 @@ def _reset_widget_state(*keys: str) -> None:
 
 # ────────────────────────── Sidebar ──────────────────────────
 
+# ────────────────────────── Sync with a digest server ──────────────────────────
+#
+# Two-way sync (docs/deploy.md): the server is the source of truth. The GUI
+# downloads config + removed papers at session start and on request, and
+# uploads on Save / Write project config / remove / restore. Offline it keeps
+# working from the local copy (arxiv_config.json / removal files) and says so.
+
+def _sync_settings() -> sync_client.SyncSettings:
+    return sync_client.load_settings()
+
+
+def _sync_call(action) -> bool:
+    """Run `action(client)` when sync is on; record and report offline."""
+    s = _sync_settings()
+    if not (s.enabled and s.initialized):
+        return False
+    try:
+        action(sync_client.SyncClient(s))
+    except sync_client.SyncError as exc:
+        st.session_state.sync_error = str(exc)
+        return False
+    st.session_state.sync_error = None
+    return True
+
+
+def _sync_upload_config() -> None:
+    _sync_call(lambda c: c.put_config(cfg()))
+
+
+def _sync_download() -> bool:
+    """Replace the session config and removals with the server's; keep a local copy."""
+    got: dict = {}
+
+    def pull(c: sync_client.SyncClient) -> None:
+        got["cfg"], got["removed"] = c.get_config(), c.get_removed()
+
+    if not _sync_call(pull):
+        return False
+    st.session_state.cfg = got["cfg"]
+    _reset_widget_state()
+    got["cfg"].dump(PROJECT_CONFIG)  # offline copy, and what the CLI reads
+    try:
+        save_removed_ids(loaded_profile(), got["removed"])
+    except (OSError, ValueError):
+        pass
+    return True
+
+
+def render_sync_section() -> None:
+    s = _sync_settings()
+    with st.expander("🔄 Sync with server" + (" · on" if s.enabled and s.initialized else ""),
+                     expanded=s.enabled and not s.initialized):
+        st.caption("Share config and removed papers with the iPhone app and other computers "
+                   "through a digest server (see docs: *Sync across devices*).")
+        server = st.text_input("Server address", value=s.server, placeholder="http://192.168.1.20:8000",
+                               key="sync_server")
+        token = st.text_input("Access token", value=s.token, type="password", key="sync_token")
+        if (server.strip().rstrip("/"), token) != (s.server, s.token):
+            if st.button("Connect", key="sync_connect"):
+                sync_client.save_settings(sync_client.SyncSettings(server=server, token=token))
+                st.rerun()
+        if not s.enabled:
+            return
+        if not s.initialized:
+            st.info("First connection: whose config should both sides use?")
+            c1, c2 = st.columns(2)
+            if c1.button("Use server's", key="sync_use_server", width="stretch"):
+                sync_client.save_settings(sync_client.SyncSettings(s.server, s.token, initialized=True))
+                if not _sync_download():
+                    sync_client.save_settings(s)  # stay undecided until it works
+                st.rerun()
+            if c2.button("Upload mine", key="sync_upload_mine", width="stretch"):
+                sync_client.save_settings(sync_client.SyncSettings(s.server, s.token, initialized=True))
+                ok = _sync_call(lambda c: (c.put_config(cfg()),
+                                           c.restore(sorted(c.get_removed())),
+                                           [c.remove(i) for i in sorted(load_removed_ids(loaded_profile()))]))
+                if not ok:
+                    sync_client.save_settings(s)
+                st.rerun()
+        else:
+            c1, c2 = st.columns(2)
+            if c1.button("⬆ Save to server", key="sync_up", width="stretch"):
+                _sync_upload_config()
+            if c2.button("⬇ Download", key="sync_down", width="stretch") and _sync_download():
+                st.rerun()
+            if st.button("Stop syncing", key="sync_off"):
+                sync_client.save_settings(sync_client.SyncSettings())
+                st.session_state.sync_error = None
+                st.rerun()
+        if err := st.session_state.get("sync_error"):
+            st.warning(f"Offline: {err} Using the local copy; save again once the server is back.")
+
+
+def _sync_on_session_start() -> None:
+    """Once per browser session: take the server's config if sync is on."""
+    if st.session_state.get("sync_started"):
+        return
+    st.session_state.sync_started = True
+    _sync_download()
+
+
 def render_sidebar():
     with st.sidebar:
         st.title("arXiv Digest")
@@ -602,6 +704,7 @@ def render_sidebar():
         st.caption(
             f"Loaded profile: **{loaded_profile()}**" if loaded_profile() else "No profile loaded."
         )
+        render_sync_section()
 
         st.divider()
 
@@ -998,10 +1101,12 @@ def _remove_paper(arxiv_id: str) -> None:
     place and the first one past the top-N cutoff takes the freed slot.
     """
     _update_removed_ids_or_warn(loaded_profile(), add={arxiv_id})
+    _sync_call(lambda c: c.remove(arxiv_id))
 
 
 def _restore_papers(arxiv_ids: list[str]) -> None:
     _update_removed_ids_or_warn(loaded_profile(), discard=arxiv_ids)
+    _sync_call(lambda c: c.restore(arxiv_ids))
 
 
 def _render_removed_papers(removed: list[dict]) -> None:
@@ -1425,6 +1530,7 @@ def render_profiles_tab():
             if _copy_removed_ids_or_warn(loaded_profile(), target):
                 save_profile(cfg(), target)
                 _set_loaded_profile(target)
+                _sync_upload_config()
                 st.success(f"Saved profile '{target}'.")
                 st.rerun()
 
@@ -1472,6 +1578,7 @@ def render_profiles_tab():
     st.caption("Persists the current config so the CLI picks it up on the next run.")
     if st.button("Write project config"):
         cfg().dump(PROJECT_CONFIG)
+        _sync_upload_config()
         st.success(f"Wrote {PROJECT_CONFIG}")
 
     uploaded = st.file_uploader("Import profile from JSON", type="json")
@@ -1694,6 +1801,7 @@ def render_score_tab():
 def main():
     st.set_page_config(page_title="arXiv Digest", layout="wide")
     init_state()
+    _sync_on_session_start()
     render_sidebar()
 
     tab_papers, tab_score, tab_kw, tab_authors, tab_lp, tab_feeds, tab_scoring, tab_profiles = st.tabs(
