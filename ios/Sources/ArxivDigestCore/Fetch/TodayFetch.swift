@@ -3,26 +3,8 @@ import Foundation
 import FoundationNetworking
 #endif
 
-/// Where Standalone mode gets "today" (S7). Both exist so they can be compared
-/// on the phone; Settings picks one.
-public enum TodaySource: String, CaseIterable, Sendable {
-    /// (a) The engine's way: scrape each feed's HTML `/new` listing (New /
-    /// Cross / Replacement sections), back-filling missing abstracts.
-    case listing
-    /// (b) The export API over arXiv's last announcement window; "cross" is
-    /// derived from the primary category, and there are no replacements.
-    case api
-
-    public var label: String {
-        switch self {
-        case .listing: return "arXiv listing"
-        case .api: return "Export API"
-        }
-    }
-}
-
 extension ArxivFetcher {
-    // MARK: - (a) HTML /new listing
+    // MARK: - HTML /new listing (S7: the GUI and server read the same pages)
 
     /// `fetch_feeds` over each feed's `/new` URL (`feed_url(…, "today")`),
     /// deduplicated by id. Any page failing fails the fetch, like the server.
@@ -158,50 +140,5 @@ extension ArxivFetcher {
         let root = HTMLNode.parse(String(decoding: data, as: UTF8.self))
         guard let block = root.find("blockquote", class: "abstract") ?? root.find("div", class: "abstract") else { return "" }
         return stripAbstractLabel(block.text(separator: " "))
-    }
-
-    // MARK: - (b) Export API
-
-    /// The export API for submissions in arXiv's last announced batch, per
-    /// feed, paced like the past-week fetch. A paper whose primary category is
-    /// under the feed is a new submission, else a cross-list (first feed wins).
-    public func fetchTodayAPI(_ feeds: [String]) async throws -> LiveSource.RawFetch {
-        let window = Self.announcementWindow(now: now())
-        let names = feeds.filter { !$0.hasPrefix("http") }
-        var papers: [RawPaper] = [], seen = Set<String>()
-        for (i, name) in names.enumerated() {
-            for (paper, primary) in try await fetchCategoryEntries(name, start: window.start, end: window.end)
-            where seen.insert(paper.id).inserted {
-                var p = paper
-                p.section = primary.lowercased().hasPrefix(name.lowercased()) ? "New submissions" : "Cross submissions"
-                papers.append(p)
-            }
-            if i < names.count - 1 { try await sleep(Self.rateLimit) }
-        }
-        return LiveSource.RawFetch(papers: papers, fetchedAt: now())
-    }
-
-    /// The submission window of arXiv's most recently announced batch:
-    /// cutoffs are 14:00 US Eastern Mon–Fri, each announced 20:00 the same day
-    /// (Friday's on Sunday). Returns (previous cutoff, cutoff].
-    /// ponytail: ignores arXiv holidays; a holiday week shifts the window by a day.
-    static func announcementWindow(now: Date) -> (start: Date, end: Date) {
-        var cal = Calendar(identifier: .gregorian)
-        cal.timeZone = TimeZone(identifier: "America/New_York")!
-        func cutoff(onDayOf d: Date) -> Date { cal.date(bySettingHour: 14, minute: 0, second: 0, of: d)! }
-        func isWeekday(_ d: Date) -> Bool { !(cal.component(.weekday, from: d) == 1 || cal.component(.weekday, from: d) == 7) }
-        func announced(_ c: Date) -> Date {
-            let days = cal.component(.weekday, from: c) == 6 ? 2 : 0  // Friday → Sunday
-            return cal.date(byAdding: .hour, value: 6, to: cal.date(byAdding: .day, value: days, to: c)!)!
-        }
-        func previousCutoff(before c: Date) -> Date {
-            var d = cal.date(byAdding: .day, value: -1, to: c)!
-            while !isWeekday(d) { d = cal.date(byAdding: .day, value: -1, to: d)! }
-            return cutoff(onDayOf: d)
-        }
-        var c = cutoff(onDayOf: now)
-        if !isWeekday(c) || c > now { c = previousCutoff(before: c) }
-        while announced(c) > now { c = previousCutoff(before: c) }
-        return (previousCutoff(before: c), c)
     }
 }

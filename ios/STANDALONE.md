@@ -257,7 +257,7 @@ personal team can't sign it. Don't start this without the user's go-ahead.
 | S4 storage/defaults/presets | done | `Local/EngineConfig.swift` (hydrate = `Config.from_json`, `merge_preset`, `LocalStore`), generated `EngineDefaults.swift`; config/removed/fetch cache in Application Support/Standalone |
 | S5 score by id | done | `ArxivFetcher.fetchPaper` (id_list, with retry), cached paper first like the server; `LiveSource.notFetchedReason` ports `_not_fetched_reason` (feed list sorted, Python keeps config order); 502 on transport/HTTP errors |
 | S6 day labels | done | `ArxivFetcher.listingDayLabels` + minimal `HTMLNode` tree (same h3 → sibling dt walk as BeautifulSoup); one plain GET per fetched feed, API label kept on failure; parity on an invented listing page |
-| S7 today feed | both built, **pick one** | (a) `fetchTodayListing`: port of `fetch_feed` + `fetch_abstract` (parity: `TodayParityFixture`); (b) `fetchTodayAPI`: export API over the last announcement window (`announcementWindow`), New/Cross from `arxiv:primary_category`, no replacements. Settings → *Today on this device* switches (default (a)); `-today-source listing\|api` |
+| S7 today feed | done (listing) | Kept (a) `fetchTodayListing` (closest to the GUI: on 2026-10-08 it matched the engine's `/new` scrape exactly, 329 papers, while (b) export API returned 66 papers none of which were in the listing). (b), `TodaySource`, the Settings switch and `-today-source` removed. |
 | S8 iCloud sync | deferred | |
 
 Session log (2026-10-07, Linux, Swift 6.2 tarball in `~/.local/swift`): baseline
@@ -283,9 +283,6 @@ Deliberate, small, and marked `ponytail:` in the code:
 - **Today (a)** back-fills missing abstracts once over the deduplicated set
   (the engine back-fills per feed: same result, fewer requests). Only common
   named HTML entities are decoded (`HTMLNode.unescape`).
-- **Today (b)** has no Python counterpart: it is new behaviour, tested on its
-  own. Its window ignores arXiv holidays, sections are plain
-  "New submissions" / "Cross submissions", and it never has replacements.
 - **Demo** keeps storing configs as sent (no hydration); the router's preset
   merge now uses the engine's `merge_preset` port for both modes (same result
   on the demo's presets; `DemoBackendTests` unchanged and green).
@@ -312,12 +309,10 @@ real arXiv or the device. Please check:
    message.
 6. Settings → Zotero shows Share to Zotero only (no Web API key on the device).
 7. Config → Starter presets: Load / Add show the engine's three presets.
-8. **S7 comparison.** Papers ⋯ → timeframe *today*, then Settings → *Today on
-   this device* → switch between **arXiv listing** (a) and **Export API** (b);
-   the digest reloads each time (each source is cached separately for an
-   hour). Compare count, New/Cross split, missing papers, and load time
-   against arxiv.org/list/<feed>/new. Tell me which to keep and I'll delete
-   the other (or keep (b) as a fallback when the listing fails).
+8. ~~S7 comparison~~: decided 2026-10-08, the arXiv listing was kept (see §8).
+
+Verified 2026-10-08 on the simulator against live arXiv (§10.1–7) and on the
+user's iPhone; see the progress log.
 
 ## 11. Handoff to the Mac agent
 

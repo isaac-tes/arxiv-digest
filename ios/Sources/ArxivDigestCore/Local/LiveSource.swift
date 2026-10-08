@@ -34,12 +34,8 @@ public actor LiveSource: DigestSource {
     private let store: LocalStore?
     private var cache: [String: RawFetch] { didSet { store?.save(cache, to: "fetch-cache.json") } }
 
-    /// Distinguishes cached "today" fetches made different ways (`TodaySource`).
-    private let todayTag: String
-
     public init(fetcher: @escaping Fetcher, fetchPaper: @escaping PaperFetcher = { _ in nil },
-                now: @escaping @Sendable () -> Date = Date.init, store: LocalStore? = nil, todayTag: String = "") {
-        self.todayTag = todayTag
+                now: @escaping @Sendable () -> Date = Date.init, store: LocalStore? = nil) {
         self.fetcher = fetcher
         self.fetchPaper = fetchPaper
         self.now = now
@@ -48,7 +44,7 @@ public actor LiveSource: DigestSource {
     }
 
     private func cacheKey(_ timeframe: String, _ feeds: [String]) -> String {
-        (timeframe == "today" ? "today-\(todayTag)" : timeframe) + "|" + feeds.joined(separator: ",")
+        timeframe + "|" + feeds.joined(separator: ",")
     }
 
     private func fresh(_ timeframe: String, _ feeds: [String]) -> RawFetch? {
@@ -178,39 +174,27 @@ public final class StandaloneBackend: @unchecked Sendable {
     public static let shared = StandaloneBackend()
 
     private let lock = NSLock()
-    private var todaySource = TodaySource.listing
-    private lazy var current = Self.makeRouter(store: .standard, today: todaySource)
+    private lazy var current = Self.makeRouter(store: .standard)
 
     public var router: DigestRouter { lock.withLock { current } }
 
-    /// Switch how "today" is fetched (S7 comparison). Rebuilds the router from
-    /// disk, so config, removals and cached fetches carry over.
-    public func setTodaySource(_ source: TodaySource) {
-        lock.withLock {
-            guard source != todaySource else { return }
-            todaySource = source
-            current = Self.makeRouter(store: .standard, today: source)
-        }
-    }
-
-    /// The live router: the past week from the export API, today per `today`.
-    static func makeRouter(store: LocalStore, today: TodaySource) -> DigestRouter {
-        makeRouter(store: store, todayTag: today.rawValue, fetcher: { timeframe, feeds, config in
+    /// The live router: the past week from the export API, today from arXiv's
+    /// `/new` listing pages (as the GUI and server do).
+    static func makeRouter(store: LocalStore) -> DigestRouter {
+        makeRouter(store: store, fetcher: { timeframe, feeds, config in
             let fetcher = ArxivFetcher()
-            guard timeframe == "today" else { return try await fetcher.fetchPastweek(feeds) }
-            switch today {
-            case .listing: return try await fetcher.fetchTodayListing(feeds, config: config)
-            case .api: return try await fetcher.fetchTodayAPI(feeds)
-            }
+            return timeframe == "today"
+                ? try await fetcher.fetchTodayListing(feeds, config: config)
+                : try await fetcher.fetchPastweek(feeds)
         }, fetchPaper: { id in try await ArxivFetcher().fetchPaper(id) })
     }
 
     /// A router over `store`: the saved config (first run: the engine's
     /// defaults), removed papers and fetch cache, with the engine's presets.
-    public static func makeRouter(store: LocalStore, todayTag: String = "", fetcher: @escaping LiveSource.Fetcher,
+    public static func makeRouter(store: LocalStore, fetcher: @escaping LiveSource.Fetcher,
                                   fetchPaper: @escaping LiveSource.PaperFetcher = { _ in nil }) -> DigestRouter {
         DigestRouter(
-            source: LiveSource(fetcher: fetcher, fetchPaper: fetchPaper, store: store, todayTag: todayTag),
+            source: LiveSource(fetcher: fetcher, fetchPaper: fetchPaper, store: store),
             config: store.load([String: JSONValue].self, from: "config.json") ?? EngineConfig.defaults,
             defaults: EngineConfig.defaults, presets: EngineConfig.presets,
             removed: store.load([String].self, from: "removed.json") ?? [],

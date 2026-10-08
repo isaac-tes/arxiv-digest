@@ -53,7 +53,7 @@ this branch: Actions → latest run → artifact **ios-screenshots**. Locally:
 
 ### Launch options (screenshots / quick checks)
 
-`-demo`, `-standalone`, `-today-source listing|api`, `-tab papers|score|config|settings`, `-open-paper <rank>`,
+`-demo`, `-standalone`, `-tab papers|score|config|settings`, `-open-paper <rank>`,
 `-score <id-or-url>`, `-config-page keywords|authors|low-priority|feeds|scoring|presets`,
 `-remove <rank>`, `-day <n>` (n-th available day), `-dirty` (fake unsaved edit).
 
@@ -95,9 +95,9 @@ per user; presets cover starting points), the GUI's "Clear fetch cache" button
 
 ## Remaining work
 
-- **Standalone mode**: MVP (S1–S6) landed, and S7 (today feed) is built two ways
-  behind a Settings switch; verify on the phone, pick an S7 variant, decide S8
-  (iCloud config sync). Progress and checklist:
+- **Standalone mode**: S1–S7 done and verified (today reads arXiv's `/new`
+  listing, like the GUI); the default for new installs. Remaining: S8 (iCloud
+  config sync, needs a paid developer account). Progress and checklist:
   [`STANDALONE.md`](STANDALONE.md); decision: ADR 0009. Beads epic [`e85`].
 - **Per-user Zotero key** [`d5q`]: needs an encrypted credential column, an
   endpoint, and a Settings field. Until then Save to Zotero needs
