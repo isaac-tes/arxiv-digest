@@ -8,7 +8,7 @@ Thanks for your interest in arxiv-digest. This is a small personal tool, but con
 git clone https://github.com/isaac-tes/arxiv-digest.git
 cd arxiv-digest
 uv sync --group dev          # CLI + GUI + tests + docs deps
-uv run pytest -q             # 74 tests, ~1s, no network
+uv run pytest -q             # ~320 tests, ~10s, no network
 ```
 
 Prerequisite: [uv](https://docs.astral.sh/uv/) (`curl -LsSf https://astral.sh/uv/install.sh | sh`).

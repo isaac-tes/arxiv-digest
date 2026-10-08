@@ -1,0 +1,36 @@
+# systemd unit for the arXiv Digest API (local mode).
+# Copy to /etc/systemd/system/arxiv-digest.service and edit the three <...> paths.
+# See docs/deploy.md for the full runbook.
+#
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now arxiv-digest
+
+[Unit]
+Description=arXiv Digest API
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=<youruser>
+WorkingDirectory=/home/<youruser>/arxiv_scraper_cli/server
+# uv is installed to ~/.local/bin by the official installer; adjust if elsewhere.
+ExecStart=/home/<youruser>/.local/bin/uv run uvicorn app.main:app --host 0.0.0.0 --port 8000
+Restart=on-failure
+RestartSec=3
+
+# --- Required for other devices: the shared access token (docs/deploy.md step 4).
+# Without it the server only answers this machine. ---
+# Environment=DIGEST_ACCESS_TOKEN=paste-a-long-random-token-here
+
+# --- Optional: enable Zotero web-save ---
+# Environment=ZOTERO_API_KEY=your_key
+# Environment=ZOTERO_LIBRARY_ID=your_library_id
+
+# --- Public/remote mode (see docs/deploy.md) ---
+# Environment=DIGEST_MODE=remote
+# Environment=DIGEST_JWT_SECRET=change-me-to-a-random-hex-string
+# Environment=DIGEST_DATABASE_URL=postgresql+psycopg://user:pass@host/db
+
+[Install]
+WantedBy=multi-user.target

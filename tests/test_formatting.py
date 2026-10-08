@@ -36,6 +36,31 @@ def test_summarize_handles_single_sentence():
     assert summarize("Just one.") == "Just one."
 
 
+def test_summarize_does_not_split_citations_or_abbreviations():
+    text = (
+        "A recent experiment by Roy et al. (Nat. Commun. 17, 2853 (2026)) demonstrated a plateau. "
+        "We prove a theorem. The corollary is an impossibility statement."
+    )
+    assert summarize(text) == (
+        "A recent experiment by Roy et al. (Nat. Commun. 17, 2853 (2026)) demonstrated a plateau. "
+        "We prove a theorem."
+    )
+    assert summarize("As shown in Fig. 2 and Eq. 3, it works. Then more. And more.") == (
+        "As shown in Fig. 2 and Eq. 3, it works. Then more."
+    )
+    assert summarize("We use e.g. DMRG here. Second one. Third.") == "We use e.g. DMRG here. Second one."
+
+
+def test_summarize_unbalanced_paren_does_not_swallow_abstract():
+    assert summarize("Unbalanced (paren. Still one. Two. Three.") == "Unbalanced (paren. Still one."
+
+
+def test_summarize_still_splits_on_lowercase_free_starts():
+    # Sentences may start with digits or math, not only capitals.
+    assert summarize("One works. 2D materials follow. Three.") == "One works. 2D materials follow."
+    assert summarize("Intro here. $\\nu=1$ states appear. More.") == "Intro here. $\\nu=1$ states appear."
+
+
 def test_format_digest_includes_rank_title_authors():
     out = format_digest([_entry()], total_papers=10, requested_top=1)
     assert "1. A title" in out

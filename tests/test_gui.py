@@ -581,8 +581,10 @@ def _tmp_home(monkeypatch, tmp_path):
 def _ranked_titles(at):
     import re
 
-    blob = " ".join(m.value for m in at.markdown)
-    return re.findall(r'class="paper-title">(.*?)</div>', blob)
+    # One markdown element per title: <span class="paper-title">1\. Title</span>
+    # (escaped rank dot; titles may contain highlight spans, so match to the end).
+    titles = [re.fullmatch(r'<span class="paper-title">(.*)</span>', m.value, re.S) for m in at.markdown]
+    return [re.sub(r"<[^>]+>", "", t.group(1)).replace("\\.", ".", 1) for t in titles if t]
 
 
 def test_remove_paper_reranks_and_promotes_next_paper(monkeypatch, tmp_path):
@@ -1457,3 +1459,167 @@ def test_score_tab_zotero_button_does_not_clash_with_card_issue_8(monkeypatch, t
     at = _score_tab_app(monkeypatch, tmp_path, [_card_paper("2609.00001", "A new paper")])
     _score(at, "2609.00001")
     assert not list(at.exception), [e.value for e in at.exception]
+
+
+def test_add_author_popover_offers_only_unnamed_and_dedupes():
+    from streamlit.testing.v1 import AppTest
+
+    at = AppTest.from_file("tests/fixtures/add_author_app.py").run(timeout=15)
+    assert not list(at.exception)
+    assert [b.label for b in at.button] == ["Bob Jones", "Carol Wu"]
+
+    at.session_state["editor_named_authors"] = {"stale": True}
+    at.button[0].click()
+    at.run(timeout=15)
+    assert at.session_state["cfg"].named_authors == ["alice smith", "Bob Jones"]
+    assert "editor_named_authors" not in at.session_state
+    assert [b.label for b in at.button] == ["Carol Wu"]
+
+
+def test_add_named_author_ignores_case_insensitive_duplicate():
+    import arxiv_gui
+
+    arxiv_gui.st.session_state.cfg = arxiv_gui.ad.Config(named_authors=["Bob Jones"])
+    arxiv_gui._add_named_author("BOB JONES")
+    assert arxiv_gui.cfg().named_authors == ["Bob Jones"]
+
+
+def test_add_author_hides_surname_only_named_match():
+    import arxiv_digest as ad
+    from streamlit.testing.v1 import AppTest
+
+    at = AppTest.from_file("tests/fixtures/add_author_app.py")
+    at.session_state["seeded"] = True
+    at.session_state["cfg"] = ad.Config(named_authors=["jones"])
+    at.run(timeout=15)
+    assert [b.label for b in at.button] == ["Alice Smith", "Carol Wu"]
+
+
+def test_score_tab_offers_and_adds_author(monkeypatch, tmp_path):
+    import xml.etree.ElementTree as ET
+
+    import zotero_bridge as zb
+
+    ns = "http://www.w3.org/2005/Atom"
+    entry = ET.fromstring(
+        f'<entry xmlns="{ns}"><id>http://arxiv.org/abs/2609.00001v1</id>'
+        "<published>2026-09-28T00:00:00Z</published><title>T</title><summary>S</summary>"
+        "<author><name>Dana Quill</name></author><author><name>Evan Rook</name></author>"
+        '<category term="quant-ph"/></entry>'
+    )
+    at = _score_tab_app(monkeypatch, tmp_path, [_card_paper("2609.00001", "A new paper")])
+    monkeypatch.setattr(zb, "fetch_arxiv_atom", lambda pid: entry)
+    _score(at, "2609.00001")
+    assert not list(at.exception), [e.value for e in at.exception]
+    scored = [b for b in at.button if b.label == "Dana Quill"]
+    assert len(scored) == 1, "Score tab did not offer the author"
+    scored[0].click()
+    at.run(timeout=15)
+    assert "Dana Quill" in at.session_state["cfg"].named_authors
+
+
+# ── Inline LaTeX in card titles / abstracts (rendered by Streamlit's KaTeX) ──
+#
+# Streamlit only typesets $...$ in Markdown, not inside a raw-HTML block such
+# as <div>...</div>, so cards wrap text in inline spans and keep math verbatim.
+
+
+def test_math_stays_verbatim_and_unhighlighted():
+    import arxiv_gui
+
+    out = arxiv_gui._highlight_terms(
+        r"we realize $\mathbb{Z}_N$ Kitaev order", ["kitaev", "mathbb"], [], 6, -5
+    )
+    assert r"$\mathbb{Z}_N$" in out          # math untouched (no escaping of _ or \)
+    assert out.count("hl-term") == 1         # "mathbb" inside math not highlighted
+    assert "Kitaev" in out
+
+
+def test_math_lt_gt_become_katex_commands():
+    import arxiv_gui
+
+    out = arxiv_gui._highlight_terms("bound $x<y>z$ holds", [], [], 6, -5)
+    assert r"$x\lt y\gt z$" in out and "<y" not in out
+
+
+def test_markdown_specials_outside_math_are_literal():
+    import arxiv_gui
+
+    out = arxiv_gui._highlight_terms("k_F and k_B, 2*3 <b>", [], [], 6, -5)
+    assert out == r"k\_F and k\_B, 2\*3 &lt;b&gt;"
+
+
+def test_lone_dollar_is_escaped():
+    import arxiv_gui
+
+    assert arxiv_gui._highlight_terms("costs $5 per run", [], [], 6, -5) == r"costs \$5 per run"
+
+
+def test_card_blocks_are_inline_spans():
+    """A leading <div> makes Markdown skip math, so card text uses block-styled spans."""
+    import arxiv_gui
+
+    out = arxiv_gui._card_block("paper-title", r"1. Parafermions in $\mathbb{Z}_N$")
+    assert out == r'<span class="paper-title">1. Parafermions in $\mathbb{Z}_N$</span>'
+    assert ".paper-title { display: block;" in arxiv_gui._PAPER_CSS
+
+
+def test_summary_highlight_toggle_persists_through_saves(monkeypatch, tmp_path):
+    """Ticking "Highlight keywords in summaries" survives Write project config and
+    a profile save + load, like the other Display toggles."""
+    import json
+    from pathlib import Path
+
+    import arxiv_digest as ad
+    from streamlit.testing.v1 import AppTest
+
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    project = tmp_path / "arxiv_config.json"
+    monkeypatch.setattr(ad, "DEFAULT_CONFIG_PATH", project)
+
+    at = AppTest.from_file("arxiv_gui.py").run(timeout=15)
+    box = next(c for c in at.sidebar.checkbox if c.label == "Highlight keywords in summaries")
+    assert box.value is False
+    box.check().run(timeout=15)
+    assert at.session_state["cfg"].highlight_terms_summary is True
+
+    next(b for b in at.button if b.label == "Write project config").click().run(timeout=15)
+    assert json.loads(project.read_text())["highlight_terms_summary"] is True
+
+    next(t for t in at.text_input if t.label == "Save current config as").input("mine").run(timeout=15)
+    next(b for b in at.button if b.label == "Save").click().run(timeout=15)
+    saved = json.loads((tmp_path / ".arxiv_scraper" / "profiles" / "mine.json").read_text())
+    assert saved["highlight_terms_summary"] is True
+
+    # A new browser session starts from the saved profile with the box ticked.
+    fresh = AppTest.from_file("arxiv_gui.py").run(timeout=15)
+    box = next(c for c in fresh.sidebar.checkbox if c.label == "Highlight keywords in summaries")
+    assert box.value is True and fresh.session_state["cfg"].highlight_terms_summary is True
+
+
+def test_loading_a_profile_applies_its_display_toggles(monkeypatch, tmp_path):
+    """Loading a profile in a running session must not let the sidebar's
+    current checkbox state overwrite the profile's Display toggles."""
+    import json
+    from dataclasses import asdict
+    from pathlib import Path
+
+    import arxiv_digest as ad
+    from streamlit.testing.v1 import AppTest
+
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.setattr(ad, "DEFAULT_CONFIG_PATH", tmp_path / "arxiv_config.json")
+    profiles = tmp_path / ".arxiv_scraper" / "profiles"
+    profiles.mkdir(parents=True)
+    on = asdict(ad.Config(highlight_terms_summary=True, highlight_authors=False))
+    (profiles / "summaries-on.json").write_text(json.JSONEncoder().encode(on))
+
+    at = AppTest.from_file("arxiv_gui.py").run(timeout=15)
+    assert at.session_state["cfg"].highlight_terms_summary is False
+    at.selectbox(key="active_profile").select("summaries-on").run(timeout=15)
+    next(b for b in at.sidebar.button if b.label == "Load profile").click().run(timeout=15)
+
+    boxes = {c.label: c.value for c in at.sidebar.checkbox}
+    assert boxes["Highlight keywords in summaries"] is True
+    assert boxes["Highlight authors"] is False
+    assert at.session_state["cfg"].highlight_terms_summary is True

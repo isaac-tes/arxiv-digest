@@ -1,0 +1,245 @@
+import SwiftUI
+import ArxivDigestCore
+import UniformTypeIdentifiers
+
+/// Settings: connection (server, on this device, or demo), appearance, and the GUI sidebar's
+/// Display section (highlight toggles, per-aspect colors and font tints).
+/// Display options are config fields, saved with the same save bar.
+struct SettingsView: View {
+    @Environment(AppModel.self) private var model
+    @AppStorage("appearanceMode") private var appearanceRaw = AppearanceMode.system.rawValue
+    @AppStorage(Highlight.underlineKey) private var underlineHighlights = false
+    @State private var serverURLText = ""
+    @State private var modeChoice: AppModel.Mode = .server
+    @State private var isConnecting = false
+    @State private var accessTokenText = ""
+    @State private var isImporting = false
+
+    var body: some View {
+        @Bindable var model = model
+        NavigationStack {
+            Form {
+                connectionSection
+
+                if model.mode != .demo { configFileSection }
+
+                Section("Appearance") {
+                    Picker("Theme", selection: $appearanceRaw) {
+                        ForEach(AppearanceMode.allCases) { Text($0.label).tag($0.rawValue) }
+                    }
+                    .pickerStyle(.segmented)
+                }
+
+                if model.configError != nil && !model.hasLoadedConfig {
+                    Section { ConfigLoadBanner() }
+                        .listRowInsets(EdgeInsets())
+                        .listRowBackground(Color.clear)
+                }
+                Section {
+                    Toggle("Highlight authors", isOn: $model.config.highlightAuthors)
+                    Toggle("Highlight keywords in titles", isOn: $model.config.highlightTermsTitle)
+                    Toggle("Highlight keywords in abstracts", isOn: $model.config.highlightTermsAbstract)
+                    Toggle("Highlight keywords in summaries", isOn: $model.config.highlightTermsSummary)
+                    Toggle("Underline highlights", isOn: $underlineHighlights)
+                } header: {
+                    Text("Display")
+                } footer: {
+                    Text("Summaries are the two-sentence previews on each paper card; off by default, as in the web GUI. Underline adds a dotted line under highlighted terms; it applies right away and stays on this device.")
+                }
+
+                Section {
+                    ForEach(HighlightAspect.allCases) { aspect in
+                        aspectRow(aspect)
+                    }
+                    preview
+                } header: {
+                    Text("Highlight colors")
+                } footer: {
+                    Text("“Tint font” also colors the matched text, not just its background. Colors and toggles are saved with your config, shared with the web GUI's profile format.")
+                }
+
+                Section("Zotero") {
+                    switch model.zoteroAvailability {
+                    case .web:
+                        Label("Saving via the server's Zotero Web API key", systemImage: "checkmark.seal.fill")
+                            .foregroundStyle(.green)
+                    case .unavailable:
+                        VStack(alignment: .leading, spacing: 4) {
+                            if model.mode == .standalone {
+                                Label("Saving through the Zotero app", systemImage: "books.vertical")
+                                Text("Use Share to Zotero: it opens the share sheet, where the Zotero app saves the paper.")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            } else {
+                                Label("No Zotero key on the server", systemImage: "books.vertical")
+                                Text("Use Share to Zotero: it opens the share sheet, where the Zotero app saves the paper. To save directly, set ZOTERO_API_KEY and ZOTERO_LIBRARY_ID on the server.")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                }
+
+                Section("About") {
+                    LabeledContent("Version", value: Self.version)
+                    Link(destination: URL(string: "https://github.com/isaac-tes/arxiv-digest")!) {
+                        Label("Source on GitHub", systemImage: "chevron.left.forwardslash.chevron.right")
+                    }
+                }
+            }
+            .navigationTitle("Settings")
+            .safeAreaInset(edge: .bottom) { if model.isDirty { SaveBar() } }
+            .animation(.default, value: model.isDirty)
+            .onAppear {
+                if serverURLText.isEmpty { serverURLText = model.baseURL.absoluteString }
+                if accessTokenText.isEmpty { accessTokenText = model.accessToken }
+                modeChoice = model.mode
+            }
+            .task { if model.connectionStatus == nil { await model.checkConnection() } }
+        }
+    }
+
+    private var connectionSection: some View {
+        Section {
+            Picker("Source", selection: $modeChoice) {
+                Text("Server").tag(AppModel.Mode.server)
+                Text("On this device").tag(AppModel.Mode.standalone)
+                Text("Demo").tag(AppModel.Mode.demo)
+            }
+            .pickerStyle(.segmented)
+
+            if modeChoice == .server {
+                TextField("http://192.168.1.20:8000", text: $serverURLText)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .keyboardType(.URL)
+                SecureField("Access token (from the server)", text: $accessTokenText)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+            }
+
+            Button {
+                connect()
+            } label: {
+                HStack {
+                    Text(modeChoice == model.mode && modeChoice == .demo ? "Reload demo" : "Connect")
+                    if isConnecting { Spacer(); ProgressView() }
+                }
+            }
+            .disabled(isConnecting || (modeChoice == .server && normalizedURL == nil))
+
+            if let status = model.connectionStatus {
+                Label(status, systemImage: status.hasPrefix("Connected") ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                    .font(.footnote)
+                    .foregroundStyle(status.hasPrefix("Connected") ? .green : .orange)
+            }
+        } header: {
+            Text("Connection")
+        } footer: {
+            switch modeChoice {
+            case .server:
+                Text("Shares config and removed papers with every device on the same server. Enter its address and the DIGEST_ACCESS_TOKEN it was started with (stored in the Keychain). On a physical device, 127.0.0.1 is the phone itself.")
+            case .standalone:
+                Text("Fetches the past week from arXiv directly and scores papers on this phone; the first load takes about 10–40 s. Config and removed papers stay on this device and aren't synced.")
+            case .demo:
+                Text("Demo mode uses built-in sample papers with invented authors; nothing leaves the device. Scores were computed by the real engine, but they don't change when you edit the config.")
+            }
+        }
+    }
+
+    /// Copy the config between devices as one JSON file (same format as the
+    /// Mac GUI's Profiles → Export / Import profile from JSON).
+    private var configFileSection: some View {
+        Section {
+            if let file = configExportFile {
+                ShareLink(item: file, preview: SharePreview("arXiv Digest config")) {
+                    Label("Export config", systemImage: "square.and.arrow.up")
+                }
+            }
+            Button {
+                isImporting = true
+            } label: {
+                Label("Import config…", systemImage: "square.and.arrow.down")
+            }
+            .fileImporter(isPresented: $isImporting, allowedContentTypes: [.json]) { result in
+                guard case .success(let url) = result else { return }
+                let scoped = url.startAccessingSecurityScopedResource()
+                defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+                if let data = try? Data(contentsOf: url) { model.importConfig(from: data) }
+            }
+        } header: {
+            Text("Config file")
+        } footer: {
+            Text("Share the current config as a JSON file (AirDrop it to your Mac and use the GUI's Profiles → Import profile from JSON), or import one exported by the GUI (Profiles → Export) or another device. An import replaces the config and is saved when you tap Save.")
+        }
+    }
+
+    /// The working config written to a temporary `.json` for the share sheet.
+    private var configExportFile: URL? {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(ConfigFile.fileName)
+        guard let data = try? ConfigFile.write(model.config), (try? data.write(to: url, options: .atomic)) != nil else {
+            return nil
+        }
+        return url
+    }
+
+    /// The typed URL, with `http://` added when no scheme was given.
+    private var normalizedURL: URL? {
+        let t = serverURLText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !t.isEmpty else { return nil }
+        let withScheme = t.contains("://") ? t : "http://" + t
+        guard let url = URL(string: withScheme), url.host != nil else { return nil }
+        return url
+    }
+
+    private func connect() {
+        let url = modeChoice == .server ? (normalizedURL ?? model.baseURL) : model.baseURL
+        if modeChoice == .server {
+            serverURLText = url.absoluteString
+            model.accessToken = accessTokenText.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        isConnecting = true
+        Task {
+            if modeChoice == .demo { DemoBackend.shared.reset() }
+            await model.connect(mode: modeChoice, url: url)
+            isConnecting = false
+        }
+    }
+
+    private func aspectRow(_ aspect: HighlightAspect) -> some View {
+        HStack {
+            ColorPicker(aspect.label, selection: Binding(
+                get: { Color(hex: model.config.color(for: aspect)) },
+                set: { model.config.setColor($0.hexString, for: aspect) }), supportsOpacity: false)
+            Toggle("Tint font", isOn: Binding(
+                get: { model.config.fontColor(for: aspect) },
+                set: { model.config.setFontColor($0, for: aspect) }))
+                .toggleStyle(.button)
+                .controlSize(.small)
+        }
+    }
+
+    /// A live sample of every aspect in the current colors.
+    private var preview: some View {
+        let cfg = model.config
+        let text = "Floquet anyons, by Ada Lovelace · photonic · quant-ph"
+        var spans: [HighlightSpan] = []
+        func add(_ needle: String, _ aspect: HighlightAspect) {
+            if let r = text.range(of: needle) { spans.append(HighlightSpan(range: r, aspect: aspect)) }
+        }
+        add("Floquet anyons", .keyword)
+        add("Ada Lovelace", .author)
+        add("photonic", .lowPriority)
+        add("quant-ph", .subject)
+        return Text(Highlight.attributed(text, spans: spans, config: cfg, underline: underlineHighlights))
+            .font(.callout)
+            .padding(.vertical, 4)
+    }
+
+    static var version: String {
+        let info = Bundle.main.infoDictionary
+        let v = info?["CFBundleShortVersionString"] as? String ?? "?"
+        let b = info?["CFBundleVersion"] as? String ?? "?"
+        return "\(v) (\(b))"
+    }
+}

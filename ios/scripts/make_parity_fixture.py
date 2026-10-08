@@ -1,0 +1,412 @@
+"""Generate the Swift scorer's parity fixture from the real scoring engine.
+
+Each case is a paper, a config and the breakdown `arxiv_digest.explain_score`
+returns for them. The Swift `Scorer` must reproduce every breakdown exactly, so
+a scoring change in Python fails the Swift tests until the port follows
+(ADR 0009). Papers and author names are invented.
+
+    uv run python ios/scripts/make_parity_fixture.py
+
+writes ios/Tests/ArxivDigestCoreTests/ScoringParityFixture.swift and
+FetchParityFixture.swift (an invented export-API Atom page and the paper
+dicts `_paper_from_api_entry` builds from it).
+"""
+
+from __future__ import annotations
+
+import json
+import sys
+import xml.etree.ElementTree as ET
+from dataclasses import asdict, replace
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT))
+
+import arxiv_digest as ad  # noqa: E402
+
+INVENTED_AUTHORS = ["Mira Castellanos", "okafor", "Jonas Albrecht", "Søren Ødegård", "li"]
+
+BASE = ad.Config(named_authors=INVENTED_AUTHORS)
+
+CONFIGS = {
+    # Engine defaults, apart from the (real) default author names.
+    "defaults": BASE,
+    "substring": replace(BASE, word_boundary_matching=False),
+    "custom-weights": replace(
+        BASE,
+        weights=ad.ScoringWeights(
+            core_keyword=3, named_author=10, low_priority_penalty=-2,
+            long_abstract_bonus=4, long_abstract_threshold=80,
+        ),
+    ),
+    # Parent feed 'cond-mat' matches every cond-mat.* subject; a zero bonus never hits.
+    "parent-feed": replace(
+        BASE, feed_weights={"cond-mat": 3, "quant-ph": 0, "physics.optics": -1, "CS.LG": 2},
+    ),
+    "empty-lists": replace(BASE, core_keywords=[], named_authors=[], low_priority_kw=[], feed_weights={}),
+    "tricky-terms": replace(
+        BASE,
+        core_keywords=["mpo", "Floquet", "  anyons ", "", "c++", "bose-hubbard", "chern number", "ünal"],
+        named_authors=["Ada Lovelace", "ma", "Castellanos", "Ødegård", " "],
+        low_priority_kw=["review", "machine learning", "dé"],
+    ),
+}
+
+PAPERS = [
+    {
+        "id": "2609.30001",
+        "title": "Anomalous Floquet Anyons in Driven Optical Lattices",
+        "authors": "Mira L. Castellanos, Tomas Reinholt, Aiko Senda",
+        "subjects": "Quantum Gases (cond-mat.quant-gas); Quantum Physics (quant-ph)",
+        "abstract": (
+            "We show that periodic driving of an interacting optical lattice stabilises anyons "
+            "with a statistical phase set by the Floquet frequency. Tensor network simulations "
+            "of a Bose-Hubbard ladder confirm a non-zero Chern number in transport measurements."
+        ),
+    },
+    {
+        "id": "2609.30002",
+        "title": "Temporal MPO compression for c++ solvers: a review",
+        "authors": "Ruth Okafor, Y. Mao, Jonas K. Albrecht",
+        "subjects": "Strongly Correlated Electrons (cond-mat.str-el); Machine Learning (cs.LG)",
+        "abstract": "We review MPO-based methods. Machine learning helps.",
+    },
+    {
+        "id": "2609.30003",
+        "title": "Photonic waveguides",
+        "authors": "Søren Ødegård, Wei Li, Ada Example",
+        "subjects": "Optics (physics.optics)",
+        "abstract": "Short.",
+    },
+    {
+        "id": "2609.30004",
+        "title": "Bob Ada and Charlie Lovelace on transport",
+        "authors": "Bob Ada, Charlie Lovelace, Elif Ünal",
+        "subjects": "Mesoscale and Nanoscale Physics (cond-mat.mes-hall)",
+        "abstract": "Dé-coherence in a film device. " * 12,
+    },
+    {
+        "id": "2609.30005",
+        "title": "",
+        "authors": "",
+        "subjects": "",
+        "abstract": "",
+    },
+]
+
+
+def build() -> list[dict]:
+    cases = []
+    for cfg_name, cfg in CONFIGS.items():
+        for paper in PAPERS:
+            b = ad.explain_score(paper, cfg)
+            cases.append({
+                "name": f"{cfg_name}/{paper['id']}",
+                "config": asdict(cfg),
+                "paper": paper,
+                "expected": {**b, "keywords": [list(t) for t in b["keywords"]],
+                             "authors": [list(t) for t in b["authors"]]},
+            })
+    return cases
+
+
+ATOM = """<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xmlns:opensearch="http://a9.com/-/spec/opensearch/1.1/" xmlns:arxiv="http://arxiv.org/schemas/atom">
+  <id>https://arxiv.org/api/invented</id>
+  <title>arXiv Query: invented</title>
+  <updated>2026-10-07T00:00:00Z</updated>
+  <opensearch:totalResults>1203</opensearch:totalResults>
+  <opensearch:startIndex>0</opensearch:startIndex>
+  <opensearch:itemsPerPage>500</opensearch:itemsPerPage>
+  <entry>
+    <id>http://arxiv.org/abs/2610.01234v2</id>
+    <updated>2026-10-06T17:59:59Z</updated>
+    <published>2026-10-05T23:30:00Z</published>
+    <title>Anomalous Floquet Anyons
+  in Driven Optical Lattices</title>
+    <summary>  We show that periodic driving stabilises anyons.
+Exact diagonalisation confirms it &amp; more.
+</summary>
+    <author>
+      <name>Mira L. Castellanos</name>
+      <arxiv:affiliation>Invented Institute</arxiv:affiliation>
+    </author>
+    <author>
+      <name> Søren Ødegård </name>
+    </author>
+    <arxiv:comment>12 pages</arxiv:comment>
+    <link href="http://arxiv.org/abs/2610.01234v2" rel="alternate" type="text/html"/>
+    <arxiv:primary_category term="cond-mat.quant-gas"/>
+    <category term="cond-mat.quant-gas" scheme="http://arxiv.org/schemas/atom"/>
+    <category term="quant-ph" scheme="http://arxiv.org/schemas/atom"/>
+  </entry>
+  <entry>
+    <id>http://arxiv.org/abs/cond-mat/0601001v1</id>
+    <published>2026-10-01T09:00:00Z</published>
+    <title>Old-style identifier</title>
+    <summary>Short.</summary>
+    <author><name>Ruth Okafor</name></author>
+    <category term="cond-mat.str-el" scheme="http://arxiv.org/schemas/atom"/>
+  </entry>
+  <entry>
+    <id>http://arxiv.org/abs/2610.05555v11</id>
+    <published>2026-10-07T00:00:01Z</published>
+    <title>No abstract</title>
+    <summary></summary>
+    <category term="quant-ph" scheme="http://arxiv.org/schemas/atom"/>
+  </entry>
+</feed>
+"""
+
+
+# Modelled on arXiv's /list/<cat>/pastweek page, trimmed, names invented.
+LISTING = """<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><title>Quantum Physics</title>
+<script>var x = "<h3>Mon, 1 Jan 2001</h3>";</script>
+<!-- <h3>Fri, 2 Oct 2026</h3> -->
+</head><body>
+<div id='dlpage'>
+<h1>Quantum Physics</h1>
+<ul><li><a href="#item0">Tue, 6 Oct 2026</a> (showing 3 of 3 entries)</li></ul>
+<dl id='articles'>
+<h3>Tue, 6 Oct 2026 (showing 3 of 3 entries )</h3>
+  <dt>
+    <a name='item1'>[1]</a>
+    <a href ="/abs/2610.00002" title="Abstract" id="2610.00002">
+        arXiv:2610.00002
+      </a>
+    [<a href="/pdf/2610.00002" title="Download PDF" id="pdf-2610.00002">pdf</a>, <a href="/format/2610.00002" title="Other formats">other</a>]
+  </dt>
+  <dd>
+    <div class='meta'>
+      <div class='list-title mathjax'><span class='descriptor'>Title:</span> Invented &amp; Fictional<br/>Results</div>
+      <div class='list-authors'><a href="/a/example_a_1">Ada Example</a>, <a href="/a/okafor_r_1">Ruth Okafor</a></div>
+    </div>
+  </dd>
+  <dt><a href="https://arxiv.org/abs/2610.00003" title="Abstract">arXiv:2610.00003</a></dt>
+  <dd><img src="x.png"><p>No close tags here</dd>
+  <dt><a title="Abstract">ARXIV : 2610.00009</a></dt>
+  <dd></dd>
+<h3>Mon, 5 Oct 2026 (showing first 2 of 4 entries )
+  <a href="/list/quant-ph/pastweek?skip=0&amp;show=2000">all</a></h3>
+  <dt><a title="Abstract" href="/abs/cond-mat/0601001v2">arXiv:cond-mat/0601001</a></dt>
+  <dd></dd>
+  <dl><dt><a href="/abs/2610.00020" title="Abstract">arXiv:2610.00020</a></dt></dl>
+  <dt><a href="/abs/2610.00002" title="Abstract">arXiv:2610.00002</a></dt>
+</dl>
+<h3>Replacement submissions (showing 1 of 1 entries)</h3>
+<dt><a href="/abs/2610.00010" title="Abstract">arXiv:2610.00010</a></dt>
+<div><h3>Sun, 4 Oct 2026</h3><dt><span><a href="/abs/2610.00030" title="Abstract">x</a></span></dt></div>
+<dt><a href="/abs/2610.00031" title="Abstract">arXiv:2610.00031</a></dt>
+</div>
+</body></html>
+"""
+
+
+# Modelled on arXiv's /list/<cat>/new page (2026 markup), trimmed, names invented.
+NEW_PAGE = """<!DOCTYPE html>
+<html lang="en"><head><title>Quantum Physics new submissions</title>
+<script>document.write("<h3>Fake</h3><dt>x</dt>");</script></head><body>
+<div id='dlpage'>
+<h1>Quantum Physics</h1>
+<h3>Showing new listings for Tuesday, 6 October 2026</h3>
+<dl id='articles'>
+<h3>New submissions (showing 3 of 3 entries)</h3>
+<dt>
+  <a name='item1'>[1]</a>
+  <a href ="/abs/2610.00007" title="Abstract" id="2610.00007">
+    arXiv:2610.00007
+  </a>
+  [<a href="/pdf/2610.00007" title="Download PDF" id="pdf-2610.00007">pdf</a>, <a href="https://arxiv.org/html/2610.00007v1" title="View HTML">html</a>]
+</dt>
+<dd>
+  <div class='meta'>
+    <div class='list-title mathjax'><span class='descriptor'>Title:</span>
+      Floquet Anyons &amp; Fictional&nbsp;Lattices: a &#x27;test&#39; &lt;case&gt;
+    </div>
+    <div class='list-authors'><a href="https://arxiv.org/a/castellanos_m_1" rel="nofollow">Mira Castellanos</a>, <a href="https://arxiv.org/a/okafor_r_1">Ruth Okafor</a></div>
+    <div class='list-comments mathjax'><span class='descriptor'>Comments:</span> 12 pages, 4 figures</div>
+    <div class='list-subjects'><span class='descriptor'>Subjects:</span>
+      <span class="primary-subject">Quantum Physics (quant-ph)</span>; Quantum Gases (cond-mat.quant-gas)
+    </div>
+    <p class='mathjax'>
+      We show that periodic driving stabilises anyons in a $2$D lattice.
+      Exact diagonalisation confirms it.
+    </p>
+  </div>
+</dd>
+<dt><a href="/abs/2610.00008" title="Abstract">arXiv:2610.00008</a></dt>
+<dd>
+  <div class='meta'>
+    <div class="list-title"><span class='descriptor'>Title:</span> No inline abstract</div>
+    <div class='list-authors'><a>Søren Ødegård</a></div>
+    <div class='list-subjects'><span class='descriptor'>Subjects:</span> Quantum Physics (quant-ph)</div>
+    <p>short</p>
+    <p>Abstract: A fallback paragraph that is long enough to count.</p>
+  </div>
+</dd>
+<dt><a name='item3'>[3]</a> no abstract link here</dt>
+<dd><div class='list-title'>Skipped</div></dd>
+<h3>Cross submissions (showing 1 of 1 entries)</h3>
+<dt><a href="/abs/2610.00009" title="Abstract">arXiv:2610.00009</a></dt>
+<dd>
+  <div class='meta'>
+    <div class='list-title mathjax'><span class='descriptor'>Title:</span> Cross-listed paper</div>
+    <div class='list-authors'><a>Ada Example</a>, <a>Wei Li</a></div>
+    <div class='list-subjects'><span class='descriptor'>Subjects:</span> <span class="primary-subject">Optics (physics.optics)</span>; Quantum Physics (quant-ph)</div>
+    <p class='mathjax'>Abstract: Light in waveguides.</p>
+  </div>
+</dd>
+<h3>Replacement submissions (showing 2 of 2 entries)</h3>
+<dt><a href="/abs/2609.00001" title="Abstract">arXiv:2609.00001</a></dt>
+<dd>
+  <div class='meta'>
+    <div class='list-title mathjax'><span class='descriptor'>Title:</span> Replaced paper</div>
+    <div class='list-authors'><a>Ruth Okafor</a></div>
+    <div class='list-subjects'><span class='descriptor'>Subjects:</span> Quantum Physics (quant-ph)</div>
+  </div>
+</dd>
+<dt><a href="/abs/2609.00002" title="Abstract">arXiv:2609.00002</a></dt>
+</dl>
+</div>
+</body></html>
+"""
+
+ABS_PAGE = """<html><body><div id="abs">
+<h1 class="title mathjax"><span class="descriptor">Title:</span>No inline abstract</h1>
+<blockquote class="abstract mathjax">
+  <span class="descriptor">Abstract:</span>Back-filled abstract
+  with <a href="https://example.invalid">a link</a> &amp; an entity.
+</blockquote>
+</div></body></html>
+"""
+
+ABS_PAGE_NEW_LAYOUT = """<html><body>
+<div class="abstract"><span class="descriptor">Abstract:</span> Newer layout abstract.</div>
+</body></html>"""
+
+
+class _Resp:
+    def __init__(self, text: str):
+        self.text = text
+        self.content = text.encode()
+        self.status_code = 200
+
+    def raise_for_status(self) -> None:
+        pass
+
+
+def build_today() -> dict:
+    pages = {"/list/": NEW_PAGE, "/abs/2610.00008": ABS_PAGE, "/abs/2610.00010": ABS_PAGE_NEW_LAYOUT}
+    original = ad.requests.get
+    ad.requests.get = lambda url, **kw: _Resp(next((v for k, v in pages.items() if k in url), "<html></html>"))
+    try:
+        papers = ad.fetch_feed("https://arxiv.org/list/quant-ph/new", backfill=False)
+        abstracts = {i: ad.fetch_abstract(i) for i in ("2610.00008", "2610.00010", "2610.00011")}
+    finally:
+        ad.requests.get = original
+    return {
+        "new_page": NEW_PAGE,
+        "papers": papers,
+        "categories": [ad.section_category(p["section"]) for p in papers],
+        "abs_pages": {"2610.00008": ABS_PAGE, "2610.00010": ABS_PAGE_NEW_LAYOUT, "2610.00011": "<html></html>"},
+        "abstracts": abstracts,
+    }
+
+
+def build_fetch() -> dict:
+    root = ET.fromstring(ATOM.encode())
+    total = int(root.find(f"{ad._API_OPENSEARCH}totalResults").text)
+    papers = [ad._paper_from_api_entry(e) for e in root.findall(f"{ad._API_ATOM}entry")]
+    return {"atom": ATOM, "total": total, "papers": papers,
+            "listing": LISTING, "listing_labels": ad._parse_listing_day_labels(LISTING)}
+
+
+def write(name: str, source: str, value) -> None:
+    data = json.dumps(value, indent=1, ensure_ascii=True, sort_keys=True)
+    out = ROOT / "ios" / "Tests" / "ArxivDigestCoreTests" / f"{name}.swift"
+    out.write_text(
+        "// Generated by ios/scripts/make_parity_fixture.py. Do not edit by hand.\n"
+        f"// Expected values come from {source}; papers and names are invented.\n\n"
+        f"enum {name} {{\n"
+        '    static let json = #"""\n'
+        f"{data}\n"
+        '"""#\n'
+        "}\n",
+        encoding="utf-8",
+    )
+    print(f"wrote {out}")
+
+
+QP = "https://arxiv.org/list/quant-ph/new"
+LG = "https://arxiv.org/list/cs.LG/new"
+
+# Config blobs as the app PUTs them -> asdict(Config.from_json(blob)), the
+# server's `_hydrate`. Every blob names invented authors, so no default
+# (real) author list appears in the fixture.
+HYDRATE = [
+    {"named_authors": INVENTED_AUTHORS},
+    {"core_keywords": [], "named_authors": [], "low_priority_kw": []},
+    {"feeds": {"quant-ph": QP, "cs.LG": LG}, "default_feeds": ["quant-ph", "unknown"], "named_authors": ["okafor"]},
+    {"feeds": {"quant-ph": QP}, "default_feeds": [], "named_authors": ["okafor"]},
+    {"feeds": {"quant-ph": QP, "cs.LG": LG}, "default_feed": "cs.LG", "named_authors": ["okafor"],
+     "weights": {"quant_gas_subject": 9, "core_keyword": "7", "named_author": 2.0}},
+    {"named_authors": ["okafor"], "top_n": 0, "timeframe": "", "include_replacements": "false",
+     "word_boundary_matching": 0, "highlight_authors": None, "color_keyword": "#000000", "weights": {},
+     "feed_weights": {"quant-ph": 2.0, "cond-mat": "3"}, "unknown_key": 1},
+    {"named_authors": ["okafor"], "top_n": "7", "core_keywords": ["Floquet", 5, True]},
+]
+HYDRATE_ERRORS = [{"top_n": "abc"}, {"feeds": ["quant-ph"]}, {"weights": {"core_keyword": None}}]
+
+
+def build_config() -> dict:
+    hydrate = [{"input": blob, "expected": asdict(ad.Config.from_json(blob))} for blob in HYDRATE]
+    for blob in HYDRATE_ERRORS:
+        try:
+            ad.Config.from_json(blob)
+        except (TypeError, ValueError, AttributeError):
+            continue
+        raise AssertionError(f"expected {blob} to be invalid")
+    base = ad.Config.from_json({"named_authors": ["okafor"], "core_keywords": ["Lindblad", "anyons"],
+                                "feed_weights": {"quant-ph": 9}})
+    merge = [{"base": asdict(base), "preset": name, "expected": asdict(ad.merge_preset(base, name))}
+             for name in ad.preset_names()]
+    return {"hydrate": hydrate, "invalid": HYDRATE_ERRORS, "merge": merge}
+
+
+def write_defaults() -> None:
+    """The engine's defaults and starter presets, Standalone mode's first-run
+    config (the same defaults the CLI, GUI and server start from)."""
+    value = {
+        "defaults": asdict(ad.Config()),
+        "presets": {
+            name: {"description": ad.preset_description(name), "config": asdict(ad.preset_config(name))}
+            for name in ad.preset_names()
+        },
+    }
+    data = json.dumps(value, indent=1, ensure_ascii=True, sort_keys=True)
+    out = ROOT / "ios" / "Sources" / "ArxivDigestCore" / "Local" / "EngineDefaults.swift"
+    out.write_text(
+        "// Generated by ios/scripts/make_parity_fixture.py. Do not edit by hand.\n"
+        "// arxiv_digest.Config() and the starter presets (PRESETS), as the engine defines them.\n\n"
+        "enum EngineDefaults {\n"
+        '    static let json = #"""\n'
+        f"{data}\n"
+        '"""#\n'
+        "}\n",
+        encoding="utf-8",
+    )
+    print(f"wrote {out}")
+
+
+def main() -> None:
+    write("ScoringParityFixture", "arxiv_digest.explain_score", build())
+    write("FetchParityFixture", "arxiv_digest._paper_from_api_entry", build_fetch())
+    write("ConfigParityFixture", "arxiv_digest.Config.from_json / merge_preset", build_config())
+    write("TodayParityFixture", "arxiv_digest.fetch_feed / fetch_abstract", build_today())
+    write_defaults()
+
+
+if __name__ == "__main__":
+    main()

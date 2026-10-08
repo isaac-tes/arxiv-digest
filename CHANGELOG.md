@@ -5,6 +5,42 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **Two-way settings sync for the GUI**: sidebar *Sync with server* shares config and removed papers with the iPhone app and other computers through the digest server (first connection asks whose config wins; offline it keeps a local copy and sends the changes made meanwhile with the next save or GUI start, so they aren't lost). Settings in `~/.arxiv_scraper/sync.json` or `ARXIV_DIGEST_SERVER` / `ARXIV_DIGEST_TOKEN`.
+- **iOS config file import/export**: Settings → *Config file* exports the config as JSON (share sheet / AirDrop) and imports one from Files or AirDrop, in the same format as the GUI's profile Export / Import, so a config moves between Mac and iPhone as one file.
+- **Update notice for `arxiv-gui`**: launching the GUI prints the same one-line "newer release available, run `arxiv-digest update`" notice as the CLI, and the GUI sidebar shows a small note under the title. Both use the existing release check, which asks GitHub at most once a day and stays silent offline.
+- **iOS Standalone mode ("On this device")**, now the default for new installs: the app fetches the past week from the arXiv export API and today's `/new` listing, scores on the phone with a Swift port of the engine (parity-tested against the Python engine), and keeps config and removed papers on the device. No server needed (ADR 0009).
+- **iOS math rendering**: inline LaTeX shows as Unicode in titles and lists, and the paper page typesets math abstracts with bundled KaTeX (offline).
+- **Add author from a paper**: an *Add author* popover on each GUI paper card (and the Score result) and an authors menu in the iOS paper detail append that paper's author to the highlighted authors. It edits the working config only; Save applies it.
+- **iOS app reaches parity with the web GUI** (`ios/`). Four tabs:
+  - **Papers**: the ranked digest for the saved timeframe and Top N, a day picker for past-week fetches, search over title/authors/abstract, swipe (or long-press) to remove a paper with Undo, a *Removed papers* section with Restore / Restore all, fetch notices, and Markdown/JSON export in the GUI's formats. Cards highlight keywords, named authors and feed-bonus subjects the way the GUI does.
+  - **Score**: paste an arXiv link or id; shows the score, breakdown, and either the rank in the Papers view or the GUI's reason it is absent (below the cutoff, removed, a replacement, another day, or never fetched).
+  - **Config**: keyword / author / low-priority editors, feeds with subscribe toggles and *Include replacement submissions*, scoring weights and per-feed subject bonuses, and the starter presets (Load / Add). Edits stay unsaved until **Save**, which confirms with a toast and re-ranks the digest.
+  - **Settings**: server address or **demo mode** (built-in sample papers, no server needed), the Display toggles including *Highlight keywords in summaries*, per-aspect colors with font tint, and Zotero status.
+- **Share to Zotero** on iOS when the server has no Zotero key: the share sheet hands the arXiv page to the Zotero app.
+- **Digest service**: `GET /digest` takes `day`, skips the user's removed papers while ranking, and returns abstracts, breakdowns, removed papers, available days, filter counts and fetch notices. New `/removed` endpoints; `/config/defaults`, `/config/presets/info` and `/config/presets/{name}/load`; preset load/merge accept the working config and `save=false`.
+
+### Changed
+- **BREAKING (digest server)**: the server now only answers the machine it runs on unless `DIGEST_ACCESS_TOKEN` is set, in which case every device must send it (the iOS app has an access-token field, kept in the Keychain). CORS is off by default, feed URLs must be on arxiv.org (max 50 feeds), and remote mode refuses the default JWT secret.
+- **Removed unused code**: the digest server's `/lists` and `/feedback` endpoints and their tables, and the matching unused iOS API calls.
+- **iOS highlights**: the dotted underline is off by default (Settings → Display → *Underline highlights*), and highlight text is darkened in light mode for readable contrast.
+- **Digest service fetches the past week like the CLI**: through the arXiv export API with a true seven-day window (`fetch_pastweek`), not the unreliable `/pastweek` HTML listing. The fetch cache now holds raw papers keyed on the resolved feeds, so editing keywords, weights, the day or removals re-ranks without re-fetching, and changing feeds can no longer serve another feed set's cache.
+- **Score a paper (service)** reports the rank shown in the Papers view or why the paper is absent, like the GUI. A paper already in the fetched digest is scored from it, so scoring keeps working while arXiv's export API is rate-limiting.
+- **`GET /config` returns the effective config** with every field filled in; invalid configs are rejected with 422.
+
+### Fixed
+- **`arxiv-digest update` works again** for `uv tool` / pipx installs: the upgrade requirement (and the "To upgrade manually" hint) lacked the `git+` scheme, so uv rejected `arxiv-digest @ https://…/arxiv-digest.git@vX.Y.Z` as an archive URL. It now uses `git+https://…` (#12).
+- **GUI: inline LaTeX in paper titles and full abstracts** (e.g. `$\mathbb{Z}_N$`) now renders; it showed as raw `$...$` because the card text sat inside a `<div>`, where Streamlit's Markdown (and its KaTeX) doesn't run. Math is kept verbatim (no highlight inside it), and stray Markdown characters outside math stay literal.
+- **Card summaries no longer stop mid-citation**: the two-sentence summary split at "et al." / "Nat." (e.g. "A recent experiment by Roy et al. (Nat."). Sentences now don't end inside parentheses, after common abbreviations (et al., Fig., Eq., Nat., Phys. Rev., e.g., …) or after an initial. Same rule in the iOS app.
+- **A cleared keyword, author or low-priority list stays cleared.** Loading a config or profile whose list was saved empty used to bring back the built-in defaults; now only a missing list does.
+- **Zotero saves from the service** put given names and surnames in the right fields (they were swapped).
+- **Named authors highlight like they score** in the service and the app (middle initials tolerated).
+
+### Removed
+- **The service's Zotero `deeplink` mode.** Its `zotero://select` link could only select an existing item, so it saved nothing (ADR 0005, amended).
+
 ## [0.6.3] - 2026-09-30
 
 ### Added

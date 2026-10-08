@@ -127,13 +127,17 @@ def test_upgrade_source_pins_newer_tag(monkeypatch):
     monkeypatch.setattr(update_check, "_latest_release", lambda: "v99.0.0")
     monkeypatch.setattr(update_check, "_current_version", lambda: "0.5.6")
     monkeypatch.setattr(update_check, "_gui_extra", lambda: "")
-    assert update_check._upgrade_source() == f"arxiv-digest @ {update_check.GIT_URL}@v99.0.0"
+    assert update_check._upgrade_source() == (
+        "arxiv-digest @ git+https://github.com/isaac-tes/arxiv-digest.git@v99.0.0"
+    )
 
 
 def test_upgrade_source_falls_back_to_head(monkeypatch):
     monkeypatch.setattr(update_check, "_latest_release", lambda: None)
     monkeypatch.setattr(update_check, "_gui_extra", lambda: "[gui]")
-    assert update_check._upgrade_source() == f"arxiv-digest[gui] @ {update_check.GIT_URL}"
+    assert update_check._upgrade_source() == (
+        "arxiv-digest[gui] @ git+https://github.com/isaac-tes/arxiv-digest.git"
+    )
 
 
 def test_run_self_upgrade_unknown_method_prints_instructions(monkeypatch, capsys):
@@ -193,3 +197,45 @@ def test_cli_dispatch_uses_installed_module(monkeypatch, flag):
 
     monkeypatch.setattr(sys.modules["update_check"], "run_self_upgrade", lambda: 0)
     assert arxiv_digest.main([flag]) == 0
+
+
+# ── newer_release + where the notice is shown ────────────────────────────────
+
+
+def test_newer_release_returns_tag_only_when_newer(monkeypatch):
+    monkeypatch.setattr(update_check, "_latest_release", lambda: "v9.9.9")
+    assert update_check.newer_release("0.6.3") == "v9.9.9"
+    assert update_check.newer_release("9.9.9") is None
+    monkeypatch.setattr(update_check, "_latest_release", lambda: None)
+    assert update_check.newer_release("0.6.3") is None
+
+
+def test_gui_launcher_prints_update_notice(monkeypatch, capsys):
+    pytest.importorskip("streamlit")
+    import arxiv_gui_launcher
+    from streamlit.web import cli as stcli
+
+    monkeypatch.setattr(update_check, "check_for_update", lambda: "A newer version… Run `arxiv-digest update`")
+    monkeypatch.setattr(stcli, "main", lambda: 0)
+    monkeypatch.setattr(arxiv_gui_launcher.sys, "argv", ["arxiv-gui"])
+    assert arxiv_gui_launcher.main() == 0
+    assert "arxiv-digest update" in capsys.readouterr().err
+
+
+def test_gui_sidebar_shows_update_notice(monkeypatch):
+    pytest.importorskip("streamlit")
+    from streamlit.testing.v1 import AppTest
+
+    monkeypatch.setattr(update_check, "newer_release", lambda current_version=None: "v9.9.9")
+    at = AppTest.from_file("arxiv_gui.py").run(timeout=15)
+    notes = [c.value for c in at.sidebar.caption if "v9.9.9" in c.value]
+    assert notes and "arxiv-digest update" in notes[0]
+
+
+def test_gui_sidebar_no_notice_when_up_to_date(monkeypatch):
+    pytest.importorskip("streamlit")
+    from streamlit.testing.v1 import AppTest
+
+    monkeypatch.setattr(update_check, "newer_release", lambda current_version=None: None)
+    at = AppTest.from_file("arxiv_gui.py").run(timeout=15)
+    assert not [c for c in at.sidebar.caption if "arxiv-digest update" in c.value]

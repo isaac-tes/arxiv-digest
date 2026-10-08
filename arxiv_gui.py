@@ -15,7 +15,7 @@ import re
 import tempfile
 import threading
 import time
-from dataclasses import asdict, fields
+from dataclasses import asdict, fields, replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Iterable, Tuple
@@ -24,6 +24,8 @@ import pandas as pd
 import streamlit as st
 
 import arxiv_digest as ad
+import sync_client
+import update_check
 import zotero_bridge as zb
 
 PROFILES_DIR = Path.home() / ".arxiv_scraper" / "profiles"
@@ -383,6 +385,36 @@ def _render_zotero_save_button(arxiv_id: str, title: str, scope: str = "card") -
     _tick_or_popover()
 
 
+def _add_named_author(name: str) -> None:
+    """Append to the working config's named authors (case-insensitive dedupe)."""
+    name = name.strip()
+    if not name or name.lower() in {a.lower() for a in cfg().named_authors}:
+        return
+    cfg().named_authors.append(name)
+    _reset_widget_state("editor_named_authors")
+    st.toast(f"Added {name} to highlighted authors - Save to apply")
+
+
+def _render_add_author(authors: str, scope: str = "card", paper_id: str = "") -> None:
+    """Popover listing the paper's authors not yet highlighted; one click adds."""
+    wb = cfg().word_boundary_matching
+    addable = [
+        a for a in (x.strip() for x in authors.split(","))
+        if a and not any(ad.author_matches(t, a, word_boundary=wb) for t in cfg().named_authors)
+    ]
+    if not addable:
+        return
+    with st.popover("Add author", width="stretch"):
+        st.caption("Add to highlighted authors (Save to keep).")
+        for i, name in enumerate(addable):
+            st.button(
+                name,
+                key=f"add_author_{scope}_{paper_id}_{i}_{name}",
+                on_click=_add_named_author,
+                args=(name,),
+            )
+
+
 # ────────────────────────── Fetching with cache ──────────────────────────
 
 def _pastweek_feeds_to_fetch(feeds_key: Tuple[Tuple[str, str], ...]) -> list[str]:
@@ -540,9 +572,147 @@ def _reset_widget_state(*keys: str) -> None:
 
 # ────────────────────────── Sidebar ──────────────────────────
 
+# ────────────────────────── Sync with a digest server ──────────────────────────
+#
+# Two-way sync (docs/deploy.md): the server is the source of truth. The GUI
+# downloads config + removed papers at session start and on request, and
+# uploads on Save / Write project config / remove / restore. Offline it keeps
+# working from the local copy (arxiv_config.json / removal files), says so, and
+# marks the settings `pending`: the next upload or session start then pushes
+# everything before anything is downloaded, so offline changes aren't lost.
+
+def _sync_settings() -> sync_client.SyncSettings:
+    return sync_client.load_settings()
+
+
+def _sync_call(action) -> bool:
+    """Run `action(client)` when sync is on; record and report offline."""
+    s = _sync_settings()
+    if not (s.enabled and s.initialized):
+        return False
+    try:
+        action(sync_client.SyncClient(s))
+    except sync_client.SyncError as exc:
+        st.session_state.sync_error = str(exc)
+        return False
+    st.session_state.sync_error = None
+    return True
+
+
+def _sync_push(c: sync_client.SyncClient) -> None:
+    """Make the server match this computer: config, then removed papers.
+
+    Only the differences are sent, so a push cut off halfway is finished by the next one.
+    """
+    try:
+        with _removed_ids_lock():
+            local = _read_removed_ids(loaded_profile())
+    except (OSError, ValueError) as exc:  # never push an unreadable list as "nothing removed"
+        raise sync_client.SyncError(f"Can't read {removed_papers_path(loaded_profile())} ({exc}).") from exc
+    c.put_config(cfg())
+    server = c.get_removed()
+    if server - local:
+        c.restore(sorted(server - local))
+    for arxiv_id in sorted(local - server):
+        c.remove(arxiv_id)
+
+
+def _sync_write(action) -> None:
+    """Send a local change; if that fails, push everything on the next try."""
+    s = _sync_settings()
+    if not (s.enabled and s.initialized):
+        return
+    ok = _sync_call(_sync_push if s.pending else action)
+    if s.pending == ok:  # just went offline, or just caught up
+        sync_client.save_settings(replace(s, pending=not ok))
+
+
+def _sync_upload_config() -> None:
+    _sync_write(lambda c: c.put_config(cfg()))
+
+
+def _sync_download() -> bool:
+    """Replace the session config and removals with the server's; keep a local copy."""
+    got: dict = {}
+
+    def pull(c: sync_client.SyncClient) -> None:
+        got["cfg"], got["removed"] = c.get_config(), c.get_removed()
+
+    if not _sync_call(pull):
+        return False
+    st.session_state.cfg = got["cfg"]
+    _reset_widget_state()
+    try:
+        got["cfg"].dump(PROJECT_CONFIG)  # offline copy, and what the CLI reads
+        save_removed_ids(loaded_profile(), got["removed"])
+    except (OSError, ValueError) as exc:
+        st.toast(f"Synced, but couldn't write the local copy ({exc}).", icon="⚠️")
+    if (s := _sync_settings()).pending:
+        sync_client.save_settings(replace(s, pending=False))  # the server's version won
+    return True
+
+
+def render_sync_section() -> None:
+    s = _sync_settings()
+    with st.expander("🔄 Sync with server" + (" · on" if s.enabled and s.initialized else ""),
+                     expanded=s.enabled and not s.initialized):
+        st.caption("Share config and removed papers with the iPhone app and other computers "
+                   "through a digest server (see docs: *Sync across devices*).")
+        server = st.text_input("Server address", value=s.server, placeholder="http://192.168.1.20:8000",
+                               key="sync_server")
+        token = st.text_input("Access token", value=s.token, type="password", key="sync_token")
+        if (server.strip().rstrip("/"), token) != (s.server, s.token):
+            if st.button("Connect", key="sync_connect"):
+                sync_client.save_settings(sync_client.SyncSettings(server=server, token=token))
+                st.rerun()
+        if not s.enabled:
+            return
+        if not s.initialized:
+            st.info("First connection: whose config should both sides use?")
+            c1, c2 = st.columns(2)
+            if c1.button("Use server's", key="sync_use_server", width="stretch"):
+                sync_client.save_settings(replace(s, initialized=True))
+                if not _sync_download():
+                    sync_client.save_settings(s)  # stay undecided until it works
+                st.rerun()
+            if c2.button("Upload mine", key="sync_upload_mine", width="stretch"):
+                # Decided now; if the push fails, `pending` finishes it on the next try.
+                sync_client.save_settings(replace(s, initialized=True, pending=True))
+                _sync_write(_sync_push)
+                st.rerun()
+        else:
+            c1, c2 = st.columns(2)
+            if c1.button("⬆ Save to server", key="sync_up", width="stretch"):
+                _sync_upload_config()
+            if c2.button("⬇ Download", key="sync_down", width="stretch") and _sync_download():
+                st.rerun()
+            if st.button("Stop syncing", key="sync_off"):
+                sync_client.save_settings(sync_client.SyncSettings())
+                st.session_state.sync_error = None
+                st.rerun()
+        if err := st.session_state.get("sync_error"):
+            st.warning(f"Offline: {err} Using the local copy; your changes go to the server "
+                       "with the next save or the next start of the GUI.")
+
+
+def _sync_on_session_start() -> None:
+    """Once per browser session: take the server's config if sync is on,
+    after sending any changes made offline."""
+    if st.session_state.get("sync_started"):
+        return
+    st.session_state.sync_started = True
+    if _sync_settings().pending:
+        _sync_write(_sync_push)
+    else:
+        _sync_download()
+
+
 def render_sidebar():
     with st.sidebar:
         st.title("arXiv Digest")
+        # Release check is cached on disk for 24 h, so GitHub is asked at most daily.
+        if latest := update_check.newer_release():
+            st.caption(f"✨ arxiv-digest {latest} is available. Run `arxiv-digest update` in a terminal.")
 
         st.subheader("Profile")
         profiles = list_profiles()
@@ -568,6 +738,7 @@ def render_sidebar():
         st.caption(
             f"Loaded profile: **{loaded_profile()}**" if loaded_profile() else "No profile loaded."
         )
+        render_sync_section()
 
         st.divider()
 
@@ -707,7 +878,7 @@ def render_sidebar():
 
 _PAPER_CSS = """
 <style>
-.paper-title { font-size: 1.35rem; font-weight: 700; line-height: 1.3; margin: 0 0 .15rem 0; }
+.paper-title { display: block; font-size: 1.35rem; font-weight: 700; line-height: 1.3; margin: 0 0 .15rem 0; }
 .paper-authors { font-size: 1.02rem; color: #e6edf3; margin: 0 0 .25rem 0; }
 .paper-meta { font-size: .9rem; color: #8b949e; margin: .25rem 0 0 0; }
 .paper-meta a { color: #58a6ff; text-decoration: none; }
@@ -803,8 +974,9 @@ def _highlight_terms(
                 continue
             for m in pat.finditer(text):
                 spans.append((m.start(), m.end(), kind))
-    if not spans:
-        return html.escape(text)
+    # Inline LaTeX is left to Streamlit's KaTeX: never highlight inside it.
+    math = [(m.start(), m.end()) for m in _MATH_RE.finditer(text)]
+    spans = [s for s in spans if not any(s[0] < b and a < s[1] for a, b in math)]
 
     spans.sort(key=lambda s: (s[0], -(s[1] - s[0])))
     chosen: list[tuple[int, int, str]] = []
@@ -814,11 +986,20 @@ def _highlight_terms(
             chosen.append(s)
             last_end = s[1]
 
+    def plain(a: int, b: int) -> str:
+        """text[a:b] with its math kept for KaTeX and everything else literal."""
+        parts, i = [], a
+        for ma, mb in math:
+            if ma >= a and mb <= b:
+                parts += [_md_text(text[i:ma]), _math_text(text[ma:mb])]
+                i = mb
+        return "".join(parts) + _md_text(text[i:b])
+
     out: list[str] = []
     i = 0
     for start, end, kind in chosen:
-        out.append(html.escape(text[i:start]))
-        frag = html.escape(text[start:end])
+        out.append(plain(i, start))
+        frag = _md_text(text[start:end])
         if kind == "kw":
             tip = f"core keyword (+{kw_bonus})"
             color = color_kw
@@ -835,8 +1016,30 @@ def _highlight_terms(
             f'<span class="hl-tip">{tip}</span></span>'
         )
         i = end
-    out.append(html.escape(text[i:]))
+    out.append(plain(i, len(text)))
     return "".join(out)
+
+
+# Inline math as Streamlit's Markdown (remark-math) delimits it. Card text is
+# rendered as Markdown with inline HTML, so math must stay verbatim and stay
+# out of block-level HTML such as <div> (Markdown isn't parsed inside those).
+_MATH_RE = re.compile(r"\$\$.+?\$\$|(?<!\\)\$[^$]+?(?<!\\)\$|\\\(.+?\\\)", re.S)
+_MD_SPECIAL_RE = re.compile(r"([\\`*_\[\]#~|$])")
+
+
+def _md_text(s: str) -> str:
+    """Plain text for Markdown-with-HTML: escape HTML and Markdown syntax."""
+    return _MD_SPECIAL_RE.sub(r"\\\1", html.escape(s, quote=False))
+
+
+def _math_text(s: str) -> str:
+    """A math span for KaTeX: verbatim, but `<`/`>` as \\lt/\\gt (no raw HTML)."""
+    return s.replace("<", r"\lt ").replace(">", r"\gt ")
+
+
+def _card_block(css_class: str, inner_html: str) -> str:
+    """Block-styled span: a <div> would stop Markdown (and KaTeX) inside it."""
+    return f'<span class="{css_class}">{inner_html}</span>'
 
 
 def _rgba(hex_color: str, alpha: float) -> str:
@@ -964,10 +1167,12 @@ def _remove_paper(arxiv_id: str) -> None:
     place and the first one past the top-N cutoff takes the freed slot.
     """
     _update_removed_ids_or_warn(loaded_profile(), add={arxiv_id})
+    _sync_write(lambda c: c.remove(arxiv_id))
 
 
 def _restore_papers(arxiv_ids: list[str]) -> None:
     _update_removed_ids_or_warn(loaded_profile(), discard=arxiv_ids)
+    _sync_write(lambda c: c.restore(arxiv_ids))
 
 
 def _render_removed_papers(removed: list[dict]) -> None:
@@ -1133,9 +1338,9 @@ def render_papers_tab():
                 if cfg().highlight_terms_title:
                     title_html = _hl(e["title"])
                 else:
-                    title_html = html.escape(e["title"])
+                    title_html = _highlight_terms(e["title"], [], [], 0, 0)
                 st.markdown(
-                    f'<div class="paper-title">{e["rank"]}. {title_html}</div>',
+                    _card_block("paper-title", f'{e["rank"]}\\. {title_html}'),
                     unsafe_allow_html=True,
                 )
                 if cfg().highlight_authors:
@@ -1173,6 +1378,7 @@ def render_papers_tab():
             with score_col:
                 st.metric("Score", e["score"])
                 _render_zotero_save_button(e["id"], e["title"])
+                _render_add_author(e["authors"], paper_id=e["id"])
             with remove_col:
                 st.button(
                     "✕",
@@ -1190,7 +1396,7 @@ def render_papers_tab():
                 abstract = paper_by_id.get(e["id"], {}).get("abstract", "") or "(unavailable)"
                 if cfg().highlight_terms_abstract and abstract != "(unavailable)":
                     st.markdown(
-                        f'<div class="paper-abstract">{_hl(abstract)}</div>',
+                        _card_block("paper-abstract", _hl(abstract)),
                         unsafe_allow_html=True,
                     )
                 else:
@@ -1390,6 +1596,7 @@ def render_profiles_tab():
             if _copy_removed_ids_or_warn(loaded_profile(), target):
                 save_profile(cfg(), target)
                 _set_loaded_profile(target)
+                _sync_upload_config()
                 st.success(f"Saved profile '{target}'.")
                 st.rerun()
 
@@ -1437,6 +1644,7 @@ def render_profiles_tab():
     st.caption("Persists the current config so the CLI picks it up on the next run.")
     if st.button("Write project config"):
         cfg().dump(PROJECT_CONFIG)
+        _sync_upload_config()
         st.success(f"Wrote {PROJECT_CONFIG}")
 
     uploaded = st.file_uploader("Import profile from JSON", type="json")
@@ -1651,6 +1859,7 @@ def render_score_tab():
 
         st.divider()
         _render_zotero_save_button(paper_id, paper["title"], scope="score")
+        _render_add_author(paper["authors"], scope="score", paper_id=paper_id)
 
 
 # ────────────────────────── Main ──────────────────────────
@@ -1658,6 +1867,7 @@ def render_score_tab():
 def main():
     st.set_page_config(page_title="arXiv Digest", layout="wide")
     init_state()
+    _sync_on_session_start()
     render_sidebar()
 
     tab_papers, tab_score, tab_kw, tab_authors, tab_lp, tab_feeds, tab_scoring, tab_profiles = st.tabs(

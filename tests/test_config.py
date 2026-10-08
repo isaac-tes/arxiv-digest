@@ -238,3 +238,19 @@ def test_dumped_config_is_valid_json(tmp_path):
     data = json.loads(p.read_text())
     assert "weights" in data
     assert data["weights"]["core_keyword"] == 6
+
+
+def test_from_json_keeps_explicitly_empty_term_lists():
+    # A cleared list must stay cleared; only a missing key means "defaults".
+    cfg = Config.from_json({"core_keywords": [], "named_authors": [], "low_priority_kw": []})
+    assert cfg.core_keywords == []
+    assert cfg.named_authors == []
+    assert cfg.low_priority_kw == []
+
+
+def test_from_json_missing_or_null_term_lists_use_defaults():
+    defaults = Config()
+    cfg = Config.from_json({"named_authors": None})
+    assert cfg.core_keywords == defaults.core_keywords
+    assert cfg.named_authors == defaults.named_authors
+    assert cfg.low_priority_kw == defaults.low_priority_kw

@@ -44,3 +44,28 @@ def empty_cfg():
 @pytest.fixture
 def sample_feed_html():
     return (Path(__file__).parent / "fixtures" / "sample_feed.html").read_text()
+
+
+@pytest.fixture(autouse=True)
+def _offline_update_check(monkeypatch, tmp_path):
+    """Keep the GitHub release check offline and out of ~/.arxiv_scraper in
+    every test (the GUI and CLI both call it); tests that exercise it patch
+    `urlopen` / `CACHE_PATH` themselves, which overrides this."""
+    import update_check
+
+    def offline(*a, **k):
+        raise OSError("network disabled in tests")
+
+    monkeypatch.setattr(update_check, "CACHE_PATH", tmp_path / "update_check.json")
+    monkeypatch.setattr(update_check.urllib.request, "urlopen", offline)
+
+
+@pytest.fixture(autouse=True)
+def _no_real_sync(monkeypatch, tmp_path):
+    """Never read the user's ~/.arxiv_scraper/sync.json or sync env vars, so no
+    test talks to a real digest server; sync tests set their own settings."""
+    import sync_client
+
+    monkeypatch.setattr(sync_client, "SETTINGS_PATH", tmp_path / "sync-settings.json")
+    monkeypatch.delenv("ARXIV_DIGEST_SERVER", raising=False)
+    monkeypatch.delenv("ARXIV_DIGEST_TOKEN", raising=False)

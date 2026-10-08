@@ -25,7 +25,7 @@ from importlib.util import find_spec
 from pathlib import Path
 
 REPO_URL = "https://github.com/isaac-tes/arxiv-digest"
-GIT_URL = f"{REPO_URL}.git"
+GIT_URL = f"git+{REPO_URL}.git"  # PEP 508 VCS reference needs the git+ scheme
 LATEST_RELEASE_URL = f"https://api.github.com/repos/isaac-tes/arxiv-digest/releases/latest"
 
 CACHE_PATH = Path("~/.arxiv_scraper/update_check.json").expanduser()
@@ -118,6 +118,20 @@ def _latest_release() -> str | None:
     return latest
 
 
+def newer_release(current_version: str | None = None) -> str | None:
+    """The latest release tag if it is newer than the installed version.
+
+    Uses the 24 h cached GitHub lookup; None when up to date, offline, or on
+    any error, so callers (CLI notice, GUI sidebar) never fail because of it.
+    """
+    try:
+        current = current_version or _current_version()
+        latest = _latest_release()
+        return latest if latest and _parse_version(latest) > _parse_version(current) else None
+    except Exception:
+        return None
+
+
 def check_for_update(current_version: str | None = None) -> str | None:
     """Return a one-line update notice if a newer release exists, else None.
 
@@ -133,8 +147,8 @@ def check_for_update(current_version: str | None = None) -> str | None:
     """
     try:
         current = current_version or _current_version()
-        latest = _latest_release()
-        if latest and _parse_version(latest) > _parse_version(current):
+        latest = newer_release(current)
+        if latest:
             method = _detect_install_method()
             if method:
                 return (

@@ -70,7 +70,7 @@ uv run python arxiv_digest.py --list-config --no-config              # inspect b
 uv run python arxiv_digest.py --timeframe today --include-replacements      # keep 'Replacement submissions'
 uv run streamlit run arxiv_gui.py                                    # Streamlit GUI
 uv run mkdocs build --strict                                         # docs build / link check
-uv run pytest                                                        # 217-test suite, ~2s, no network
+uv run pytest                                                        # ~320-test suite, ~9s, no network
 ```
 
 CLI uses `--timeframe {today,pastweek}`. There are no `--today` / `--pastweek` / `--days` flags despite older docs — confirm with `--help`. `--include-replacements` keeps arXiv "Replacement submissions" (hidden by default; only present in the `today`/`/new` feed).
@@ -79,7 +79,7 @@ CLI uses `--timeframe {today,pastweek}`. There are no `--today` / `--pastweek` /
 
 `arxiv_digest.py` is the single-file CLI; `arxiv_gui.py` is a Streamlit GUI that imports from it. Data flow:
 
-1. **Config** (`Config` dataclass + `ScoringWeights` dataclass) — loaded from `arxiv_config.json` if present, then mutated by CLI flags via `apply_cli_modifications`. Persisted with `--save-config`. The GUI reads/writes the same file. Also persists: `include_replacements`, `feed_weights`, and the three GUI display toggles (`highlight_authors` / `highlight_terms_title` / `highlight_terms_abstract`).
+1. **Config** (`Config` dataclass + `ScoringWeights` dataclass) — loaded from `arxiv_config.json` if present, then mutated by CLI flags via `apply_cli_modifications`. Persisted with `--save-config`. The GUI reads/writes the same file. Also persists: `include_replacements`, `feed_weights`, and the GUI display toggles (`highlight_authors` / `highlight_terms_title` / `highlight_terms_abstract` / `highlight_terms_summary`) and highlight colors.
 2. **Fetch** — `fetch_feeds` → `fetch_feed` scrapes arXiv HTML list pages (BeautifulSoup). Each paper keeps its section header in `paper["section"]` (e.g. `New submissions…` / `Cross submissions…` / `Replacement submissions…` on `/new`, or a date like `Fri, 19 Jun 2026` on `/pastweek`). Missing abstracts are back-filled in parallel via `ThreadPoolExecutor` calling `fetch_abstract`.
 3. **Filter** — `filter_papers(papers, include_replacements, days)` drops `Replacement submissions` by default (cross-lists kept) and optionally restricts to specific day labels. Helpers: `section_category`, `section_day_label`, `available_day_labels`. Applied post-fetch so the GUI re-filters without re-fetching.
 4. **Score** (`score_paper`) — delegates to `explain_score(paper, cfg)` which returns a per-rule breakdown. Scalar weights live in `cfg.weights`; **subject scoring is `cfg.feed_weights`** (a bonus per feed name found in a paper's subjects — defaults quant-gas 4 / mes-hall 4 / quant-ph 2 via `_default_feed_weights`). Named-author matches the author field **only**, not title/abstract. Keyword/author/low-priority matching is **whole-word by default** via `term_matches`/`term_pattern` (`(?<!\w)term(?!\w)`), gated by `cfg.word_boundary_matching` (set `False` for legacy substring); subjects/`feed_weights` always stay substring so a parent feed `cond-mat` still matches `cond-mat.quant-gas`. Defaults: +6 per keyword/author, per-feed subject bonus, −5 once if any low-priority hit, +1 long-abstract bonus.
@@ -94,9 +94,13 @@ Feed URLs encode the timeframe: `/new` = today, while `pastweek` uses a true sev
 
 Starter presets must remain generic and must not reintroduce personal or group-specific author names; `tests/test_presets.py::test_every_preset_has_authors` guards this boundary.
 
-GUI display: `arxiv_gui.py` hover-highlights authors (in the author list), and matched keywords/low-priority terms in the title + abstract via `_highlight_terms`; toggled by the three `highlight_*` config flags. The highlighters reuse the scorer's `ad.term_pattern` (honoring `word_boundary_matching`), so highlights and scores never diverge. Streamlit strips the `title` attribute, so tooltips use CSS (`.tip`/`.hl-tip`), not `title=`.
+GUI display: `arxiv_gui.py` hover-highlights authors (in the author list), and matched keywords/low-priority terms in the title, abstract and (optionally) summary via `_highlight_terms`; toggled by the four `highlight_*` config flags. Inline LaTeX (`$...$`) is left verbatim for Streamlit's KaTeX: card text is a block-styled `<span>`, never a `<div>` (Markdown isn't parsed inside HTML blocks). The highlighters reuse the scorer's `ad.term_pattern` (honoring `word_boundary_matching`), so highlights and scores never diverge. Streamlit strips the `title` attribute, so tooltips use CSS (`.tip`/`.hl-tip`), not `title=`.
 
-Tests live in `tests/`; run with `uv run pytest` (217 tests). `requests.get` is monkey-patched, so no network calls hit arXiv during the suite. GUI tests use `streamlit.testing.v1.AppTest` (headless).
+Tests live in `tests/`; run with `uv run pytest` (~320 tests). `requests.get` is monkey-patched, so no network calls hit arXiv during the suite. GUI tests use `streamlit.testing.v1.AppTest` (headless).
+
+**Sync with a digest server** (`sync_client.py`, GUI sidebar): optional two-way sync of the config and removed papers with the FastAPI service in `server/` (the iOS app's Server mode). The server is the source of truth; offline the GUI keeps working from `arxiv_config.json`. Settings: `~/.arxiv_scraper/sync.json` (0600) or `ARXIV_DIGEST_SERVER` / `ARXIV_DIGEST_TOKEN`. User docs: `docs/deploy.md`; iOS app: `ios/HANDOFF.md`.
+
+**GUI tests must never touch real user files.** `AppTest` re-executes `arxiv_gui.py`, so patching `arxiv_gui.PROJECT_CONFIG` etc. has no effect; patch `Path.home` and `ad.DEFAULT_CONFIG_PATH` (see `tests/test_sync_client.py::fake_server`). `tests/conftest.py` already keeps the update check and sync settings away from `~/.arxiv_scraper`.
 
 ## Contributing & git conventions
 

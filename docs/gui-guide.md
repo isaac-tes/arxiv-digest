@@ -223,8 +223,20 @@ CLI workflow by loading it, then clicking **Write project config**.
     project-config save captures the *current* live config, so apply your tab
     edits first, otherwise they won't be included.
 
+## Moving settings to the iPhone (and back)
+
+Two ways, both described step by step in [Sync across devices](deploy.md):
+
+- **Copy one file, no server**: **Profiles → Export** a profile, AirDrop the
+  `.json` to the iPhone and open it with *arXiv Digest*; the other way, the
+  app's Settings → **Config file → Export config**, then **Profiles → Import
+  profile from JSON** here. See [Copy the config file](deploy.md#copy-the-config-file-without-a-server).
+- **Keep them in sync**: run the digest server, then sidebar → **🔄 Sync with
+  server** here and Settings → Connection → **Server** in the app. See
+  [Connect each device](deploy.md#5-connect-each-device).
+
 ## Tips
 
 - The score breakdown is the fastest way to figure out why a low-priority hit overshadowed a keyword match. Open it before re-tweaking weights blindly.
 - Profiles are pure JSON; you can hand-edit them outside the GUI or check them into a separate dotfiles repo.
-- The GUI never writes back to `arxiv_config.json` automatically. You must press **Write project config** in the Profiles tab. That keeps surprises out of your CLI workflow.
+- Without sync, the GUI never writes back to `arxiv_config.json` automatically. You must press **Write project config** in the Profiles tab. That keeps surprises out of your CLI workflow. (With **Sync with server** on, downloading from the server also updates `arxiv_config.json`, so the CLI follows the shared config.)

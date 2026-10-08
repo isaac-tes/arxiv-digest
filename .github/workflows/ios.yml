@@ -1,0 +1,101 @@
+name: iOS app + digest service
+
+on:
+  push:
+    branches: [main, feat/swift_ios]
+    paths:
+      - "ios/**"
+      - "server/**"
+      - "arxiv_digest.py"
+      - "zotero_bridge.py"
+      - ".github/workflows/ios.yml"
+  workflow_dispatch:
+
+jobs:
+  server:
+    name: Digest service tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - name: Run server tests
+        working-directory: server
+        run: |
+          uv sync --extra dev
+          uv run pytest
+
+  swift-linux:
+    name: Swift core tests (Linux)
+    runs-on: ubuntu-latest
+    container: swift:6.2
+    steps:
+      - uses: actions/checkout@v4
+      - name: swift test
+        working-directory: ios
+        run: swift test
+
+  ios:
+    name: iOS build + screenshots
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: swift test (macOS)
+        working-directory: ios
+        run: swift test
+
+      - name: Generate Xcode project
+        working-directory: ios
+        run: |
+          brew install xcodegen
+          xcodegen generate
+
+      - name: Pick an iPhone simulator
+        id: sim
+        run: |
+          UDID=$(xcrun simctl list devices available -j | python3 -c '
+          import json, sys
+          devs = json.load(sys.stdin)["devices"]
+          best = None
+          for runtime, items in devs.items():
+              if "iOS" not in runtime:
+                  continue
+              ver = tuple(int(x) for x in runtime.split("iOS-")[-1].split("-"))
+              for d in items:
+                  if d["name"].startswith("iPhone") and "Pro" in d["name"] and "Max" not in d["name"]:
+                      if best is None or ver > best[0]:
+                          best = (ver, d["udid"], d["name"])
+          print(best[1])
+          sys.stderr.write(f"Using {best[2]} iOS {best[0]}\n")
+          ')
+          echo "udid=$UDID" >> "$GITHUB_OUTPUT"
+
+      - name: Build app for simulator
+        working-directory: ios
+        run: |
+          set -o pipefail
+          xcodebuild -project ArxivDigest.xcodeproj -scheme ArxivDigestApp \
+            -configuration Debug -sdk iphonesimulator \
+            -destination "id=${{ steps.sim.outputs.udid }}" \
+            -derivedDataPath build CODE_SIGNING_ALLOWED=NO build 2>&1 \
+            | grep -E "error|warning: |BUILD" | grep -v "^ld: warning" | tail -n 120
+
+      - name: Boot simulator and install
+        run: |
+          xcrun simctl boot "${{ steps.sim.outputs.udid }}" || true
+          xcrun simctl bootstatus "${{ steps.sim.outputs.udid }}" -b
+          xcrun simctl install "${{ steps.sim.outputs.udid }}" ios/build/Build/Products/Debug-iphonesimulator/ArxivDigest.app
+
+      - name: Screenshots (demo mode)
+        run: SETTLE=8 ios/scripts/screenshots.sh "${{ steps.sim.outputs.udid }}" screenshots
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ios-screenshots
+          path: screenshots/

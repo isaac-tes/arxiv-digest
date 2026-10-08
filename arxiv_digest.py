@@ -211,6 +211,19 @@ def _hydrate_feed_weights(data: Dict[str, object]) -> Dict[str, int]:
     return fw
 
 
+def _term_list(data: Dict[str, object], key: str, default) -> List[str]:
+    """A keyword/author/low-priority list from a config blob.
+
+    A list that is present is kept as is, even when empty: a user who cleared
+    their authors must not get the built-in defaults back on reload. Only a
+    missing (or null) key falls back to the defaults.
+    """
+    value = data.get(key)
+    if isinstance(value, list):
+        return [str(v) for v in value]
+    return default()
+
+
 @dataclass
 class ScoringWeights:
     core_keyword: int = 6
@@ -310,9 +323,9 @@ class Config:
                 "cond-mat": "https://arxiv.org/list/cond-mat/new",
             },
             default_feeds=default_feeds or list(DEFAULT_FEEDS),
-            core_keywords=list(data.get("core_keywords") or _default_core_keywords()),
-            named_authors=list(data.get("named_authors") or _default_named_authors()),
-            low_priority_kw=list(data.get("low_priority_kw") or _default_low_priority_kw()),
+            core_keywords=_term_list(data, "core_keywords", _default_core_keywords),
+            named_authors=_term_list(data, "named_authors", _default_named_authors),
+            low_priority_kw=_term_list(data, "low_priority_kw", _default_low_priority_kw),
             top_n=int(data.get("top_n") or 20),
             timeframe=str(data.get("timeframe") or "pastweek"),
             include_replacements=bool(data.get("include_replacements", False)),
@@ -1484,11 +1497,43 @@ def format_score_breakdown(paper: dict, breakdown: dict) -> str:
     return "\n".join(lines)
 
 
+# Words ending in "." that don't end a sentence in abstracts ("Roy et al.",
+# "Nat. Commun.", "Fig. 2", "e.g."). Compared lower-case, without the dot.
+_ABBREVIATIONS = frozenset(
+    "al e.g i.e cf vs fig figs eq eqs ref refs sec secs no vol nat phys rev lett "
+    "commun sci natl acad proc approx resp dr prof".split()
+)
+
+
 def summarize(text: str) -> str:
+    """The first two sentences, whitespace collapsed.
+
+    A sentence ends at `.`, `!` or `?` followed by a space, except inside
+    parentheses, after a known abbreviation, or after a single-letter initial,
+    so a citation like "Roy et al. (Nat. Commun. 17, 2853 (2026))" isn't cut.
+    """
     cleaned = re.sub(r"\s+", " ", (text or "").strip())
     if not cleaned:
         return "(No abstract available.)"
-    sentences = re.split(r"(?<=[.!?])\s+", cleaned)
+    sentences: List[str] = []
+    start = depth = 0
+    # A stray "(" would otherwise swallow the whole abstract into one sentence.
+    track_parens = cleaned.count("(") == cleaned.count(")")
+    for i, ch in enumerate(cleaned):
+        if ch == "(" and track_parens:
+            depth += 1
+        elif ch == ")" and track_parens:
+            depth = max(depth - 1, 0)
+        elif ch in ".!?" and depth == 0 and cleaned[i + 1 : i + 2] == " ":
+            word = cleaned[start:i].rsplit(" ", 1)[-1]
+            if ch == "." and (word.lower() in _ABBREVIATIONS or (len(word) == 1 and word.isalpha())):
+                continue
+            sentences.append(cleaned[start : i + 1])
+            start = i + 2
+            if len(sentences) == 2:
+                break
+    if len(sentences) < 2 and start < len(cleaned):
+        sentences.append(cleaned[start:])
     return " ".join(sentences[:2])
 
 
