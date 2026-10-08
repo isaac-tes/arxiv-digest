@@ -115,9 +115,8 @@ Verified by hand on 2026-10-08 (simulator + live arXiv + a real server): the
 standalone device checklist (connect, past-week fetch, re-rank on save, removals,
 Score tab, presets, today listing), KaTeX light/dark, light-mode contrast, author menu, token flow
 (401/403/200, no CORS, SSRF 422), GUI sync round-trip, config file import from a
-GUI export, GUI LaTeX in Safari. **Not verified on a physical phone after the last
-round**: Export config via AirDrop, opening a `.json` from Files, access-token
-entry on device.
+GUI export, GUI LaTeX in Safari. The user then checked the app on a physical
+iPhone the same day and reported no problems.
 
 ---
 
