@@ -20,6 +20,12 @@ def main() -> int:
             file=sys.stderr,
         )
         return 1
+    import update_check
+
+    # Same once-a-day release check as the CLI; silent when offline.
+    notice = update_check.check_for_update()
+    if notice:
+        print(notice, file=sys.stderr)
     app = Path(__file__).resolve().parent / "arxiv_gui.py"
     # Auto-open the browser so the GUI pops up without manually pasting the
     # localhost URL. Streamlit's server.headless defaults to false (open the

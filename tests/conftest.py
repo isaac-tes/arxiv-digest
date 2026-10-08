@@ -44,3 +44,17 @@ def empty_cfg():
 @pytest.fixture
 def sample_feed_html():
     return (Path(__file__).parent / "fixtures" / "sample_feed.html").read_text()
+
+
+@pytest.fixture(autouse=True)
+def _offline_update_check(monkeypatch, tmp_path):
+    """Keep the GitHub release check offline and out of ~/.arxiv_scraper in
+    every test (the GUI and CLI both call it); tests that exercise it patch
+    `urlopen` / `CACHE_PATH` themselves, which overrides this."""
+    import update_check
+
+    def offline(*a, **k):
+        raise OSError("network disabled in tests")
+
+    monkeypatch.setattr(update_check, "CACHE_PATH", tmp_path / "update_check.json")
+    monkeypatch.setattr(update_check.urllib.request, "urlopen", offline)

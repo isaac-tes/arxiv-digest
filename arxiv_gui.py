@@ -24,6 +24,7 @@ import pandas as pd
 import streamlit as st
 
 import arxiv_digest as ad
+import update_check
 import zotero_bridge as zb
 
 PROFILES_DIR = Path.home() / ".arxiv_scraper" / "profiles"
@@ -573,6 +574,9 @@ def _reset_widget_state(*keys: str) -> None:
 def render_sidebar():
     with st.sidebar:
         st.title("arXiv Digest")
+        # Release check is cached on disk for 24 h, so GitHub is asked at most daily.
+        if latest := update_check.newer_release():
+            st.caption(f"✨ arxiv-digest {latest} is available. Run `arxiv-digest update` in a terminal.")
 
         st.subheader("Profile")
         profiles = list_profiles()

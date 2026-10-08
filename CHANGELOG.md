@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Update notice for `arxiv-gui`**: launching the GUI prints the same one-line "newer release available, run `arxiv-digest update`" notice as the CLI, and the GUI sidebar shows a small note under the title. Both use the existing release check, which asks GitHub at most once a day and stays silent offline.
+- **iOS Standalone mode ("On this device")**, now the default for new installs: the app fetches the past week from the arXiv export API and today's `/new` listing, scores on the phone with a Swift port of the engine (parity-tested against the Python engine), and keeps config and removed papers on the device. No server needed (ADR 0009).
+- **iOS math rendering**: inline LaTeX shows as Unicode in titles and lists, and the paper page typesets math abstracts with bundled KaTeX (offline).
 - **Add author from a paper**: an *Add author* popover on each GUI paper card (and the Score result) and an authors menu in the iOS paper detail append that paper's author to the highlighted authors. It edits the working config only; Save applies it.
 - **iOS app reaches parity with the web GUI** (`ios/`, branch `feat/swift_ios`). Four tabs:
   - **Papers**: the ranked digest for the saved timeframe and Top N, a day picker for past-week fetches, search over title/authors/abstract, swipe (or long-press) to remove a paper with Undo, a *Removed papers* section with Restore / Restore all, fetch notices, and Markdown/JSON export in the GUI's formats. Cards highlight keywords, named authors and feed-bonus subjects the way the GUI does.
@@ -18,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Digest service**: `GET /digest` takes `day`, skips the user's removed papers while ranking, and returns abstracts, breakdowns, removed papers, available days, filter counts and fetch notices. New `/removed` endpoints; `/config/defaults`, `/config/presets/info` and `/config/presets/{name}/load`; preset load/merge accept the working config and `save=false`.
 
 ### Changed
+- **iOS highlights**: the dotted underline is off by default (Settings → Display → *Underline highlights*), and highlight text is darkened in light mode for readable contrast.
 - **Digest service fetches the past week like the CLI**: through the arXiv export API with a true seven-day window (`fetch_pastweek`), not the unreliable `/pastweek` HTML listing. The fetch cache now holds raw papers keyed on the resolved feeds, so editing keywords, weights, the day or removals re-ranks without re-fetching, and changing feeds can no longer serve another feed set's cache.
 - **Score a paper (service)** reports the rank shown in the Papers view or why the paper is absent, like the GUI. A paper already in the fetched digest is scored from it, so scoring keeps working while arXiv's export API is rate-limiting.
 - **`GET /config` returns the effective config** with every field filled in; invalid configs are rejected with 422.
