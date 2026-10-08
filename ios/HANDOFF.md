@@ -1,123 +1,162 @@
-# iOS app — session handoff
+# Handoff — `feat/swift_ios` (iOS app, digest server, GUI sync)
 
-_Last updated: 2026-10-08 · branch `feat/swift_ios`_
+_Last updated: 2026-10-08 · branch `feat/swift_ios` · ~47 commits ahead of `main` (v0.6.3)_
 
-Living handoff for the native iOS app: what exists, how to run it, what's left.
-Decisions live in ADRs (`docs/adr/`), terms in `CONTEXT.md`. Beads data is
-local to the Mac; ids in brackets refer to it.
+Start here for the next round. It covers **everything this branch changes
+compared with `main`**, how to run and verify it, and what's left. Decisions live
+in ADRs (`docs/adr/`, not on the public site), terms in `CONTEXT.md`, user docs in
+`docs/ios-app.md` and `docs/deploy.md`. Beads data is local to the Mac; ids in
+brackets refer to it (never push beads/Dolt data to GitHub).
 
-## Architecture in one line
+---
 
-The app is a **thin client** of the FastAPI **digest service** (`server/`), which
-wraps the same `arxiv_digest.py` engine as the CLI and GUI (ADR 0002). The server
-computes the Papers view: filters, day, removed papers, top-N (ADR 0008). The app
-renders it and edits config. **Demo mode** serves an engine-generated sample
-digest in-process, so the app also runs with no server. **Standalone mode**
-(Settings → On this device, ADR 0009) answers the same endpoints in-process
-from a live arXiv fetch scored on the phone (Swift port pinned to the engine by
-parity fixtures); see [`STANDALONE.md`](STANDALONE.md).
+## 1. What this branch adds, by area
 
-## Try it on a Mac (Xcode installed)
+### iOS app (`ios/`, new)
+
+A native SwiftUI app (iOS 17+) mirroring the web GUI: **Papers**, **Score**,
+**Config**, **Settings** tabs. Three connection modes (Settings → Connection):
+
+| Mode | Where fetching/scoring happens | Config + removed papers |
+|---|---|---|
+| **On this device** (default for new installs) | On the phone: Swift port of the engine, arXiv export API for the past week, `/new` listing for today | Application Support on the phone |
+| **Server** | The digest server (`server/`) | On the server, shared by every device |
+| **Demo** | Built-in sample digest | In memory |
+
+- **Architecture**: every screen talks to `APIClient` (the server's JSON). Demo and
+  On-this-device answer the same endpoints in-process through a `URLProtocol` +
+  shared `DigestRouter` (ADR 0009). `ArxivDigestCore` (SwiftPM, builds on Linux)
+  holds all logic; the app target is thin.
+- **Engine parity**: scorer, config hydration, presets, Atom/listing parsers and
+  `summarize` are ported and pinned by fixtures generated from the Python engine
+  (`ios/scripts/make_parity_fixture.py`, `make_demo_fixture.py`). Live check on
+  2026-10-08: top-20 ids and scores identical to the Python engine on the same fetch.
+  Known deliberate differences: `ios/STANDALONE.md` §4.
+- **Features**: day chips, search, remove/undo/restore, Score a paper (rank or
+  absence reason), config editors + presets with an unsaved-changes bar, highlight
+  colors/toggles with light-mode contrast, **math**: Unicode in lists and titles,
+  bundled **KaTeX** (offline, pre-warmed web view) for math abstracts on the paper
+  page, **Add author** from a paper, **Save to Zotero** (server key) or **Share to
+  Zotero**, **Export / Import config** (one JSON file, same format as the GUI's
+  profile export; opens `.json` from AirDrop/Files), access token for Server mode
+  (Keychain).
+- **Install before the App Store**: `docs/ios-app.md` (Xcode, free Apple ID,
+  Developer Mode, renew every 7 days).
+
+### Digest server (`server/`, new)
+
+FastAPI around `arxiv_digest.py`: `/digest` (GUI-equivalent view: day, removals,
+top-N, abstracts, breakdowns, notices; 1 h raw-fetch cache, pastweek via
+`fetch_pastweek`), `/removed`, `/score` (rank or absence reason, 502 on arXiv
+errors), `/config` (+ `/defaults`, presets load/merge with `save=false`),
+`/zotero` (Web API only), `/auth` (remote mode).
+
+**Security (audited 2026-10-08, `server/app/security.py`, ADR 0003 amendment)**:
+local mode answers only its own machine unless `DIGEST_ACCESS_TOKEN` is set, then
+every request except `/health` needs `Authorization: Bearer <token>` (constant-time
+compare); `Host` header checked (DNS rebinding); CORS off by default; feed URLs
+must be on arxiv.org, ≤ 50 feeds (no SSRF); remote mode refuses the default JWT
+secret. **Breaking** for anyone running the server for other devices: set the token.
+
+Removed as unused (ponytail review): `/lists`, `/feedback`, their tables, and the
+unused highlight path.
+
+### GUI + engine (shared files, affect `main` users)
+
+- **Sync with server** (`sync_client.py`, sidebar): optional two-way sync of config
+  and removed papers with the digest server. First connect asks *Use server's* /
+  *Upload mine*; sessions start from the server; Save/Write project config/remove/
+  restore upload; offline keeps working from `arxiv_config.json`. Settings in
+  `~/.arxiv_scraper/sync.json` (0600) or `ARXIV_DIGEST_SERVER` / `ARXIV_DIGEST_TOKEN`.
+- **Add author** popover on each card and in Score a paper.
+- **Update notice** for `arxiv-gui` (terminal + sidebar), using the existing
+  once-a-day release check (`update_check.newer_release`).
+- **Fixes**: inline LaTeX in card titles and full abstracts now renders (cards use
+  block-styled `<span>`, never `<div>`; math kept verbatim); card summaries no longer
+  cut citations like "Roy et al. (Nat. Commun. …)" (`summarize`); explicitly empty
+  keyword/author lists stay empty on config load.
+- **Docs**: `docs/deploy.md` (Sync across devices: server, token, LAN/Tailscale/SSH,
+  systemd/tmux, file copy both ways), `docs/ios-app.md`, GUI guide section,
+  README pointer. `CHANGELOG.md` `[Unreleased]` lists all of it.
+- **Tests**: `tests/conftest.py` keeps the update check and sync settings away from
+  `~/.arxiv_scraper` in every test. GUI tests must patch `Path.home` and
+  `ad.DEFAULT_CONFIG_PATH` (AppTest re-executes the module).
+
+### CI (`.github/workflows/ios.yml`, new)
+
+On pushes to `feat/swift_ios`: server tests (Linux), `swift test` (Linux + macOS),
+app build + screenshots (artifact **ios-screenshots**).
+
+---
+
+## 2. Run and verify
 
 ```bash
-git fetch origin && git switch feat/swift_ios     # or: wt switch feat/swift_ios
-brew install xcodegen                              # once
-cd ios && xcodegen generate && open ArxivDigest.xcodeproj
+uv sync --group dev && uv run pytest                 # root: 319 tests
+cd server && uv sync --extra dev && uv run pytest    # server: 54
+cd ios && swift test                                 # Core: 124 (also on Linux)
+uv run mkdocs build --strict                         # docs
+uv run python ios/scripts/make_parity_fixture.py && git diff --exit-code ios/   # parity
 ```
 
-In Xcode: scheme **ArxivDigestApp**, pick an iPhone simulator, **Run** (⌘R).
-
-- **No server needed:** Settings → Connection → **Demo** → Reload demo. Or edit
-  the scheme (Product → Scheme → Edit Scheme → Run → Arguments) and add `-demo`.
-- **Real digest, no server:** Settings → Connection → **On this device** →
-  Connect (or `-standalone`). The first past-week load fetches arXiv from the
-  phone (~10–40 s); later loads within the hour use the on-device cache.
-- **Real digest on the simulator:** in a second terminal
-  `cd server && uv sync && uv run uvicorn app.main:app` (listens on
-  127.0.0.1:8000), then Settings → Connection → **Server** → `http://127.0.0.1:8000` (plus the
-  access token if the server sets `DIGEST_ACCESS_TOKEN`) → Connect. The first past-week load fetches from arXiv (~30 s); later loads use
-  the server's 1 h cache. To start from your GUI profile:
-  `DIGEST_DEFAULT_CONFIG_PATH=~/.arxiv_scraper/profiles/<name>.json uv run uvicorn app.main:app`.
-- **On your iPhone:** see [`docs/ios-app.md`](../docs/ios-app.md) (development
-  install with a free Apple ID); the app starts in *On this device* mode.
-
-Tests: `cd ios && swift test` (Core, 124 tests, also on Linux), `cd server && uv run pytest`
-(54), `uv run pytest` at the root (319). Parity fixtures + engine defaults:
-`uv run python ios/scripts/make_parity_fixture.py`.
-
-Screenshots are produced by CI (`.github/workflows/ios.yml`) on every push to
-this branch: Actions → latest run → artifact **ios-screenshots**. Locally:
-`ios/scripts/screenshots.sh <booted-sim-udid> /tmp/shots` after installing the app.
-
-### Launch options (screenshots / quick checks)
-
+App on a simulator: `cd ios && xcodegen generate && open ArxivDigest.xcodeproj`,
+scheme **ArxivDigestApp**, ⌘R. Launch options for quick checks/screenshots:
 `-demo`, `-standalone`, `-tab papers|score|config|settings`, `-open-paper <rank>`,
 `-score <id-or-url>`, `-config-page keywords|authors|low-priority|feeds|scoring|presets`,
-`-remove <rank>`, `-day <n>` (n-th available day), `-dirty` (fake unsaved edit).
+`-remove <rank>`, `-day <n>`, `-dirty`.
 
-## What the app does (parity with the web GUI)
+Server for the simulator: `cd server && uv run uvicorn app.main:app --port 8799`
+(port 8765 is taken by a VS Code extension on this Mac); Settings → Connection →
+Server → `http://127.0.0.1:8799`. With `DIGEST_ACCESS_TOKEN=…` enter the token too.
 
-| GUI | App |
-|---|---|
-| Papers tab: cards, highlights, Why this score? / Full abstract | **Papers** list → detail (abstract, breakdown, arXiv/PDF, Zotero, Remove) |
-| Day picker, search, caption, Markdown/JSON downloads | Day chips, search, same caption, export from the ⋯ menu |
-| ✕ remove + Removed papers (Restore / Restore all) | Swipe left or long-press → Remove (with Undo); Removed papers section |
-| Sidebar timeframe / Top N | Papers ⋯ menu (saved immediately via `PATCH /config`) |
-| Score a paper (rank or absence reason) | **Score** tab, same wording, same view as Papers |
-| Keywords / Authors / Low priority tabs | **Config** → list editors (add, tap to rename, swipe delete, reorder, reset) |
-| Feeds tab + sidebar feed multiselect + replacements | Config → Feeds (subscribe toggles, URLs, include replacements) |
-| Scoring tab | Config → Scoring (whole-word, weights, per-feed bonuses, reset) |
-| Profiles → starter presets Load / Add | Config → Starter presets (unsaved until Save, like the GUI) |
-| Sidebar Display: toggles, colors, font tint | **Settings** → Display / Highlight colors (live preview) |
-| Save to Zotero | Save via server key, or **Share to Zotero** (share sheet) without one |
+On a phone: `docs/ios-app.md`. Sharing settings: `docs/deploy.md`.
 
-Config edits are a working copy: the **unsaved-changes bar** (Config and Settings
-tabs, plus a dot on the Config tab) saves, confirms with "Saved ✓", and re-ranks.
+Verified by hand on 2026-10-08 (simulator + live arXiv + a real server): the
+standalone device checklist (connect, past-week fetch, re-rank on save, removals,
+Score tab, presets, today listing), KaTeX light/dark, light-mode contrast, author menu, token flow
+(401/403/200, no CORS, SSRF 422), GUI sync round-trip, config file import from a
+GUI export, GUI LaTeX in Safari. **Not verified on a physical phone after the last
+round**: Export config via AirDrop, opening a `.json` from Files, access-token
+entry on device.
 
-Not ported (by design or deferred): named **profiles** (the server has one config
-per user; presets cover starting points), the GUI's "Clear fetch cache" button
-(pull to refresh does a fresh fetch), JSON profile import/export.
+---
 
-## Server changes on this branch
+## 3. Merging
 
-- `/digest`: pastweek via `fetch_pastweek` like the CLI; `day`; removals; abstracts
-  and breakdowns per paper; `removed`, `available_days`, `hidden_by_filters`,
-  `fetched_papers`, `notices`, `fetched_at`. Cache holds raw fetches keyed on
-  resolved feeds; ranking runs per request.
-- `/removed` (GET, POST, POST `/restore`), per user.
-- `/score`: `rank` or `absence_reason` against the same view; 502 on arXiv errors.
-- `/config`: effective config (all fields), 422 on invalid, `/defaults`,
-  `/presets/info`, `/presets/{name}/load`, `save=false` + working-config body.
-- Zotero: `deeplink` mode removed (ADR 0005 amendment); creator names fixed.
-- Engine: an explicitly empty keyword/author list is no longer replaced by defaults.
+- Not yet merged. `pyproject.toml` stays `0.6.3`, so merging alone cuts no release;
+  bump the version + `uv.lock` and rename `[Unreleased]` in `CHANGELOG.md` when
+  releasing (see `CONTRIBUTING.md`).
+- After merge: README/`docs/deploy.md` still say "branch `feat/swift_ios`" in the
+  clone steps; change to `main`. `.github/workflows/ios.yml` only triggers on
+  `feat/swift_ios`; add `main`.
+- Existing `server/digest.db` files keep the dropped `saved_lists` / `list_papers` /
+  `feedback` tables; harmless, no migration.
 
-## Remaining work
+## 4. Remaining work (next round)
 
-- **Standalone mode**: S1–S7 done and verified (today reads arXiv's `/new`
-  listing, like the GUI); the default for new installs. Remaining: S8 (iCloud
-  config sync, needs a paid developer account). Progress and checklist:
-  [`STANDALONE.md`](STANDALONE.md); decision: ADR 0009. Beads epic [`e85`].
-- **Per-user Zotero key** [`d5q`]: needs an encrypted credential column, an
-  endpoint, and a Settings field. Until then Save to Zotero needs
-  `ZOTERO_API_KEY` + `ZOTERO_LIBRARY_ID` on the server; Share to Zotero works without.
+- **S8 iCloud config sync** [`e85.8`]: needs a paid Apple Developer account; ask first.
+- **Per-user Zotero key** [`d5q`]: encrypted credential column + endpoint + Settings
+  field. Until then Save to Zotero needs `ZOTERO_API_KEY` + `ZOTERO_LIBRARY_ID` on
+  the server; Share to Zotero works without. Close [`4bg`] after a real Web API save.
 - **Zotero PDF attachment** [`ynp`] for Web API saves.
-- **Close `4bg`** after a real Web API save; close `92s`, `b9k`, `v2z`, `jtg`,
-  `cx0` (done on this branch) on the Mac.
-- **Deploy the digest service** [`08f`]: `docs/deploy.md`. Public/remote mode
-  should reuse the engine's persistent fetch cache before going multi-user.
-- **Offline cache** (SwiftData) per CONTEXT.md.
-- **Named profiles on the server** if switching configs on the phone matters.
-- **UI tests**: the app target has none; behaviour is pushed into Core (tested)
-  and checked visually via the CI screenshots.
+- **Deploy the server** [`08f`]: runbook in `docs/deploy.md`; the user's managed
+  Linux box forbids long-running services, so a Mac LaunchAgent or a small VPS
+  are the candidates. Remote (multi-user) mode needs an app login screen first.
+- **iOS app login** for remote mode; **named profiles** on the server/app if
+  switching configs on the phone matters; **offline cache** (SwiftData) per CONTEXT.md.
+- **UI tests**: none for the app target; logic is in Core (tested) and checked via
+  CI screenshots.
+- **Signals pipeline** (`server/app/signals/`, ADR 0004) has one implementation;
+  the ponytail review suggested inlining it, kept on purpose pending ADR 0004's
+  future signals.
 
-## Conventions
+## 5. Conventions
 
-- Core logic that can be unit-tested goes in `ArxivDigestCore` with a test;
-  views stay thin. New app-target files are picked up by `xcodegen generate`.
-- `ios/scripts/make_parity_fixture.py` regenerates Standalone's parity fixtures
-  and `EngineDefaults.swift` (defaults + presets); run it after changing the
-  engine's scoring, config hydration, presets or parsers.
-- `ios/scripts/make_demo_fixture.py` regenerates the demo fixture from the
-  engine; run it after changing scoring, and keep invented names only.
-- Conventional Commits per `CONTRIBUTING.md`. Don't push beads/Dolt data to the
-  public remote.
+- Logic goes in `ArxivDigestCore` with a test (TDD); views stay thin. New
+  app-target files: `xcodegen generate` (resets the signing team in Xcode).
+- When the engine's scoring, config hydration, presets, parsers or `summarize`
+  change: regenerate `make_parity_fixture.py` + `make_demo_fixture.py` and update
+  the Swift port; Python is the reference.
+- Invented names only in fixtures (public repo); presets stay generic.
+- Conventional Commits per `CONTRIBUTING.md`; CHANGELOG `[Unreleased]` for every change.
+- Never let a test touch `~/.arxiv_scraper` or a real server (see conftest).
