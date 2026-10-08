@@ -127,13 +127,17 @@ def test_upgrade_source_pins_newer_tag(monkeypatch):
     monkeypatch.setattr(update_check, "_latest_release", lambda: "v99.0.0")
     monkeypatch.setattr(update_check, "_current_version", lambda: "0.5.6")
     monkeypatch.setattr(update_check, "_gui_extra", lambda: "")
-    assert update_check._upgrade_source() == f"arxiv-digest @ {update_check.GIT_URL}@v99.0.0"
+    assert update_check._upgrade_source() == (
+        "arxiv-digest @ git+https://github.com/isaac-tes/arxiv-digest.git@v99.0.0"
+    )
 
 
 def test_upgrade_source_falls_back_to_head(monkeypatch):
     monkeypatch.setattr(update_check, "_latest_release", lambda: None)
     monkeypatch.setattr(update_check, "_gui_extra", lambda: "[gui]")
-    assert update_check._upgrade_source() == f"arxiv-digest[gui] @ {update_check.GIT_URL}"
+    assert update_check._upgrade_source() == (
+        "arxiv-digest[gui] @ git+https://github.com/isaac-tes/arxiv-digest.git"
+    )
 
 
 def test_run_self_upgrade_unknown_method_prints_instructions(monkeypatch, capsys):

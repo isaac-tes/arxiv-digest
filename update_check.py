@@ -25,7 +25,7 @@ from importlib.util import find_spec
 from pathlib import Path
 
 REPO_URL = "https://github.com/isaac-tes/arxiv-digest"
-GIT_URL = f"{REPO_URL}.git"
+GIT_URL = f"git+{REPO_URL}.git"  # PEP 508 VCS reference needs the git+ scheme
 LATEST_RELEASE_URL = f"https://api.github.com/repos/isaac-tes/arxiv-digest/releases/latest"
 
 CACHE_PATH = Path("~/.arxiv_scraper/update_check.json").expanduser()
