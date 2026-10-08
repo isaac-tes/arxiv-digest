@@ -220,9 +220,11 @@ public struct DigestConfig: Codable, Sendable, Equatable {
 
     /// A paper's authors (comma-separated) that are not already in `namedAuthors`.
     public func addableAuthors(in authors: String) -> [String] {
-        let named = Set(namedAuthors.map { $0.lowercased() })
-        return DigestConfig.cleaned(authors.components(separatedBy: ","))
-            .filter { !named.contains($0.lowercased()) }
+        DigestConfig.cleaned(authors.components(separatedBy: ",")).filter { author in
+            !namedAuthors.contains {
+                HighlightEngine.authorMatches(term: $0, authors: author, wordBoundary: wordBoundaryMatching)
+            }
+        }
     }
 
     /// Append `item` unless a case-insensitive duplicate exists. Returns false

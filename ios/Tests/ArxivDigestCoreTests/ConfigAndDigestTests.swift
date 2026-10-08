@@ -84,6 +84,12 @@ final class DigestConfigEditingTests: XCTestCase {
         XCTAssertEqual(cfg.addableAuthors(in: "Alice Smith, Bob Jones"), [])
     }
 
+    func testAddableAuthorsSkipsSurnameOnlyMatch() {
+        var cfg = DigestConfig()
+        cfg.namedAuthors = ["jones"]
+        XCTAssertEqual(cfg.addableAuthors(in: "Bob Jones, Carol Wu, Joneson Ray"), ["Carol Wu", "Joneson Ray"])
+    }
+
     func testEquatableForDirtyTracking() {
         var a = DigestConfig()
         a.coreKeywords = ["x"]

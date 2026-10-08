@@ -1480,3 +1480,37 @@ def test_add_named_author_ignores_case_insensitive_duplicate():
     arxiv_gui.st.session_state.cfg = arxiv_gui.ad.Config(named_authors=["Bob Jones"])
     arxiv_gui._add_named_author("BOB JONES")
     assert arxiv_gui.cfg().named_authors == ["Bob Jones"]
+
+
+def test_add_author_hides_surname_only_named_match():
+    import arxiv_digest as ad
+    from streamlit.testing.v1 import AppTest
+
+    at = AppTest.from_file("tests/fixtures/add_author_app.py")
+    at.session_state["seeded"] = True
+    at.session_state["cfg"] = ad.Config(named_authors=["jones"])
+    at.run(timeout=15)
+    assert [b.label for b in at.button] == ["Alice Smith", "Carol Wu"]
+
+
+def test_score_tab_offers_and_adds_author(monkeypatch, tmp_path):
+    import xml.etree.ElementTree as ET
+
+    import zotero_bridge as zb
+
+    ns = "http://www.w3.org/2005/Atom"
+    entry = ET.fromstring(
+        f'<entry xmlns="{ns}"><id>http://arxiv.org/abs/2609.00001v1</id>'
+        "<published>2026-09-28T00:00:00Z</published><title>T</title><summary>S</summary>"
+        "<author><name>Dana Quill</name></author><author><name>Evan Rook</name></author>"
+        '<category term="quant-ph"/></entry>'
+    )
+    at = _score_tab_app(monkeypatch, tmp_path, [_card_paper("2609.00001", "A new paper")])
+    monkeypatch.setattr(zb, "fetch_arxiv_atom", lambda pid: entry)
+    _score(at, "2609.00001")
+    assert not list(at.exception), [e.value for e in at.exception]
+    scored = [b for b in at.button if b.label == "Dana Quill"]
+    assert len(scored) == 1, "Score tab did not offer the author"
+    scored[0].click()
+    at.run(timeout=15)
+    assert "Dana Quill" in at.session_state["cfg"].named_authors

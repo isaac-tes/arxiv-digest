@@ -395,8 +395,11 @@ def _add_named_author(name: str) -> None:
 
 def _render_add_author(authors: str, scope: str = "card", paper_id: str = "") -> None:
     """Popover listing the paper's authors not yet highlighted; one click adds."""
-    named = {a.lower() for a in cfg().named_authors}
-    addable = [a.strip() for a in authors.split(",") if a.strip() and a.strip().lower() not in named]
+    wb = cfg().word_boundary_matching
+    addable = [
+        a for a in (x.strip() for x in authors.split(","))
+        if a and not any(ad.author_matches(t, a, word_boundary=wb) for t in cfg().named_authors)
+    ]
     if not addable:
         return
     with st.popover("Add author", width="stretch"):
@@ -1679,6 +1682,7 @@ def render_score_tab():
 
         st.divider()
         _render_zotero_save_button(paper_id, paper["title"], scope="score")
+        _render_add_author(paper["authors"], scope="score", paper_id=paper_id)
 
 
 # ────────────────────────── Main ──────────────────────────
