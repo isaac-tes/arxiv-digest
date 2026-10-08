@@ -5,7 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.7.0] - 2026-10-08
+
+> **Upgrading from 0.6.x:** the `arxiv-digest update` in 0.6.x has the bug fixed here (#12), so it fails one last time. Upgrade once by hand; later updates work again:
+>
+> ```bash
+> uv tool install --reinstall 'arxiv-digest[gui] @ git+https://github.com/isaac-tes/arxiv-digest.git@v0.7.0'
+> ```
 
 ### Added
 - **Two-way settings sync for the GUI**: sidebar *Sync with server* shares config and removed papers with the iPhone app and other computers through the digest server (first connection asks whose config wins; offline it keeps a local copy and sends the changes made meanwhile with the next save or GUI start, so they aren't lost). Settings in `~/.arxiv_scraper/sync.json` or `ARXIV_DIGEST_SERVER` / `ARXIV_DIGEST_TOKEN`.

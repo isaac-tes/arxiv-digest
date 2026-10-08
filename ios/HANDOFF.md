@@ -1,6 +1,6 @@
 # Handoff — `feat/swift_ios` (iOS app, digest server, GUI sync)
 
-_Last updated: 2026-10-08 · branch `feat/swift_ios` · based on `main` (v0.6.3)_
+_Last updated: 2026-10-08 · merged to `main` in PR #13, released in v0.7.0_
 
 Start here for the next round. It covers **everything this branch changes
 compared with `main`**, how to run and verify it, and what's left. Decisions live
@@ -122,11 +122,8 @@ iPhone the same day and reported no problems.
 
 ## 3. Merging
 
-- Not yet merged. `pyproject.toml` stays `0.6.3`, so merging alone cuts no release;
-  bump the version + `uv.lock` and rename `[Unreleased]` in `CHANGELOG.md` when
-  releasing (see `CONTRIBUTING.md`).
-- Ready for `main`: `docs/deploy.md` clones `main`, and `.github/workflows/ios.yml`
-  also triggers on `main`.
+- Merged to `main` in PR #13 and released in v0.7.0. `docs/deploy.md` clones `main`,
+  and `.github/workflows/ios.yml` also triggers on `main`.
 - Existing `server/digest.db` files keep the dropped `saved_lists` / `list_papers` /
   `feedback` tables; harmless, no migration.
 
