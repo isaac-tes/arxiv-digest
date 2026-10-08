@@ -24,3 +24,15 @@ discussed (Phase 5).
   truth).
 - Slightly more upfront work in Phase 0/1 (auth plumbing), but no migration later.
 - Single-user local mode keeps a no-op auth path so development stays frictionless.
+
+## Amendment (2026-10-08): local mode guards itself; lists/feedback removed
+
+- **Local mode** (one shared user, no accounts) is what personal setups run. It
+  now protects itself instead of trusting the network: with
+  `DIGEST_ACCESS_TOKEN` set every request except `/health` needs that bearer
+  token; without it the server answers only its own machine (loopback client and
+  a localhost `Host` header). CORS is off by default, feed URLs must be on
+  arxiv.org, and remote mode refuses the default JWT secret. See
+  `server/app/security.py` and `docs/deploy.md`.
+- The `/lists` and `/feedback` endpoints and their tables were removed: no client
+  used them. Records scoped by `user_id` are now the config and removed papers.

@@ -96,9 +96,9 @@ discussions.
   sent to the backend as feedback. Distinct from a *score*: a swipe *changes*
   future scores. Distinct from **Removed paper**, which never changes a score.
 
-- **List** — a named, user-curated collection of saved papers (e.g. one per subfield,
-  the way Floquet/topological/anyon-Hubbard work is tracked separately). Multi-list
-  support is a strategic differentiator.
+- **List** — *(deferred; the `/lists` endpoints were removed as unused)* a named,
+  user-curated collection of saved papers (e.g. one per subfield). Saving to Zotero
+  covers this today.
 
 - **Anchor paper** — a paper the user marks as core interest; used (in a later phase)
   as an embedding-similarity reference to catch semantically related work that misses
@@ -112,11 +112,23 @@ discussions.
   score (e.g. a blocked author or a blocked sub-keyword). Distinct from a negative
   weight on the same axis.
 
-- **Feedback** — *(deferred)* a recorded swipe action that reweights the relevant signal so the
-  model visibly adapts to the user's triage.
+- **Feedback** — *(deferred; the `/feedback` endpoint was removed as unused)* a recorded
+  swipe action that reweights the relevant signal so the model visibly adapts to the
+  user's triage.
 
-- **User** — an account in the multi-tenant backend. Every config, list, and feedback
-  record is scoped to a user. v1 runs single-user but the schema is multi-tenant.
+- **User** — an account in the multi-tenant backend. The config and removed papers
+  are scoped to a user. Local mode runs one shared user; remote mode has accounts.
+
+- **Server mode** — the app (and the GUI, via *Sync with server*) using a digest
+  service as the source of truth, so every device sees the same config and removed
+  papers. Last save wins.
+
+- **Access token** — the shared secret (`DIGEST_ACCESS_TOKEN`) a local-mode digest
+  service requires from other devices; without one it answers only its own machine.
+
+- **Config file** — the config as one JSON file (the engine's `Config` fields), the
+  same format for the GUI's profile Export/Import and the app's Export/Import config.
+  The no-server way to copy settings between devices.
 
 - **Demo mode** — a self-contained run of the app against a bundled sample digest,
   with no digest service. For trying the UI and producing screenshots; its

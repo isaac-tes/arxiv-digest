@@ -1,6 +1,6 @@
 # iOS app — session handoff
 
-_Last updated: 2026-10-07 · branch `feat/swift_ios`_
+_Last updated: 2026-10-08 · branch `feat/swift_ios`_
 
 Living handoff for the native iOS app: what exists, how to run it, what's left.
 Decisions live in ADRs (`docs/adr/`), terms in `CONTEXT.md`. Beads data is
@@ -34,15 +34,15 @@ In Xcode: scheme **ArxivDigestApp**, pick an iPhone simulator, **Run** (⌘R).
   phone (~10–40 s); later loads within the hour use the on-device cache.
 - **Real digest on the simulator:** in a second terminal
   `cd server && uv sync && uv run uvicorn app.main:app` (listens on
-  127.0.0.1:8000), then Settings → Digest server → `http://127.0.0.1:8000` →
-  Connect. The first past-week load fetches from arXiv (~30 s); later loads use
+  127.0.0.1:8000), then Settings → Connection → **Server** → `http://127.0.0.1:8000` (plus the
+  access token if the server sets `DIGEST_ACCESS_TOKEN`) → Connect. The first past-week load fetches from arXiv (~30 s); later loads use
   the server's 1 h cache. To start from your GUI profile:
   `DIGEST_DEFAULT_CONFIG_PATH=~/.arxiv_scraper/profiles/<name>.json uv run uvicorn app.main:app`.
 - **On your iPhone:** see [`docs/ios-app.md`](../docs/ios-app.md) (development
   install with a free Apple ID); the app starts in *On this device* mode.
 
-Tests: `cd ios && swift test` (Core, 123 tests, also on Linux), `cd server && uv run pytest`
-(54), `uv run pytest` at the root (309). Parity fixtures + engine defaults:
+Tests: `cd ios && swift test` (Core, 124 tests, also on Linux), `cd server && uv run pytest`
+(54), `uv run pytest` at the root (319). Parity fixtures + engine defaults:
 `uv run python ios/scripts/make_parity_fixture.py`.
 
 Screenshots are produced by CI (`.github/workflows/ios.yml`) on every push to
