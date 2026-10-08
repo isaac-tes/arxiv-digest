@@ -32,7 +32,7 @@ struct PaperRowView: View {
                 if !paper.section.isEmpty {
                     Label(paper.section, systemImage: "calendar")
                         .font(.caption)
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(.secondary)
                         .labelStyle(.titleAndIcon)
                 }
 

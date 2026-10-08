@@ -69,7 +69,7 @@ struct ConfigView: View {
 
     private func stat(_ value: String, _ label: String, _ hex: String) -> some View {
         VStack(spacing: 2) {
-            Text(value).font(.title2.weight(.bold)).monospacedDigit().foregroundStyle(Color(hex: hex))
+            Text(value).font(.title2.weight(.bold)).monospacedDigit().foregroundStyle(Color(textHex: hex))
             Text(label).font(.caption2).foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity)
@@ -82,7 +82,7 @@ struct ConfigView: View {
                     Text(page.title)
                 } icon: {
                     Image(systemName: page.systemImage)
-                        .foregroundStyle(color.map { Color(hex: $0) } ?? Color.accentColor)
+                        .foregroundStyle(color.map { Color(textHex: $0) } ?? Color.accentColor)
                 }
                 Spacer()
                 if let count {

@@ -22,7 +22,7 @@ enum Highlight {
                 attr[range].underlineStyle = Text.LineStyle(pattern: .dot, color: color)
             }
             if config.fontColor(for: span.aspect) {
-                attr[range].foregroundColor = color
+                attr[range].foregroundColor = Color(textHex: config.color(for: span.aspect))
             }
             if span.aspect == .author {
                 attr[range].inlinePresentationIntent = .stronglyEmphasized

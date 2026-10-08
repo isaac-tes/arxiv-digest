@@ -1,4 +1,5 @@
 import SwiftUI
+import ArxivDigestCore
 #if canImport(UIKit)
 import UIKit
 #endif
@@ -47,5 +48,20 @@ extension Color {
             return
         }
         self = Color(.sRGB, red: r, green: g, blue: b, opacity: a)
+    }
+}
+
+extension Color {
+    /// A highlight color used as *text*: as stored in dark mode, darkened in
+    /// light mode until readable on white (`ColorContrast`), like the GUI's
+    /// light-theme override. Backgrounds keep `init(hex:)`.
+    init(textHex hex: String) {
+        #if canImport(UIKit)
+        let dark = UIColor(Color(hex: hex))
+        let light = UIColor(Color(hex: ColorContrast.readableOnWhite(hex)))
+        self = Color(uiColor: UIColor { $0.userInterfaceStyle == .dark ? dark : light })
+        #else
+        self.init(hex: hex)
+        #endif
     }
 }

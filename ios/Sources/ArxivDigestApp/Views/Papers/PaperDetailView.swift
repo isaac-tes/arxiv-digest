@@ -100,7 +100,7 @@ struct PaperDetailView: View {
                     Text(paper.section).font(.caption)
                 }
             }
-            .foregroundStyle(.tertiary)
+            .foregroundStyle(.secondary)
             if !paper.subjects.isEmpty {
                 (Text("Subjects: ").foregroundStyle(.secondary) + Text(Highlight.subjects(paper.subjects, config: config, underline: underline)))
                     .font(.caption)
