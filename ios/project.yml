@@ -24,6 +24,9 @@ targets:
     platform: iOS
     sources:
       - path: Sources/ArxivDigestApp
+      # KaTeX for the paper page abstract; a folder reference keeps fonts/ beside the CSS.
+      - path: Resources/KaTeX
+        type: folder
     dependencies:
       - package: ArxivDigestCore
     settings:

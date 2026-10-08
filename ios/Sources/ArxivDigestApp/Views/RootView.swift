@@ -42,6 +42,7 @@ struct RootView: View {
         }
         .animation(.spring(duration: 0.35), value: model.toast)
         .task {
+            KaTeXWebView.prewarm()  // KaTeX loaded before the first paper page
             await model.bootstrap()
             await applyLaunchOptions()
         }

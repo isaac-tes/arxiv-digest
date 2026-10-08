@@ -15,30 +15,93 @@ public enum MathText {
     public static func render(_ text: String) -> String {
         guard text.contains("$") || text.contains("\\") else { return text }
         let c = Array(text)
+        return segments(c).map { seg in
+            seg.isMath ? math(Array(c[seg.content])) : textMode(Array(c[seg.whole]))
+        }.joined()
+    }
+
+    /// The inline math regions (`$…$`, `$$…$$`, `\(…\)`), delimiters included.
+    public static func mathRanges(in text: String) -> [Range<String.Index>] {
+        let c = Array(text)
+        return segments(c).filter(\.isMath).map { seg in
+            text.index(text.startIndex, offsetBy: seg.whole.lowerBound)..<text.index(text.startIndex, offsetBy: seg.whole.upperBound)
+        }
+    }
+
+    /// The paper page's abstract as HTML for KaTeX's auto-render: math kept
+    /// verbatim with its delimiters, text-mode commands rendered, everything
+    /// HTML-escaped, and `spans` (ranges of `text`) wrapped in
+    /// `<span class="hl <aspect>">`. A span touching math is dropped: KaTeX
+    /// can't render math split by markup.
+    public static func html(_ text: String, spans: [HighlightSpan]) -> String {
+        let c = Array(text)
+        let offsets = spans.map {
+            (text.distance(from: text.startIndex, to: $0.range.lowerBound),
+             text.distance(from: text.startIndex, to: $0.range.upperBound), $0.aspect)
+        }.sorted { $0.0 < $1.0 }
         var out = ""
-        var i = 0
+        for seg in segments(c) {
+            if seg.isMath { out += escape(String(c[seg.whole])); continue }
+            var i = seg.whole.lowerBound
+            for (lo, hi, aspect) in offsets where lo >= i && hi <= seg.whole.upperBound {
+                out += escape(textMode(Array(c[i..<lo])))
+                out += "<span class=\"hl \(aspect.rawValue)\">" + escape(textMode(Array(c[lo..<hi]))) + "</span>"
+                i = hi
+            }
+            out += escape(textMode(Array(c[i..<seg.whole.upperBound])))
+        }
+        return out
+    }
+
+    private static func escape(_ s: String) -> String {
+        s.replacingOccurrences(of: "&", with: "&amp;")
+            .replacingOccurrences(of: "<", with: "&lt;")
+            .replacingOccurrences(of: ">", with: "&gt;")
+    }
+
+    /// Text and math runs covering `c`; `content` excludes the delimiters.
+    private struct Segment { let whole: Range<Int>; let content: Range<Int>; let isMath: Bool }
+
+    private static func segments(_ c: [Character]) -> [Segment] {
+        var out: [Segment] = []
+        var textStart = 0, i = 0
+        func emitText(upTo end: Int) {
+            if end > textStart { out.append(Segment(whole: textStart..<end, content: textStart..<end, isMath: false)) }
+        }
         while i < c.count {
-            let ch = c[i]
-            if ch == "\\", i + 1 < c.count, c[i + 1] == "(",
-               let close = find(c, from: i + 2, closer: ["\\", ")"]) {
-                out += math(Array(c[(i + 2)..<close]))
-                i = close + 2
-            } else if ch == "\\" {
+            var delims: (open: Int, close: [Character])?
+            if c[i] == "\\", i + 1 < c.count, c[i + 1] == "(" {
+                delims = (2, ["\\", ")"])
+            } else if c[i] == "\\" {
+                i += 2  // an escape like \$ is text
+                continue
+            } else if c[i] == "$" {
+                let double = i + 1 < c.count && c[i + 1] == "$"
+                delims = (double ? 2 : 1, double ? ["$", "$"] : ["$"])
+            }
+            if let d = delims, let close = find(c, from: i + d.open, closer: d.close) {
+                emitText(upTo: i)
+                let end = close + d.close.count
+                out.append(Segment(whole: i..<end, content: (i + d.open)..<close, isMath: true))
+                textStart = end
+                i = end
+            } else {
+                i += 1
+            }
+        }
+        emitText(upTo: c.count)
+        return out
+    }
+
+    private static func textMode(_ c: [Character]) -> String {
+        var out = "", i = 0
+        while i < c.count {
+            if c[i] == "\\" {
                 let (s, next) = textCommand(c, at: i)
                 out += s
                 i = next
-            } else if ch == "$" {
-                let double = i + 1 < c.count && c[i + 1] == "$"
-                let start = i + (double ? 2 : 1)
-                if let close = find(c, from: start, closer: double ? ["$", "$"] : ["$"]) {
-                    out += math(Array(c[start..<close]))
-                    i = close + (double ? 2 : 1)
-                } else {
-                    out.append(ch)
-                    i += 1
-                }
             } else {
-                out.append(ch)
+                out.append(c[i])
                 i += 1
             }
         }

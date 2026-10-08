@@ -31,10 +31,14 @@ struct PaperDetailView: View {
                     if isFetching && paper.abstract.isEmpty {
                         HStack { ProgressView(); Text("Loading full abstract…").foregroundStyle(.secondary) }
                     }
-                    Text(Highlight.terms(abstract, enabled: config.highlightTermsAbstract, config: config, underline: underline))
-                        .font(.body)
-                        .textSelection(.enabled)
-                        .fixedSize(horizontal: false, vertical: true)
+                    if MathText.mathRanges(in: abstract).isEmpty {
+                        Text(Highlight.terms(abstract, enabled: config.highlightTermsAbstract, config: config, underline: underline))
+                            .font(.body)
+                            .textSelection(.enabled)
+                            .fixedSize(horizontal: false, vertical: true)
+                    } else {
+                        MathAbstractView(abstract: abstract, config: config, underline: underline)
+                    }
                 }
                 card("Why this score?", systemImage: "chart.bar.doc.horizontal") {
                     if let breakdown {
