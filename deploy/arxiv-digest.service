@@ -19,6 +19,10 @@ ExecStart=/home/<youruser>/.local/bin/uv run uvicorn app.main:app --host 0.0.0.0
 Restart=on-failure
 RestartSec=3
 
+# --- Required for other devices: the shared access token (docs/deploy.md step 4).
+# Without it the server only answers this machine. ---
+# Environment=DIGEST_ACCESS_TOKEN=paste-a-long-random-token-here
+
 # --- Optional: enable Zotero web-save ---
 # Environment=ZOTERO_API_KEY=your_key
 # Environment=ZOTERO_LIBRARY_ID=your_library_id

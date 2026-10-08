@@ -11,6 +11,7 @@ struct SettingsView: View {
     @State private var serverURLText = ""
     @State private var modeChoice: AppModel.Mode = .server
     @State private var isConnecting = false
+    @State private var accessTokenText = ""
 
     var body: some View {
         @Bindable var model = model
@@ -87,6 +88,7 @@ struct SettingsView: View {
             .animation(.default, value: model.isDirty)
             .onAppear {
                 if serverURLText.isEmpty { serverURLText = model.baseURL.absoluteString }
+                if accessTokenText.isEmpty { accessTokenText = model.accessToken }
                 modeChoice = model.mode
             }
             .task { if model.connectionStatus == nil { await model.checkConnection() } }
@@ -107,6 +109,9 @@ struct SettingsView: View {
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
                     .keyboardType(.URL)
+                SecureField("Access token (from the server)", text: $accessTokenText)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
             }
 
             Button {
@@ -129,7 +134,7 @@ struct SettingsView: View {
         } footer: {
             switch modeChoice {
             case .server:
-                Text("Run the server with `uv run uvicorn app.main:app --host 0.0.0.0` and enter your computer's LAN address. On a physical device, 127.0.0.1 is the phone itself.")
+                Text("Shares config and removed papers with every device on the same server. Enter its address and the DIGEST_ACCESS_TOKEN it was started with (stored in the Keychain). On a physical device, 127.0.0.1 is the phone itself.")
             case .standalone:
                 Text("Fetches the past week from arXiv directly and scores papers on this phone; the first load takes about 10–40 s. Config and removed papers stay on this device and aren't synced.")
             case .demo:
@@ -149,7 +154,10 @@ struct SettingsView: View {
 
     private func connect() {
         let url = modeChoice == .server ? (normalizedURL ?? model.baseURL) : model.baseURL
-        if modeChoice == .server { serverURLText = url.absoluteString }
+        if modeChoice == .server {
+            serverURLText = url.absoluteString
+            model.accessToken = accessTokenText.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
         isConnecting = true
         Task {
             if modeChoice == .demo { DemoBackend.shared.reset() }

@@ -19,6 +19,11 @@ _tmpdir = tempfile.mkdtemp(prefix="digest-test-")
 os.environ["DIGEST_DATABASE_URL"] = f"sqlite:///{_tmpdir}/test.db"
 os.environ["DIGEST_MODE"] = "local"
 os.environ.pop("DIGEST_DEFAULT_CONFIG_PATH", None)
+# The shared client authenticates with an access token (the server refuses
+# token-less requests from anywhere but this machine; see test_security.py).
+TEST_TOKEN = "test-access-token"
+os.environ["DIGEST_ACCESS_TOKEN"] = TEST_TOKEN
+os.environ.pop("DIGEST_CORS_ORIGINS", None)
 
 from fastapi.testclient import TestClient  # noqa: E402
 
@@ -27,5 +32,5 @@ from app.main import app  # noqa: E402
 
 @pytest.fixture(scope="session")
 def client():
-    with TestClient(app) as c:
+    with TestClient(app, headers={"Authorization": f"Bearer {TEST_TOKEN}"}) as c:
         yield c

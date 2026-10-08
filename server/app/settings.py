@@ -19,15 +19,24 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 
 
+DEFAULT_JWT_SECRET = "dev-secret-change-me"
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="DIGEST_", env_file=".env", extra="ignore")
 
     mode: str = "local"  # "local" | "remote"
     database_url: str = "sqlite:///./digest.db"
-    jwt_secret: str = "dev-secret-change-me"
+    jwt_secret: str = DEFAULT_JWT_SECRET
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 60 * 24 * 7  # 7 days
-    cors_origins: list[str] = ["*"]
+    # No CORS by default: the apps and GUI aren't browsers, and a permissive
+    # policy would let any web page drive a server listening on localhost.
+    cors_origins: list[str] = []
+    # Shared secret for local mode. Set it to reach the server from other
+    # devices (`Authorization: Bearer <token>`); unset, only this machine may
+    # call it. Generate one with `python -c "import secrets;print(secrets.token_urlsafe(32))"`.
+    access_token: str = ""
     # Optional path to a JSON config file (e.g. a saved GUI profile) used as the
     # default config when a user has no stored config. Lets the mobile app score
     # with the same preferences as the web GUI out of the box.

@@ -51,8 +51,8 @@ Check it from the same machine:
 curl http://127.0.0.1:8000/health      # {"status":"ok","mode":"local"}
 ```
 
-- `--host 127.0.0.1` accepts connections from this machine only. To let other
-  devices on your network in, use `--host 0.0.0.0` (see the warning in step 4).
+- Without an access token the server **only answers this machine** (it checks
+  the caller and the `Host` header). Other devices need a token, see step 4.
 - The first past-week load fetches from arXiv (~20–40 s); later loads come from
   the server's 1 h cache.
 - Stop it with `Ctrl-C`. Your config and removed papers are kept in
@@ -73,7 +73,18 @@ server and don't change the profile file.
 
 ## 4. Make it reachable from your devices
 
-Pick the first option that fits:
+First create an **access token** (a shared secret every device sends) and start
+the server with it. Keep it private, like a password:
+
+```bash
+export DIGEST_ACCESS_TOKEN="$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')"
+echo "$DIGEST_ACCESS_TOKEN"     # copy this into each device (step 5)
+uv run uvicorn app.main:app --host 0.0.0.0 --port 8000
+```
+
+With a token set, every request except `/health` must send it
+(`Authorization: Bearer <token>`); without it the server answers `401`. Then
+pick how devices reach the server:
 
 | Setup | Server command | URL to enter on each device |
 |---|---|---|
@@ -85,16 +96,29 @@ Find the LAN IP with `ipconfig getifaddr en0` (Mac) or `hostname -I` (Linux).
 If a device can't connect, open `http://<url>/health` in its browser first;
 firewalls and guest/eduroam networks that isolate devices are the usual cause.
 
-!!! warning "The default server has no login"
-    It runs in `local` mode: no authentication, one shared user. Expose it only
-    on networks you trust (home Wi-Fi, Tailscale, an SSH tunnel), never directly
-    on the public internet. See [Going public](#going-public-remote-mode).
+!!! warning "One shared user, plain HTTP"
+    `local` mode has a single shared user and no accounts; the access token is
+    the only lock, and plain `http://` doesn't encrypt it. Use it on networks you
+    trust (home Wi-Fi, Tailscale, an SSH tunnel), never directly on the public
+    internet. See [Going public](#going-public-remote-mode).
+
+What the server guards against:
+
+- **Other devices without the token**: `401` (or `403` when no token is configured).
+- **Web pages you visit**: no CORS headers by default, and the localhost-only
+  check rejects foreign `Host` names, so a page can't read or change your
+  config through `http://127.0.0.1:8000` (including DNS rebinding).
+- **Fetching arbitrary URLs**: feed URLs must be on `arxiv.org`; a config with
+  other hosts, or more than 50 feeds, is rejected (`422`).
+- **Remote mode with the default JWT secret**: the server refuses to start.
 
 ## 5. Connect each device
 
 **iPhone / iPad**: Settings → Connection → **Server** → enter the URL from
-step 4 → **Connect**. The status line reads *Connected · local mode*. Allow
-**Local Network** access when iOS asks (needed for LAN addresses).
+step 4 and the **access token** → **Connect**. The status line reads
+*Connected · local mode*; a wrong token shows *Missing or wrong access token*.
+The token is stored in the iOS Keychain. Allow **Local Network** access when iOS
+asks (needed for LAN addresses).
 
 **Mac**: on Apple-silicon Macs the iOS app also runs as a Mac app. In Xcode,
 open `ios/ArxivDigest.xcodeproj`, choose the destination **My Mac (Designed for
@@ -165,7 +189,8 @@ Everything is in `server/digest.db`. Copy it while the server is stopped, e.g.
 | `DIGEST_DATABASE_URL` | `sqlite:///./digest.db` | Database (Postgres for `remote`) |
 | `DIGEST_DEFAULT_CONFIG_PATH` | – | GUI profile used for users without a stored config |
 | `DIGEST_JWT_SECRET` | `dev-secret-change-me` | **Change** in `remote` mode |
-| `DIGEST_CORS_ORIGINS` | `["*"]` | Allowed browser origins |
+| `DIGEST_ACCESS_TOKEN` | – | Local mode: token every device must send; unset = this machine only |
+| `DIGEST_CORS_ORIGINS` | `[]` (none) | Browser origins allowed to call the API; leave empty unless a web front end needs it |
 | `ZOTERO_API_KEY`, `ZOTERO_LIBRARY_ID` | – | Enable *Save to Zotero* from the app via the Zotero Web API |
 
 Without the Zotero variables the app offers **Share to Zotero** (the iOS share

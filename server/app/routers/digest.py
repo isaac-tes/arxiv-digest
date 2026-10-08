@@ -23,6 +23,7 @@ from ..db import get_db
 from ..models import RemovedPaper, User
 from ..schemas import DigestResponse, PaperOut
 from ..scoring import explain_paper, load_user_config
+from ..security import is_arxiv_url
 
 router = APIRouter(prefix="/digest", tags=["digest"])
 
@@ -53,7 +54,8 @@ def resolve_feed_names(cfg, feeds: list[str] | None) -> list[str]:
     """
     requested = [f.strip() for f in (feeds or []) if f.strip()]
     names = requested or cfg.default_feeds
-    return [n for n in names if n in cfg.feeds or n.startswith(("http://", "https://"))]
+    # Only arXiv URLs: the server fetches them (no requests to arbitrary hosts).
+    return [n for n in names if (n in cfg.feeds and is_arxiv_url(cfg.feeds[n])) or is_arxiv_url(n)]
 
 
 def _cache_key(cfg, names: list[str], timeframe: str) -> tuple:

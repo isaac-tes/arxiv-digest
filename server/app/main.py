@@ -9,7 +9,8 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .db import init_db
 from .routers import auth, config, digest, removed, score, zotero
-from .settings import get_settings
+from .security import access_guard
+from .settings import DEFAULT_JWT_SECRET, get_settings
 
 
 @asynccontextmanager
@@ -20,6 +21,8 @@ async def lifespan(app: FastAPI):
 
 def create_app() -> FastAPI:
     settings = get_settings()
+    if settings.is_remote and settings.jwt_secret == DEFAULT_JWT_SECRET:
+        raise RuntimeError("Remote mode needs a real DIGEST_JWT_SECRET (e.g. `openssl rand -hex 32`).")
     app = FastAPI(
         title="arXiv Digest API",
         version="0.1.0",
@@ -27,13 +30,15 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=settings.cors_origins,
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
+    # Starlette runs the last-added middleware first: CORS, then the guard.
+    app.middleware("http")(access_guard)
+    if settings.cors_origins:
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=settings.cors_origins,
+            allow_methods=["*"],
+            allow_headers=["*"],
+        )
 
     app.include_router(auth.router)
     app.include_router(digest.router)

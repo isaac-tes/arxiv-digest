@@ -79,7 +79,7 @@ final class AppModel {
 
     private static func makeClient(mode: Mode, url: URL) -> APIClient {
         switch mode {
-        case .server: return APIClient(baseURL: url)
+        case .server: return APIClient(baseURL: url, authToken: AuthStore().load())
         case .demo: return APIClient(baseURL: DemoURLProtocol.baseURL, session: DemoURLProtocol.makeSession())
         case .standalone: return APIClient(baseURL: LocalURLProtocol.baseURL, session: LocalURLProtocol.makeSession())
         }
@@ -94,6 +94,13 @@ final class AppModel {
         async let zotero: Void = refreshZoteroAvailability()
         await loadDigest()
         _ = await (presetsLoad, zotero)
+    }
+
+    /// The server's access token, kept in the Keychain (empty clears it).
+    /// Applies on the next `connect`.
+    var accessToken: String {
+        get { AuthStore().load() ?? "" }
+        set { newValue.isEmpty ? AuthStore().clear() : AuthStore().save(token: newValue) }
     }
 
     /// Switch between a real server and demo mode and/or change the URL.
@@ -119,6 +126,8 @@ final class AppModel {
     func checkConnection() async {
         do {
             let h = try await client.health()
+            // /health needs no token; a real call shows whether the token works.
+            if mode == .server { _ = try await client.getConfig() }
             connectionStatus = "Connected · \(h["mode"] ?? "ok") mode"
         } catch {
             connectionStatus = error.localizedDescription

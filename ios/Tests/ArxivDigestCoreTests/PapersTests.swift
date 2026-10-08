@@ -139,4 +139,18 @@ final class APIClientZoteroTests: XCTestCase {
         XCTAssertTrue(result.ok)
         XCTAssertEqual(result.mode, "web")
     }
+
+    /// Server mode sends the server's access token (DIGEST_ACCESS_TOKEN).
+    func testAccessTokenSentAsBearer() async throws {
+        MockURLProtocol.handler = { request in
+            XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer s3cret")
+            let resp = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            return (resp, #"{"status": "ok", "mode": "local"}"#.data(using: .utf8)!)
+        }
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [MockURLProtocol.self]
+        let client = APIClient(baseURL: URL(string: "http://127.0.0.1:8000")!, authToken: "s3cret",
+                               session: URLSession(configuration: config))
+        _ = try await client.health()
+    }
 }

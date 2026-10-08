@@ -20,6 +20,7 @@ from ..models import Config as ConfigModel
 from ..models import User
 from ..schemas import ConfigOut, ConfigUpdate, PresetInfo
 from ..scoring import config_from_dict, load_user_config
+from ..security import is_arxiv_url
 
 router = APIRouter(prefix="/config", tags=["config"])
 
@@ -34,12 +35,26 @@ def _get_or_create(db: Session, user: User) -> ConfigModel:
     return row
 
 
+MAX_FEEDS = 50  # each subscribed feed costs a paced arXiv request per fetch
+
+
 def _hydrate(data: dict[str, Any]) -> dict[str, Any]:
-    """Validate a config blob and return it with every field filled in."""
+    """Validate a config blob and return it with every field filled in.
+
+    Feed URLs must point at arXiv: the server fetches them, so anything else
+    would let a client make it request arbitrary (e.g. internal) addresses.
+    """
     try:
-        return asdict(config_from_dict(data))
+        hydrated = asdict(config_from_dict(data))
     except (TypeError, ValueError, AttributeError) as exc:
         raise HTTPException(status_code=422, detail=f"Invalid config: {exc}") from exc
+    feeds = hydrated.get("feeds") or {}
+    if len(feeds) > MAX_FEEDS:
+        raise HTTPException(status_code=422, detail=f"Invalid config: more than {MAX_FEEDS} feeds")
+    bad = [name for name, url in feeds.items() if not is_arxiv_url(str(url))]
+    if bad:
+        raise HTTPException(status_code=422, detail=f"Invalid config: feed URLs must be on arxiv.org ({', '.join(bad[:3])})")
+    return hydrated
 
 
 def _store(db: Session, user: User, data: dict[str, Any]) -> ConfigOut:
