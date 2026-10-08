@@ -1,6 +1,6 @@
 """Pluggable scoring signals (ADR 0004).
 
-Each signal contributes a score, an explanation, and highlight ranges. The
+Each signal contributes a score and an explanation. The
 pipeline sums signals; adding a signal later is additive and does not break the
 API or the app.
 """
@@ -20,4 +20,3 @@ class Signal(Protocol):
 
     def explain(self, paper: dict, cfg) -> dict: ...
 
-    def highlight(self, paper: dict, cfg) -> dict: ...

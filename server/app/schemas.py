@@ -106,44 +106,6 @@ class ConfigUpdate(BaseModel):
     data: dict[str, Any]
 
 
-# ── Lists ───────────────────────────────────────────────────────────────────
-class ListCreate(BaseModel):
-    name: str
-
-
-class ListPaperIn(BaseModel):
-    arxiv_id: str
-    title: str = ""
-    authors: str = ""
-    link: str = ""
-
-
-class ListPaperOut(BaseModel):
-    arxiv_id: str
-    title: str
-    authors: str
-    link: str
-    added_at: datetime
-
-    model_config = {"from_attributes": True}
-
-
-class ListOut(BaseModel):
-    id: int
-    name: str
-    created_at: datetime
-    papers: list[ListPaperOut] = []
-
-    model_config = {"from_attributes": True}
-
-
-# ── Feedback ────────────────────────────────────────────────────────────────
-class FeedbackIn(BaseModel):
-    arxiv_id: str
-    action: Literal["star", "dismiss", "penalize"]
-    signal: str = "keyword"
-
-
 # ── Zotero ──────────────────────────────────────────────────────────────────
 class ZoteroSaveRequest(BaseModel):
     arxiv_id: str

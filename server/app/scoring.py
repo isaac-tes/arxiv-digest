@@ -73,12 +73,3 @@ def explain_paper(paper: dict, cfg: Config) -> dict[str, Any]:
         breakdown["signals"][sig.name] = sig_explain
         breakdown["total"] += sig_explain.get("total", 0)
     return breakdown
-
-
-def highlight_paper(paper: dict, cfg: Config) -> dict[str, Any]:
-    """Matched terms per aspect for the UI to highlight."""
-    merged: dict[str, Any] = {}
-    for sig in ACTIVE_SIGNALS:
-        for aspect, terms in sig.highlight(paper, cfg).items():
-            merged.setdefault(aspect, []).extend(terms)
-    return merged

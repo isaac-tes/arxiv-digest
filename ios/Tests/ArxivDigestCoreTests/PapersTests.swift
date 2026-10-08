@@ -135,7 +135,7 @@ final class APIClientZoteroTests: XCTestCase {
             let resp = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
             return (resp, body)
         }
-        let result = try await makeClient().saveToZotero(arxivId: "2601.1", mode: .web)
+        let result = try await makeClient().saveToZotero(arxivId: "2601.1")
         XCTAssertTrue(result.ok)
         XCTAssertEqual(result.mode, "web")
     }

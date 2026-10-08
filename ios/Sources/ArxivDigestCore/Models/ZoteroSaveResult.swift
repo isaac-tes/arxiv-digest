@@ -1,13 +1,8 @@
 import Foundation
 
-/// How the server saves a paper to Zotero (ADR 0005, amended): Web API only.
-/// The no-key path is the OS share sheet (Share to Zotero), which needs no server.
-public enum ZoteroMode: String, Sendable {
-    case web        // Zotero Web API (server needs an API key)
-}
-
-/// Whether a paper can actually be saved to Zotero, derived from
-/// `GET /zotero/status`.
+/// Whether a paper can be saved to Zotero through the server, derived from
+/// `GET /zotero/status`. Web API only (ADR 0005, amended); without a key the
+/// app offers the share sheet (Share to Zotero), which needs no server.
 public enum ZoteroSaveAvailability: Sendable, Equatable {
     /// The server has a Zotero Web API key — `POST /zotero/save` will create a
     /// `preprint` item.

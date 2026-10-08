@@ -377,14 +377,6 @@ def test_unknown_preset_is_404(client):
     assert client.post("/config/presets/nope/merge").status_code == 404
 
 
-def test_keyword_signal_highlight_uses_author_matching():
-    from app.signals.keyword import KeywordSignal
-
-    cfg = ad.Config.from_json(CONFIG)
-    hl = KeywordSignal().highlight(PAPERS[0], cfg)
-    assert hl["authors"] == ["Ada Lovelace"]
-
-
 def test_cleared_author_list_stays_cleared(client):
     data = client.put("/config", json={"data": {**CONFIG, "named_authors": []}}).json()["data"]
     assert data["named_authors"] == []

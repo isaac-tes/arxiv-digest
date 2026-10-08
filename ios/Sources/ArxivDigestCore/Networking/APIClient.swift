@@ -198,10 +198,6 @@ public struct APIClient: Sendable {
         return DigestConfig(data: resp.data)
     }
 
-    public func listPresets() async throws -> [String] {
-        try await request("GET", "config/presets")
-    }
-
     public func presetInfo() async throws -> [PresetInfo] {
         try await request("GET", "config/presets/info")
     }
@@ -222,37 +218,6 @@ public struct APIClient: Sendable {
             "POST", "config/presets/\(name)/load",
             query: [URLQueryItem(name: "save", value: save ? "true" : "false")])
         return DigestConfig(data: resp.data)
-    }
-
-    // MARK: - Lists / feedback (server endpoints kept; not used by the current UI)
-
-    public func fetchLists() async throws -> [SavedList] {
-        try await request("GET", "lists")
-    }
-
-    public func createList(name: String) async throws -> SavedList {
-        struct Body: Codable { let name: String }
-        return try await request("POST", "lists", body: Body(name: name))
-    }
-
-    public func addPaperToList(listID: Int, paper: Paper) async throws -> ListPaper {
-        struct Body: Codable {
-            let arxiv_id: String
-            let title: String
-            let authors: String
-            let link: String
-        }
-        return try await request("POST", "lists/\(listID)/papers",
-                                 body: Body(arxiv_id: paper.id, title: paper.title, authors: paper.authors, link: paper.link))
-    }
-
-    public func removePaperFromList(listID: Int, arxivId: String) async throws {
-        try await requestNoContent("DELETE", "lists/\(listID)/papers/\(arxivId)")
-    }
-
-    public func recordFeedback(arxivId: String, action: String, signal: String = "keyword") async throws {
-        struct Body: Codable { let arxiv_id: String; let action: String; let signal: String }
-        try await requestNoContent("POST", "feedback", body: Body(arxiv_id: arxivId, action: action, signal: signal))
     }
 
     // MARK: - Score a paper
@@ -276,13 +241,13 @@ public struct APIClient: Sendable {
         try await request("GET", "zotero/status")
     }
 
-    public func saveToZotero(arxivId: String, mode: ZoteroMode = .web, collectionKey: String? = nil) async throws -> ZoteroSaveResult {
+    /// Save through the server's Zotero Web API key (the only save mode).
+    public func saveToZotero(arxivId: String, collectionKey: String? = nil) async throws -> ZoteroSaveResult {
         struct Body: Codable {
             let arxiv_id: String
-            let mode: String
+            let mode = "web"
             let collection_key: String?
         }
-        return try await request("POST", "zotero/save",
-                                 body: Body(arxiv_id: arxivId, mode: mode.rawValue, collection_key: collectionKey))
+        return try await request("POST", "zotero/save", body: Body(arxiv_id: arxivId, collection_key: collectionKey))
     }
 }

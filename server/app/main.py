@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .db import init_db
-from .routers import auth, config, digest, feedback, lists, removed, score, zotero
+from .routers import auth, config, digest, removed, score, zotero
 from .settings import get_settings
 
 
@@ -40,8 +40,6 @@ def create_app() -> FastAPI:
     app.include_router(removed.router)
     app.include_router(score.router)
     app.include_router(config.router)
-    app.include_router(lists.router)
-    app.include_router(feedback.router)
     app.include_router(zotero.router)
 
     @app.get("/health")

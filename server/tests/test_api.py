@@ -39,37 +39,6 @@ def test_presets_listed(client):
     assert "open-quantum-systems" in names
 
 
-def test_lists_crud(client):
-    created = client.post("/lists", json={"name": "floquet"})
-    assert created.status_code == 201
-    list_id = created.json()["id"]
-
-    add = client.post(
-        f"/lists/{list_id}/papers",
-        json={"arxiv_id": "arXiv:2601.0001", "title": "A Floquet paper", "authors": "A. Einstein"},
-    )
-    assert add.status_code == 201
-
-    got = client.get(f"/lists/{list_id}")
-    assert got.status_code == 200
-    assert len(got.json()["papers"]) == 1
-
-    dup = client.post(
-        f"/lists/{list_id}/papers",
-        json={"arxiv_id": "arXiv:2601.0001", "title": "dup"},
-    )
-    assert dup.status_code == 409
-
-    rm = client.delete(f"/lists/{list_id}/papers/arXiv:2601.0001")
-    assert rm.status_code == 204
-
-
-def test_feedback_recorded(client):
-    resp = client.post("/feedback", json={"arxiv_id": "arXiv:2601.0001", "action": "star"})
-    assert resp.status_code == 201
-    assert resp.json()["ok"] is True
-
-
 def test_zotero_status(client):
     resp = client.get("/zotero/status")
     assert resp.status_code == 200

@@ -25,26 +25,3 @@ class KeywordSignal:
         from arxiv_digest import explain_score
 
         return explain_score(paper, cfg)
-
-    def highlight(self, paper: dict, cfg: "Config") -> dict:
-        """Return matched terms per aspect for the UI to highlight.
-
-        Mirrors the GUI's highlight logic: keywords/low-priority match title +
-        abstract, authors match the author list only, subjects match the subject
-        string.
-        """
-        from arxiv_digest import author_matches, term_matches
-
-        wb = cfg.word_boundary_matching
-        txt = " ".join(
-            [paper.get("title", ""), paper.get("abstract", ""), paper.get("authors", ""), paper.get("subjects", "")]
-        ).lower()
-        authors_txt = paper.get("authors", "").lower()
-        subjects = paper.get("subjects", "").lower()
-
-        return {
-            "keywords": [kw for kw in cfg.core_keywords if term_matches(kw, txt, word_boundary=wb)],
-            "authors": [a for a in cfg.named_authors if author_matches(a, authors_txt, word_boundary=wb)],
-            "low_priority": [k for k in cfg.low_priority_kw if term_matches(k, txt, word_boundary=wb)],
-            "subjects": [name for name, w in (cfg.feed_weights or {}).items() if w and name.lower() in subjects],
-        }
