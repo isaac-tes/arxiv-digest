@@ -12,13 +12,13 @@
         <meta name="author" content="isaac-tes">
       
       
-        <link rel="canonical" href="https://isaac-tes.github.io/arxiv-digest/scoring/">
+        <link rel="canonical" href="https://isaac-tes.github.io/arxiv-digest/ios-app/">
       
       
-        <link rel="prev" href="../cli-guide/">
+        <link rel="prev" href="../scoring/">
       
       
-        <link rel="next" href="../ios-app/">
+        <link rel="next" href="../deploy/">
       
       
         
@@ -29,7 +29,7 @@
     
     
       
-        <title>Scoring - arXiv Digest</title>
+        <title>iPhone app - arXiv Digest</title>
       
     
     
@@ -84,7 +84,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#scoring" class="md-skip">
+        <a href="#iphone-ipad-app-preview" class="md-skip">
           Skip to content
         </a>
       
@@ -120,7 +120,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Scoring
+              iPhone app
             
           </span>
         </div>
@@ -448,6 +448,34 @@
                 
   
   
+  
+  
+    <li class="md-nav__item">
+      <a href="../scoring/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Scoring
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
     
   
   
@@ -467,7 +495,7 @@
   <span class="md-ellipsis">
     
   
-    Scoring
+    iPhone app
   
 
     
@@ -485,7 +513,7 @@
   <span class="md-ellipsis">
     
   
-    Scoring
+    iPhone app
   
 
     
@@ -511,10 +539,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#defaults" class="md-nav__link">
+  <a href="#what-you-need" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Defaults
+        What you need
       
     </span>
   </a>
@@ -522,10 +550,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#weights-feed_weights-in-arxiv_configjson" class="md-nav__link">
+  <a href="#install" class="md-nav__link">
     <span class="md-ellipsis">
       
-        weights + feed_weights in arxiv_config.json
+        Install
       
     </span>
   </a>
@@ -533,10 +561,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#why-the-low-priority-penalty-fires-only-once" class="md-nav__link">
+  <a href="#use-it" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Why the low-priority penalty fires only once
+        Use it
       
     </span>
   </a>
@@ -544,21 +572,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#designing-custom-weights" class="md-nav__link">
+  <a href="#update-or-renew" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Designing custom weights
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#explain_score" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        explain_score
+        Update or renew
       
     </span>
   </a>
@@ -569,34 +586,6 @@
   
 </nav>
       
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../ios-app/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    iPhone app
-  
-
-    
-  </span>
-  
-  
-
-      </a>
     </li>
   
 
@@ -813,10 +802,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#defaults" class="md-nav__link">
+  <a href="#what-you-need" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Defaults
+        What you need
       
     </span>
   </a>
@@ -824,10 +813,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#weights-feed_weights-in-arxiv_configjson" class="md-nav__link">
+  <a href="#install" class="md-nav__link">
     <span class="md-ellipsis">
       
-        weights + feed_weights in arxiv_config.json
+        Install
       
     </span>
   </a>
@@ -835,10 +824,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#why-the-low-priority-penalty-fires-only-once" class="md-nav__link">
+  <a href="#use-it" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Why the low-priority penalty fires only once
+        Use it
       
     </span>
   </a>
@@ -846,21 +835,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#designing-custom-weights" class="md-nav__link">
+  <a href="#update-or-renew" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Designing custom weights
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#explain_score" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        explain_score
+        Update or renew
       
     </span>
   </a>
@@ -935,84 +913,79 @@
   
 
 
-<h1 id="scoring">Scoring<a class="headerlink" href="#scoring" title="Permanent link">&para;</a></h1>
-<p>Every paper is reduced to a single integer score. The CLI and GUI both rank by this score and slice to <code>top_n</code>. Scoring is fully transparent: the GUI's <em>Why this score?</em> expander shows the per-rule contribution.</p>
-<h2 id="defaults">Defaults<a class="headerlink" href="#defaults" title="Permanent link">&para;</a></h2>
+<h1 id="iphone-ipad-app-preview">iPhone / iPad app (preview)<a class="headerlink" href="#iphone-ipad-app-preview" title="Permanent link">&para;</a></h1>
+<p>The native app isn't on the App Store yet. Until it is, you can install it on
+your own iPhone or iPad from source with Xcode, as a development build.</p>
+<h2 id="what-you-need">What you need<a class="headerlink" href="#what-you-need" title="Permanent link">&para;</a></h2>
+<ul>
+<li>A Mac with <a href="https://apps.apple.com/app/xcode/id497799835">Xcode</a> (free) and
+  <a href="https://brew.sh">Homebrew</a>.</li>
+<li>An Apple ID. A free account works; the app then stops opening after <strong>7 days</strong>
+  until you install it again (a paid Apple Developer account extends this to a
+  year).</li>
+<li>The iPhone/iPad and a USB cable (for the first install).</li>
+</ul>
+<h2 id="install">Install<a class="headerlink" href="#install" title="Permanent link">&para;</a></h2>
+<ol>
+<li>Get the code and generate the Xcode project:
+   <div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>git<span class="w"> </span>clone<span class="w"> </span>https://github.com/isaac-tes/arxiv-digest.git
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="nb">cd</span><span class="w"> </span>arxiv-digest/ios
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>brew<span class="w"> </span>install<span class="w"> </span>xcodegen
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>xcodegen<span class="w"> </span>generate<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>open<span class="w"> </span>ArxivDigest.xcodeproj
+</span></code></pre></div></li>
+<li><strong>Sign it</strong> (once): in Xcode → Settings → <strong>Accounts</strong>, add your Apple ID.
+   Then click the blue <strong>ArxivDigest</strong> project → target <strong>ArxivDigestApp</strong> →
+   <strong>Signing &amp; Capabilities</strong> → tick <em>Automatically manage signing</em> → <strong>Team</strong>:
+   your <em>(Personal Team)</em>. If Xcode says the bundle identifier is taken, change
+   it to something unique, e.g. <code>com.&lt;yourname&gt;.arxivdigest</code>.</li>
+<li><strong>Prepare the phone</strong> (once): connect it by cable, unlock it and tap <strong>Trust
+   This Computer</strong>. Turn on <strong>Settings → Privacy &amp; Security → Developer Mode</strong>;
+   the phone restarts.</li>
+<li><strong>Run</strong>: in Xcode's toolbar pick the scheme <strong>ArxivDigestApp</strong> and your phone
+   as the destination, then press <strong>⌘R</strong>.</li>
+<li><strong>Trust the developer</strong> (first launch only): iOS refuses to open the app.
+   On the phone go to <strong>Settings → General → VPN &amp; Device Management</strong>, tap your
+   Apple ID, <strong>Trust</strong>, and open the app again.</li>
+</ol>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Running <code>xcodegen generate</code> again resets the signing team; set it again in
+step 2. If Xcode offers to "update to recommended settings", choose <strong>Cancel</strong>
+(the project file is generated from <code>ios/project.yml</code>).</p>
+</div>
+<h2 id="use-it">Use it<a class="headerlink" href="#use-it" title="Permanent link">&para;</a></h2>
+<p>The app starts in <strong>On this device</strong> mode: it fetches arXiv and scores papers on
+the phone, with no server. Settings → Connection switches modes:</p>
 <table>
 <thead>
 <tr>
-<th>Rule</th>
-<th>Default weight</th>
+<th>Mode</th>
+<th>When</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td>Per matched core keyword</td>
-<td><strong>+6</strong></td>
+<td><strong>On this device</strong></td>
+<td>Default. Works anywhere; settings stay on the phone.</td>
 </tr>
 <tr>
-<td>Per matched named author</td>
-<td><strong>+6</strong> (matched against the author list only)</td>
+<td><strong>Server</strong></td>
+<td>Share settings with your Mac (GUI) and other devices. See <a href="../deploy/">Sync across devices</a>.</td>
 </tr>
 <tr>
-<td>Per-feed subject bonus</td>
-<td><strong>per feed</strong>: e.g. <code>cond-mat.quant-gas</code> +4, <code>cond-mat.mes-hall</code> +4, <code>quant-ph</code> +2</td>
-</tr>
-<tr>
-<td>Any low-priority term matches (applied once)</td>
-<td><strong>−5</strong></td>
-</tr>
-<tr>
-<td>Abstract longer than 200 chars</td>
-<td><strong>+1</strong></td>
+<td><strong>Demo</strong></td>
+<td>Built-in sample papers, to look around.</td>
 </tr>
 </tbody>
 </table>
-<p>Scalar weights live in the <code>ScoringWeights</code> dataclass; <strong>subject scoring is fully driven by <code>feed_weights</code></strong>, one bonus per configured feed, added when the feed name appears in a paper's subjects. Edit both in <code>arxiv_config.json</code> or the GUI's Scoring tab (a field per feed under <em>Per-feed subject bonuses</em>).</p>
-<h2 id="weights-feed_weights-in-arxiv_configjson"><code>weights</code> + <code>feed_weights</code> in <code>arxiv_config.json</code><a class="headerlink" href="#weights-feed_weights-in-arxiv_configjson" title="Permanent link">&para;</a></h2>
-<div class="language-json highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="p">{</span>
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="w">  </span><span class="nt">&quot;weights&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="w">    </span><span class="nt">&quot;core_keyword&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">6</span><span class="p">,</span>
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="w">    </span><span class="nt">&quot;named_author&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">6</span><span class="p">,</span>
-</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="w">    </span><span class="nt">&quot;low_priority_penalty&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">-5</span><span class="p">,</span>
-</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="w">    </span><span class="nt">&quot;long_abstract_bonus&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span>
-</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="w">    </span><span class="nt">&quot;long_abstract_threshold&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">200</span>
-</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="w">  </span><span class="p">},</span>
-</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="w">  </span><span class="nt">&quot;feed_weights&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a><span class="w">    </span><span class="nt">&quot;cond-mat.quant-gas&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">4</span><span class="p">,</span>
-</span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a><span class="w">    </span><span class="nt">&quot;cond-mat.mes-hall&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">4</span><span class="p">,</span>
-</span><span id="__span-0-12"><a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a><span class="w">    </span><span class="nt">&quot;quant-ph&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">2</span>
-</span><span id="__span-0-13"><a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a><span class="w">  </span><span class="p">}</span>
-</span><span id="__span-0-14"><a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a><span class="p">}</span>
+<p>To bring your GUI settings over without a server, export a profile in the GUI
+and open the file on the phone: see <a href="../deploy/#copy-the-config-file-without-a-server">Copy the config file</a>.</p>
+<h2 id="update-or-renew">Update or renew<a class="headerlink" href="#update-or-renew" title="Permanent link">&para;</a></h2>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="nb">cd</span><span class="w"> </span>arxiv-digest<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>git<span class="w"> </span>pull
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="nb">cd</span><span class="w"> </span>ios<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>xcodegen<span class="w"> </span>generate<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>open<span class="w"> </span>ArxivDigest.xcodeproj
 </span></code></pre></div>
-<p>Missing <code>weights</code> keys fall back to defaults. Configs written before unification (with <code>quant_gas_subject</code> etc. under <code>weights</code>) are <strong>migrated automatically</strong> into <code>feed_weights</code> on load.</p>
-<h2 id="why-the-low-priority-penalty-fires-only-once">Why the low-priority penalty fires only once<a class="headerlink" href="#why-the-low-priority-penalty-fires-only-once" title="Permanent link">&para;</a></h2>
-<p>Multiple low-priority hits don't compound. A paper with three "growth" / "film" / "annealing" hits gets <code>−5</code>, not <code>−15</code>. This stops the heuristic from over-punishing legitimate work that happens to mention thin films in one sentence.</p>
-<h2 id="designing-custom-weights">Designing custom weights<a class="headerlink" href="#designing-custom-weights" title="Permanent link">&para;</a></h2>
-<p>A useful mental model: a single keyword is worth roughly two <code>quant-ph</code> subject bonuses, and a single low-priority hit cancels one keyword match. Tune from there.</p>
-<p>Common patterns:</p>
-<ul>
-<li><strong>Subject-only ranking</strong>: zero out keywords/authors, raise subject bonuses to e.g. +10.</li>
-<li><strong>Author-driven</strong>: drop keywords to +1, raise <code>named_author</code> to +10. Useful when tracking specific groups.</li>
-<li><strong>Aggressive filtering</strong>: <code>low_priority_penalty: -20</code> makes any film/growth hit drop a paper out of the top N entirely.</li>
-</ul>
-<h2 id="explain_score"><code>explain_score</code><a class="headerlink" href="#explain_score" title="Permanent link">&para;</a></h2>
-<p>Programmatic introspection:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">arxiv_digest</span><span class="w"> </span><span class="kn">import</span> <span class="n">Config</span><span class="p">,</span> <span class="n">explain_score</span>
-</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>
-</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="n">cfg</span> <span class="o">=</span> <span class="n">Config</span><span class="o">.</span><span class="n">load</span><span class="p">()</span>
-</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="n">breakdown</span> <span class="o">=</span> <span class="n">explain_score</span><span class="p">(</span><span class="n">paper</span><span class="p">,</span> <span class="n">cfg</span><span class="p">)</span>
-</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="c1"># {</span>
-</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="c1">#   &quot;keywords&quot;: [(&quot;topological&quot;, 6), (&quot;dmrg&quot;, 6)],</span>
-</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="c1">#   &quot;authors&quot;: [(&quot;bloch&quot;, 6)],</span>
-</span><span id="__span-1-8"><a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a><span class="c1">#   &quot;subjects&quot;: {&quot;cond-mat.quant-gas&quot;: 4},</span>
-</span><span id="__span-1-9"><a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a><span class="c1">#   &quot;low_priority_hits&quot;: [],</span>
-</span><span id="__span-1-10"><a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a><span class="c1">#   &quot;low_priority_penalty&quot;: 0,</span>
-</span><span id="__span-1-11"><a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a><span class="c1">#   &quot;abstract_bonus&quot;: 1,</span>
-</span><span id="__span-1-12"><a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a><span class="c1">#   &quot;total&quot;: 23,</span>
-</span><span id="__span-1-13"><a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a><span class="c1"># }</span>
-</span></code></pre></div>
-<p><code>score_paper(paper, cfg)</code> is a thin wrapper that returns <code>breakdown["total"]</code>. The two functions can never drift: <code>score_paper</code> calls <code>explain_score</code> internally.</p>
+<p>Set the signing team again (step 2), connect the phone and press <strong>⌘R</strong>. Do the
+same every 7 days on a free Apple ID; your config and removed papers are kept.</p>
 
 
 
@@ -1035,7 +1008,7 @@
     <span class="md-icon" title="Last update">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M21 13.1c-.1 0-.3.1-.4.2l-1 1 2.1 2.1 1-1c.2-.2.2-.6 0-.8l-1.3-1.3c-.1-.1-.2-.2-.4-.2m-1.9 1.8-6.1 6V23h2.1l6.1-6.1zM12.5 7v5.2l4 2.4-1 1L11 13V7zM11 21.9c-5.1-.5-9-4.8-9-9.9C2 6.5 6.5 2 12 2c5.3 0 9.6 4.1 10 9.3-.3-.1-.6-.2-1-.2s-.7.1-1 .2C19.6 7.2 16.2 4 12 4c-4.4 0-8 3.6-8 8 0 4.1 3.1 7.5 7.1 7.9l-.1.2z"/></svg>
     </span>
-    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="August 24, 2026 09:41:24 UTC"><span class="timeago" datetime="2026-08-24T09:41:24+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="August 24, 2026 09:41:24 UTC">2026-08-24</span>
+    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="October 8, 2026 10:01:28 UTC"><span class="timeago" datetime="2026-10-08T10:01:28+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="October 8, 2026 10:01:28 UTC">2026-10-08</span>
   </span>
 
     
@@ -1045,7 +1018,7 @@
     <span class="md-icon" title="Created">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M14.47 15.08 11 13V7h1.5v5.25l3.08 1.83c-.41.28-.79.62-1.11 1m-1.39 4.84c-.36.05-.71.08-1.08.08-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8c0 .37-.03.72-.08 1.08.69.1 1.33.32 1.92.64.1-.56.16-1.13.16-1.72 0-5.5-4.5-10-10-10S2 6.5 2 12s4.47 10 10 10c.59 0 1.16-.06 1.72-.16-.32-.59-.54-1.23-.64-1.92M18 15v3h-3v2h3v3h2v-3h3v-2h-3v-3z"/></svg>
     </span>
-    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="May 7, 2026 08:38:58 UTC"><span class="timeago" datetime="2026-05-07T08:38:58+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="May 7, 2026 08:38:58 UTC">2026-05-07</span>
+    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="October 8, 2026 10:01:28 UTC"><span class="timeago" datetime="2026-10-08T10:01:28+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="October 8, 2026 10:01:28 UTC">2026-10-08</span>
   </span>
 
     
@@ -1080,7 +1053,7 @@
       <nav class="md-footer__inner md-grid" aria-label="Footer" >
         
           
-          <a href="../cli-guide/" class="md-footer__link md-footer__link--prev" aria-label="Previous: CLI">
+          <a href="../scoring/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Scoring">
             <div class="md-footer__button md-icon">
               
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
@@ -1090,20 +1063,20 @@
                 Previous
               </span>
               <div class="md-ellipsis">
-                CLI
+                Scoring
               </div>
             </div>
           </a>
         
         
           
-          <a href="../ios-app/" class="md-footer__link md-footer__link--next" aria-label="Next: iPhone app">
+          <a href="../deploy/" class="md-footer__link md-footer__link--next" aria-label="Next: Sync across devices">
             <div class="md-footer__title">
               <span class="md-footer__direction">
                 Next
               </span>
               <div class="md-ellipsis">
-                iPhone app
+                Sync across devices
               </div>
             </div>
             <div class="md-footer__button md-icon">

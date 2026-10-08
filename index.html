@@ -648,6 +648,10 @@
       
         
       
+        
+      
+        
+      
     
     
     
@@ -764,6 +768,62 @@
     
   
     Scoring
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="ios-app/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    iPhone app
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="deploy/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Sync across devices
   
 
     
@@ -1315,7 +1375,7 @@ clone, with no PATH entry and nothing to uninstall:</p>
 <p><strong>Want to hack on the code?</strong> Run straight from the clone instead of installing
 as a tool:</p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>uv<span class="w"> </span>sync<span class="w"> </span>--group<span class="w"> </span>dev<span class="w">                      </span><span class="c1"># CLI + GUI + tests + docs</span>
-</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>uv<span class="w"> </span>run<span class="w"> </span>pytest<span class="w"> </span>-q<span class="w">                         </span><span class="c1"># full test suite, ~2s, no network</span>
+</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>uv<span class="w"> </span>run<span class="w"> </span>pytest<span class="w"> </span>-q<span class="w">                         </span><span class="c1"># full test suite, ~10s, no network</span>
 </span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>uv<span class="w"> </span>run<span class="w"> </span>streamlit<span class="w"> </span>run<span class="w"> </span>arxiv_gui.py<span class="w">        </span><span class="c1"># GUI in browser at localhost:8501</span>
 </span></code></pre></div>
 <p><code>uv tool install</code> puts both commands on your PATH in an isolated environment;
@@ -1329,10 +1389,11 @@ Streamlit + pandas; use <code>uv tool install .</code> for a CLI-only install.</
 <code>arxiv-gui</code> tools from it (keeping CLI-only installs CLI-only). On Windows it
 prints the exact command to run, because the running <code>.exe</code> would lock the
 upgrade.</p>
-<p>You'll also get a one-line notice at the end of normal digest runs when a newer
-release is out (checked against the GitHub releases API at most once a day,
-cached in <code>~/.arxiv_scraper/update_check.json</code>, silent when offline). Suppress
-it with <code>--no-update-check</code>.</p>
+<p>You'll also get a one-line notice at the end of normal digest runs, and when
+starting <code>arxiv-gui</code> (in the terminal and as a small note in the GUI sidebar),
+when a newer release is out (checked against the GitHub releases API at most
+once a day, cached in <code>~/.arxiv_scraper/update_check.json</code>, silent when
+offline). Suppress the CLI notice with <code>--no-update-check</code>.</p>
 <p>Prefer updating from your clone (e.g. to track a branch or an unreleased
 commit)?</p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="nb">cd</span><span class="w"> </span>arxiv-digest
@@ -1344,6 +1405,7 @@ commit)?</p>
 <p><strong>Why <code>--reinstall</code>?</strong> <code>uv tool</code> installs into an isolated environment that does <strong>not</strong> auto-track your clone, so <code>git pull</code> alone won't update the <code>arxiv-digest</code> / <code>arxiv-gui</code> commands. The reinstall rebuilds them. (If you <code>uv run</code> from the clone instead of installing as a tool, just <code>git pull</code> is enough.)</p>
 </blockquote>
 <hr />
+<p><strong>📱 iPhone / iPad app (preview)</strong>: works on its own ("On this device"), or shares your settings across devices through a small self-hosted server. Not on the App Store yet: <a href="ios-app/">install it from Xcode</a>, then see <a href="deploy/">Share settings across devices</a>.</p>
 <p><strong>👋 Most people should use the web app.</strong> It runs in your browser, shows each paper's keyword / author / subject hits highlighted in color, explains <em>why</em> it scored what it did, and offers one-click <strong>Save to Zotero</strong>. The CLI is there for those who want a scriptable, terminal-first digest sharing the exact same preferences and config.</p>
 <p>Both share the same <code>Config</code> and <code>arxiv_config.json</code>; tweak in one, the other picks it up.</p>
 <p>Fetches arXiv listing pages for <strong>any</strong> category, scores papers by your keyword / author / subject preferences, and presents the ranked digest as a <strong>web app</strong> (<code>arxiv-gui</code>) for interactive browsing and tuning, or as a CLI report (terminal, Markdown, JSON) for automation. Works with any arXiv feed (<code>hep-th</code>, <code>cs.LG</code>, <code>math.AG</code>, …); the defaults just ship a condensed-matter / quantum-physics set you can replace.</p>
@@ -1640,7 +1702,7 @@ and starter presets as the web app: tweak in one, the other picks it up.</p>
 <hr />
 <h2 id="tests">Tests<a class="headerlink" href="#tests" title="Permanent link">&para;</a></h2>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-13-1"><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a>uv<span class="w"> </span>sync<span class="w"> </span>--group<span class="w"> </span><span class="nb">test</span>
-</span><span id="__span-13-2"><a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a>uv<span class="w"> </span>run<span class="w"> </span>pytest<span class="w">             </span><span class="c1"># full suite (~1s, no network)</span>
+</span><span id="__span-13-2"><a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a>uv<span class="w"> </span>run<span class="w"> </span>pytest<span class="w">             </span><span class="c1"># full suite (~10s, no network)</span>
 </span><span id="__span-13-3"><a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a>uv<span class="w"> </span>run<span class="w"> </span>pytest<span class="w"> </span>-k<span class="w"> </span>weight<span class="w">   </span><span class="c1"># filter by name</span>
 </span></code></pre></div>
 <p>Covers <code>Config</code> defaults &amp; JSON round-trips, every scoring rule independently, a property test that <code>score_paper == explain_score(...)["total"]</code>, CLI flag handling, formatting helpers, HTML parsing of <code>fetch_feed</code> against a fixture, and a Streamlit GUI render smoke test. <code>requests.get</code> is monkey-patched so no network calls hit arXiv during tests.</p>
@@ -1677,7 +1739,7 @@ and starter presets as the web app: tweak in one, the other picks it up.</p>
     <span class="md-icon" title="Last update">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M21 13.1c-.1 0-.3.1-.4.2l-1 1 2.1 2.1 1-1c.2-.2.2-.6 0-.8l-1.3-1.3c-.1-.1-.2-.2-.4-.2m-1.9 1.8-6.1 6V23h2.1l6.1-6.1zM12.5 7v5.2l4 2.4-1 1L11 13V7zM11 21.9c-5.1-.5-9-4.8-9-9.9C2 6.5 6.5 2 12 2c5.3 0 9.6 4.1 10 9.3-.3-.1-.6-.2-1-.2s-.7.1-1 .2C19.6 7.2 16.2 4 12 4c-4.4 0-8 3.6-8 8 0 4.1 3.1 7.5 7.1 7.9l-.1.2z"/></svg>
     </span>
-    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="September 30, 2026 12:39:51 UTC"><span class="timeago" datetime="2026-09-30T12:39:51+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="September 30, 2026 12:39:51 UTC">2026-09-30</span>
+    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="October 8, 2026 10:01:28 UTC"><span class="timeago" datetime="2026-10-08T10:01:28+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="October 8, 2026 10:01:28 UTC">2026-10-08</span>
   </span>
 
     

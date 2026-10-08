@@ -339,6 +339,10 @@
       
         
       
+        
+      
+        
+      
     
     
     
@@ -612,6 +616,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#moving-settings-to-the-iphone-and-back" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Moving settings to the iPhone (and back)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#tips" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -674,6 +689,62 @@
     
   
     Scoring
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ios-app/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    iPhone app
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../deploy/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Sync across devices
   
 
     
@@ -1031,6 +1102,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#moving-settings-to-the-iphone-and-back" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Moving settings to the iPhone (and back)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#tips" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1355,11 +1437,22 @@ config when you click that tab's <strong>Save</strong> button; <strong>Feeds</st
 project-config save captures the <em>current</em> live config, so apply your tab
 edits first, otherwise they won't be included.</p>
 </div>
+<h2 id="moving-settings-to-the-iphone-and-back">Moving settings to the iPhone (and back)<a class="headerlink" href="#moving-settings-to-the-iphone-and-back" title="Permanent link">&para;</a></h2>
+<p>Two ways, both described step by step in <a href="../deploy/">Sync across devices</a>:</p>
+<ul>
+<li><strong>Copy one file, no server</strong>: <strong>Profiles → Export</strong> a profile, AirDrop the
+  <code>.json</code> to the iPhone and open it with <em>arXiv Digest</em>; the other way, the
+  app's Settings → <strong>Config file → Export config</strong>, then <strong>Profiles → Import
+  profile from JSON</strong> here. See <a href="../deploy/#copy-the-config-file-without-a-server">Copy the config file</a>.</li>
+<li><strong>Keep them in sync</strong>: run the digest server, then sidebar → <strong>🔄 Sync with
+  server</strong> here and Settings → Connection → <strong>Server</strong> in the app. See
+  <a href="../deploy/#5-connect-each-device">Connect each device</a>.</li>
+</ul>
 <h2 id="tips">Tips<a class="headerlink" href="#tips" title="Permanent link">&para;</a></h2>
 <ul>
 <li>The score breakdown is the fastest way to figure out why a low-priority hit overshadowed a keyword match. Open it before re-tweaking weights blindly.</li>
 <li>Profiles are pure JSON; you can hand-edit them outside the GUI or check them into a separate dotfiles repo.</li>
-<li>The GUI never writes back to <code>arxiv_config.json</code> automatically. You must press <strong>Write project config</strong> in the Profiles tab. That keeps surprises out of your CLI workflow.</li>
+<li>Without sync, the GUI never writes back to <code>arxiv_config.json</code> automatically. You must press <strong>Write project config</strong> in the Profiles tab. That keeps surprises out of your CLI workflow. (With <strong>Sync with server</strong> on, downloading from the server also updates <code>arxiv_config.json</code>, so the CLI follows the shared config.)</li>
 </ul>
 
 
@@ -1383,7 +1476,7 @@ edits first, otherwise they won't be included.</p>
     <span class="md-icon" title="Last update">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M21 13.1c-.1 0-.3.1-.4.2l-1 1 2.1 2.1 1-1c.2-.2.2-.6 0-.8l-1.3-1.3c-.1-.1-.2-.2-.4-.2m-1.9 1.8-6.1 6V23h2.1l6.1-6.1zM12.5 7v5.2l4 2.4-1 1L11 13V7zM11 21.9c-5.1-.5-9-4.8-9-9.9C2 6.5 6.5 2 12 2c5.3 0 9.6 4.1 10 9.3-.3-.1-.6-.2-1-.2s-.7.1-1 .2C19.6 7.2 16.2 4 12 4c-4.4 0-8 3.6-8 8 0 4.1 3.1 7.5 7.1 7.9l-.1.2z"/></svg>
     </span>
-    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="September 30, 2026 12:39:51 UTC"><span class="timeago" datetime="2026-09-30T12:39:51+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="September 30, 2026 12:39:51 UTC">2026-09-30</span>
+    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="October 8, 2026 10:01:28 UTC"><span class="timeago" datetime="2026-10-08T10:01:28+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="October 8, 2026 10:01:28 UTC">2026-10-08</span>
   </span>
 
     

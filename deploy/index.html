@@ -12,13 +12,13 @@
         <meta name="author" content="isaac-tes">
       
       
-        <link rel="canonical" href="https://isaac-tes.github.io/arxiv-digest/scoring/">
+        <link rel="canonical" href="https://isaac-tes.github.io/arxiv-digest/deploy/">
       
       
-        <link rel="prev" href="../cli-guide/">
+        <link rel="prev" href="../ios-app/">
       
       
-        <link rel="next" href="../ios-app/">
+        <link rel="next" href="../troubleshooting/">
       
       
         
@@ -29,7 +29,7 @@
     
     
       
-        <title>Scoring - arXiv Digest</title>
+        <title>Sync across devices - arXiv Digest</title>
       
     
     
@@ -84,7 +84,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#scoring" class="md-skip">
+        <a href="#share-settings-across-devices-digest-server" class="md-skip">
           Skip to content
         </a>
       
@@ -120,7 +120,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Scoring
+              Sync across devices
             
           </span>
         </div>
@@ -448,37 +448,10 @@
                 
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
-      
-      
-        
-      
-      
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Scoring
-  
-
-    
-  </span>
-  
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <a href="./" class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../scoring/" class="md-nav__link">
         
   
   
@@ -494,81 +467,6 @@
   
 
       </a>
-      
-        
-
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
-  
-  
-  
-    
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#defaults" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Defaults
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#weights-feed_weights-in-arxiv_configjson" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        weights + feed_weights in arxiv_config.json
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#why-the-low-priority-penalty-fires-only-once" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Why the low-priority penalty fires only once
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#designing-custom-weights" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Designing custom weights
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#explain_score" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        explain_score
-      
-    </span>
-  </a>
-  
-</li>
-      
-    </ul>
-  
-</nav>
-      
     </li>
   
 
@@ -606,10 +504,37 @@
                 
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="../deploy/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Sync across devices
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   
@@ -625,6 +550,153 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#1-requirements" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Requirements
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-start-the-server" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Start the server
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-optional-start-from-your-gui-settings" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Optional: start from your GUI settings
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-make-it-reachable-from-your-devices" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. Make it reachable from your devices
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#5-connect-each-device" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. Connect each device
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#6-keep-it-running" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6. Keep it running
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#7-back-up" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7. Back up
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#copy-the-config-file-without-a-server" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Copy the config file (without a server)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#reference" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Reference
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Reference">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#server-settings-environment-variables" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Server settings (environment variables)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#going-public-remote-mode" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Going public (remote mode)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -813,10 +885,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#defaults" class="md-nav__link">
+  <a href="#1-requirements" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Defaults
+        1. Requirements
       
     </span>
   </a>
@@ -824,10 +896,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#weights-feed_weights-in-arxiv_configjson" class="md-nav__link">
+  <a href="#2-start-the-server" class="md-nav__link">
     <span class="md-ellipsis">
       
-        weights + feed_weights in arxiv_config.json
+        2. Start the server
       
     </span>
   </a>
@@ -835,10 +907,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#why-the-low-priority-penalty-fires-only-once" class="md-nav__link">
+  <a href="#3-optional-start-from-your-gui-settings" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Why the low-priority penalty fires only once
+        3. Optional: start from your GUI settings
       
     </span>
   </a>
@@ -846,10 +918,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#designing-custom-weights" class="md-nav__link">
+  <a href="#4-make-it-reachable-from-your-devices" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Designing custom weights
+        4. Make it reachable from your devices
       
     </span>
   </a>
@@ -857,13 +929,85 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#explain_score" class="md-nav__link">
+  <a href="#5-connect-each-device" class="md-nav__link">
     <span class="md-ellipsis">
       
-        explain_score
+        5. Connect each device
       
     </span>
   </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#6-keep-it-running" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6. Keep it running
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#7-back-up" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7. Back up
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#copy-the-config-file-without-a-server" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Copy the config file (without a server)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#reference" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Reference
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Reference">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#server-settings-environment-variables" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Server settings (environment variables)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#going-public-remote-mode" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Going public (remote mode)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
   
 </li>
       
@@ -935,84 +1079,292 @@
   
 
 
-<h1 id="scoring">Scoring<a class="headerlink" href="#scoring" title="Permanent link">&para;</a></h1>
-<p>Every paper is reduced to a single integer score. The CLI and GUI both rank by this score and slice to <code>top_n</code>. Scoring is fully transparent: the GUI's <em>Why this score?</em> expander shows the per-rule contribution.</p>
-<h2 id="defaults">Defaults<a class="headerlink" href="#defaults" title="Permanent link">&para;</a></h2>
+<h1 id="share-settings-across-devices-digest-server">Share settings across devices (digest server)<a class="headerlink" href="#share-settings-across-devices-digest-server" title="Permanent link">&para;</a></h1>
+<p>The iOS app has three connection modes (Settings → Connection):</p>
 <table>
 <thead>
 <tr>
-<th>Rule</th>
-<th>Default weight</th>
+<th>Mode</th>
+<th>Where config + removed papers live</th>
+<th>Synced?</th>
+<th>Needs a server?</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td>Per matched core keyword</td>
-<td><strong>+6</strong></td>
+<td><strong>On this device</strong> (default)</td>
+<td>on the phone</td>
+<td>no</td>
+<td>no</td>
 </tr>
 <tr>
-<td>Per matched named author</td>
-<td><strong>+6</strong> (matched against the author list only)</td>
+<td><strong>Server</strong></td>
+<td>on the digest server</td>
+<td><strong>yes</strong>: every device pointing at the same server shares them</td>
+<td>yes</td>
 </tr>
 <tr>
-<td>Per-feed subject bonus</td>
-<td><strong>per feed</strong>: e.g. <code>cond-mat.quant-gas</code> +4, <code>cond-mat.mes-hall</code> +4, <code>quant-ph</code> +2</td>
-</tr>
-<tr>
-<td>Any low-priority term matches (applied once)</td>
-<td><strong>−5</strong></td>
-</tr>
-<tr>
-<td>Abstract longer than 200 chars</td>
-<td><strong>+1</strong></td>
+<td><strong>Demo</strong></td>
+<td>in memory (sample papers)</td>
+<td>no</td>
+<td>no</td>
 </tr>
 </tbody>
 </table>
-<p>Scalar weights live in the <code>ScoringWeights</code> dataclass; <strong>subject scoring is fully driven by <code>feed_weights</code></strong>, one bonus per configured feed, added when the feed name appears in a paper's subjects. Edit both in <code>arxiv_config.json</code> or the GUI's Scoring tab (a field per feed under <em>Per-feed subject bonuses</em>).</p>
-<h2 id="weights-feed_weights-in-arxiv_configjson"><code>weights</code> + <code>feed_weights</code> in <code>arxiv_config.json</code><a class="headerlink" href="#weights-feed_weights-in-arxiv_configjson" title="Permanent link">&para;</a></h2>
-<div class="language-json highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="p">{</span>
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="w">  </span><span class="nt">&quot;weights&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="w">    </span><span class="nt">&quot;core_keyword&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">6</span><span class="p">,</span>
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="w">    </span><span class="nt">&quot;named_author&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">6</span><span class="p">,</span>
-</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="w">    </span><span class="nt">&quot;low_priority_penalty&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">-5</span><span class="p">,</span>
-</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="w">    </span><span class="nt">&quot;long_abstract_bonus&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span>
-</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="w">    </span><span class="nt">&quot;long_abstract_threshold&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">200</span>
-</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="w">  </span><span class="p">},</span>
-</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="w">  </span><span class="nt">&quot;feed_weights&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a><span class="w">    </span><span class="nt">&quot;cond-mat.quant-gas&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">4</span><span class="p">,</span>
-</span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a><span class="w">    </span><span class="nt">&quot;cond-mat.mes-hall&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">4</span><span class="p">,</span>
-</span><span id="__span-0-12"><a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a><span class="w">    </span><span class="nt">&quot;quant-ph&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">2</span>
-</span><span id="__span-0-13"><a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a><span class="w">  </span><span class="p">}</span>
-</span><span id="__span-0-14"><a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a><span class="p">}</span>
-</span></code></pre></div>
-<p>Missing <code>weights</code> keys fall back to defaults. Configs written before unification (with <code>quant_gas_subject</code> etc. under <code>weights</code>) are <strong>migrated automatically</strong> into <code>feed_weights</code> on load.</p>
-<h2 id="why-the-low-priority-penalty-fires-only-once">Why the low-priority penalty fires only once<a class="headerlink" href="#why-the-low-priority-penalty-fires-only-once" title="Permanent link">&para;</a></h2>
-<p>Multiple low-priority hits don't compound. A paper with three "growth" / "film" / "annealing" hits gets <code>−5</code>, not <code>−15</code>. This stops the heuristic from over-punishing legitimate work that happens to mention thin films in one sentence.</p>
-<h2 id="designing-custom-weights">Designing custom weights<a class="headerlink" href="#designing-custom-weights" title="Permanent link">&para;</a></h2>
-<p>A useful mental model: a single keyword is worth roughly two <code>quant-ph</code> subject bonuses, and a single low-priority hit cancels one keyword match. Tune from there.</p>
-<p>Common patterns:</p>
+<p>To share keywords, authors, feeds, weights and removed papers between devices
+(iPhone, iPad, a Mac), run the <strong>digest server</strong> (<code>server/</code>, a FastAPI app around
+the same <code>arxiv_digest.py</code> engine as the CLI and GUI) somewhere all of them can
+reach, and switch each device to <strong>Server</strong>.</p>
+<div class="admonition tip">
+<p class="admonition-title">No server? Copy one file instead</p>
+<p>In <strong>On this device</strong> mode nothing is synced, but you can move the config by
+hand as a single JSON file, both ways (see <a href="#copy-the-config-file-without-a-server">Copy the config file</a>).</p>
+</div>
+<hr />
+<h2 id="1-requirements">1. Requirements<a class="headerlink" href="#1-requirements" title="Permanent link">&para;</a></h2>
 <ul>
-<li><strong>Subject-only ranking</strong>: zero out keywords/authors, raise subject bonuses to e.g. +10.</li>
-<li><strong>Author-driven</strong>: drop keywords to +1, raise <code>named_author</code> to +10. Useful when tracking specific groups.</li>
-<li><strong>Aggressive filtering</strong>: <code>low_priority_penalty: -20</code> makes any film/growth hit drop a paper out of the top N entirely.</li>
+<li>Python 3.12+ and <a href="https://docs.astral.sh/uv/">uv</a> (installs into your home
+  directory, no root needed):
+  <div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>curl<span class="w"> </span>-LsSf<span class="w"> </span>https://astral.sh/uv/install.sh<span class="w"> </span><span class="p">|</span><span class="w"> </span>sh
+</span></code></pre></div></li>
+<li>The <strong>whole repository</strong>, not just <code>server/</code>: the server imports the engine
+  (<code>arxiv_digest.py</code>) from the repo root.
+  <div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>git<span class="w"> </span>clone<span class="w"> </span>https://github.com/isaac-tes/arxiv-digest.git
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="nb">cd</span><span class="w"> </span>arxiv-digest
+</span></code></pre></div></li>
 </ul>
-<h2 id="explain_score"><code>explain_score</code><a class="headerlink" href="#explain_score" title="Permanent link">&para;</a></h2>
-<p>Programmatic introspection:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">arxiv_digest</span><span class="w"> </span><span class="kn">import</span> <span class="n">Config</span><span class="p">,</span> <span class="n">explain_score</span>
-</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>
-</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="n">cfg</span> <span class="o">=</span> <span class="n">Config</span><span class="o">.</span><span class="n">load</span><span class="p">()</span>
-</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="n">breakdown</span> <span class="o">=</span> <span class="n">explain_score</span><span class="p">(</span><span class="n">paper</span><span class="p">,</span> <span class="n">cfg</span><span class="p">)</span>
-</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="c1"># {</span>
-</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="c1">#   &quot;keywords&quot;: [(&quot;topological&quot;, 6), (&quot;dmrg&quot;, 6)],</span>
-</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="c1">#   &quot;authors&quot;: [(&quot;bloch&quot;, 6)],</span>
-</span><span id="__span-1-8"><a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a><span class="c1">#   &quot;subjects&quot;: {&quot;cond-mat.quant-gas&quot;: 4},</span>
-</span><span id="__span-1-9"><a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a><span class="c1">#   &quot;low_priority_hits&quot;: [],</span>
-</span><span id="__span-1-10"><a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a><span class="c1">#   &quot;low_priority_penalty&quot;: 0,</span>
-</span><span id="__span-1-11"><a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a><span class="c1">#   &quot;abstract_bonus&quot;: 1,</span>
-</span><span id="__span-1-12"><a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a><span class="c1">#   &quot;total&quot;: 23,</span>
-</span><span id="__span-1-13"><a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a><span class="c1"># }</span>
+<h2 id="2-start-the-server">2. Start the server<a class="headerlink" href="#2-start-the-server" title="Permanent link">&para;</a></h2>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="nb">cd</span><span class="w"> </span>server
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>uv<span class="w"> </span>sync
+</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>uv<span class="w"> </span>run<span class="w"> </span>uvicorn<span class="w"> </span>app.main:app<span class="w"> </span>--host<span class="w"> </span><span class="m">127</span>.0.0.1<span class="w"> </span>--port<span class="w"> </span><span class="m">8000</span>
 </span></code></pre></div>
-<p><code>score_paper(paper, cfg)</code> is a thin wrapper that returns <code>breakdown["total"]</code>. The two functions can never drift: <code>score_paper</code> calls <code>explain_score</code> internally.</p>
+<p>Check it from the same machine:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>curl<span class="w"> </span>http://127.0.0.1:8000/health<span class="w">      </span><span class="c1"># {&quot;status&quot;:&quot;ok&quot;,&quot;mode&quot;:&quot;local&quot;}</span>
+</span></code></pre></div>
+<ul>
+<li>Without an access token the server <strong>only answers this machine</strong> (it checks
+  the caller and the <code>Host</code> header). Other devices need a token, see step 4.</li>
+<li>The first past-week load fetches from arXiv (~20–40 s); later loads come from
+  the server's 1 h cache.</li>
+<li>Stop it with <code>Ctrl-C</code>. Your config and removed papers are kept in
+  <code>server/digest.db</code> (SQLite), so restarting doesn't lose them.</li>
+</ul>
+<h2 id="3-optional-start-from-your-gui-settings">3. Optional: start from your GUI settings<a class="headerlink" href="#3-optional-start-from-your-gui-settings" title="Permanent link">&para;</a></h2>
+<p>Point the server at a saved GUI profile; it is used as the config for a user who
+has none stored yet:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="nv">DIGEST_DEFAULT_CONFIG_PATH</span><span class="o">=</span>~/.arxiv_scraper/profiles/&lt;name&gt;.json<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="w">  </span>uv<span class="w"> </span>run<span class="w"> </span>uvicorn<span class="w"> </span>app.main:app<span class="w"> </span>--host<span class="w"> </span><span class="m">127</span>.0.0.1<span class="w"> </span>--port<span class="w"> </span><span class="m">8000</span>
+</span></code></pre></div>
+<p>This seeds the server once. Edits made later in the app are stored on the
+server and don't change the profile file.</p>
+<h2 id="4-make-it-reachable-from-your-devices">4. Make it reachable from your devices<a class="headerlink" href="#4-make-it-reachable-from-your-devices" title="Permanent link">&para;</a></h2>
+<p>First create an <strong>access token</strong> (a shared secret every device sends) and start
+the server with it. Keep it private, like a password:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="nb">export</span><span class="w"> </span><span class="nv">DIGEST_ACCESS_TOKEN</span><span class="o">=</span><span class="s2">&quot;</span><span class="k">$(</span>python3<span class="w"> </span>-c<span class="w"> </span><span class="s1">&#39;import secrets; print(secrets.token_urlsafe(32))&#39;</span><span class="k">)</span><span class="s2">&quot;</span>
+</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;</span><span class="nv">$DIGEST_ACCESS_TOKEN</span><span class="s2">&quot;</span><span class="w">     </span><span class="c1"># copy this into each device (step 5)</span>
+</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>uv<span class="w"> </span>run<span class="w"> </span>uvicorn<span class="w"> </span>app.main:app<span class="w"> </span>--host<span class="w"> </span><span class="m">0</span>.0.0.0<span class="w"> </span>--port<span class="w"> </span><span class="m">8000</span>
+</span></code></pre></div>
+<p>With a token set, every request except <code>/health</code> must send it
+(<code>Authorization: Bearer &lt;token&gt;</code>); without it the server answers <code>401</code>. Then
+pick how devices reach the server:</p>
+<table>
+<thead>
+<tr>
+<th>Setup</th>
+<th>Server command</th>
+<th>URL to enter on each device</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Same Wi-Fi at home</strong> (Mac or Linux box)</td>
+<td><code>--host 0.0.0.0</code></td>
+<td><code>http://&lt;server-LAN-IP&gt;:8000</code></td>
+</tr>
+<tr>
+<td><strong>From anywhere, private</strong>: <a href="https://tailscale.com">Tailscale</a> on the server and every device</td>
+<td><code>--host 0.0.0.0</code></td>
+<td><code>http://&lt;server-tailscale-IP&gt;:8000</code></td>
+</tr>
+<tr>
+<td><strong>Remote Linux machine, Mac only</strong>: SSH tunnel</td>
+<td><code>--host 127.0.0.1</code></td>
+<td>on the Mac: <code>ssh -N -L 8000:127.0.0.1:8000 you@host</code>, then <code>http://127.0.0.1:8000</code></td>
+</tr>
+</tbody>
+</table>
+<p>Find the LAN IP with <code>ipconfig getifaddr en0</code> (Mac) or <code>hostname -I</code> (Linux).
+If a device can't connect, open <code>http://&lt;url&gt;/health</code> in its browser first;
+firewalls and guest/eduroam networks that isolate devices are the usual cause.</p>
+<div class="admonition warning">
+<p class="admonition-title">One shared user, plain HTTP</p>
+<p><code>local</code> mode has a single shared user and no accounts; the access token is
+the only lock, and plain <code>http://</code> doesn't encrypt it. Use it on networks you
+trust (home Wi-Fi, Tailscale, an SSH tunnel), never directly on the public
+internet. See <a href="#going-public-remote-mode">Going public</a>.</p>
+</div>
+<p>What the server guards against:</p>
+<ul>
+<li><strong>Other devices without the token</strong>: <code>401</code> (or <code>403</code> when no token is configured).</li>
+<li><strong>Web pages you visit</strong>: no CORS headers by default, and the localhost-only
+  check rejects foreign <code>Host</code> names, so a page can't read or change your
+  config through <code>http://127.0.0.1:8000</code> (including DNS rebinding).</li>
+<li><strong>Fetching arbitrary URLs</strong>: feed URLs must be on <code>arxiv.org</code>; a config with
+  other hosts, or more than 50 feeds, is rejected (<code>422</code>).</li>
+<li><strong>Remote mode with the default JWT secret</strong>: the server refuses to start.</li>
+</ul>
+<h2 id="5-connect-each-device">5. Connect each device<a class="headerlink" href="#5-connect-each-device" title="Permanent link">&para;</a></h2>
+<p><strong>iPhone / iPad</strong>: Settings → Connection → <strong>Server</strong> → enter the URL from
+step 4 and the <strong>access token</strong> → <strong>Connect</strong>. The status line reads
+<em>Connected · local mode</em>; a wrong token shows <em>Missing or wrong access token</em>.
+The token is stored in the iOS Keychain. Allow <strong>Local Network</strong> access when iOS
+asks (needed for LAN addresses).</p>
+<p><strong>Web GUI (<code>arxiv-gui</code>, two-way)</strong>: sidebar → <strong>🔄 Sync with server</strong> → enter
+the URL and the access token → <strong>Connect</strong>. The first time it asks once whose
+config both sides should use: <strong>Use server's</strong> or <strong>Upload mine</strong>. After that:</p>
+<ul>
+<li>every GUI session starts from the server's config and removed papers;
+  <strong>⬇ Download</strong> refreshes them;</li>
+<li><strong>⬆ Save to server</strong>, saving a profile, and <em>Write project config</em> upload the
+  config; removing or restoring a paper goes to the server straight away;</li>
+<li>if the server can't be reached the GUI keeps working from its local copy
+  (<code>arxiv_config.json</code>, which the <code>arxiv-digest</code> CLI also reads) and shows
+  <em>Offline</em>. Changes made meanwhile (config, removed and restored papers) go
+  to the server with the next save or the next GUI start, before anything is
+  downloaded; <strong>⬇ Download</strong> instead drops them in favour of the server's.</li>
+</ul>
+<p>The address and token are stored in <code>~/.arxiv_scraper/sync.json</code> (readable only
+by you); <code>ARXIV_DIGEST_SERVER</code> / <code>ARXIV_DIGEST_TOKEN</code> override them. <strong>Stop
+syncing</strong> goes back to local-only.</p>
+<p>Named profiles stay on your computer: loading one and saving it sends it to the
+server as the shared config.</p>
+<p><strong>Mac app (optional)</strong>: on Apple-silicon Macs the iOS app also runs as a Mac
+app. In Xcode, open <code>ios/ArxivDigest.xcodeproj</code>, choose the destination <strong>My Mac
+(Designed for iPad)</strong>, run it, and connect it to the same URL. (Not yet tested
+on this project; report problems.)</p>
+<p>Now a keyword added on the phone, a removal on the Mac, or a preset loaded on
+either is saved to the server and shows on the other device after its next load
+(pull to refresh).</p>
+<h2 id="6-keep-it-running">6. Keep it running<a class="headerlink" href="#6-keep-it-running" title="Permanent link">&para;</a></h2>
+<div class="tabbed-set tabbed-alternate" data-tabs="1:3"><input checked="checked" id="__tabbed_1_1" name="__tabbed_1" type="radio" /><input id="__tabbed_1_2" name="__tabbed_1" type="radio" /><input id="__tabbed_1_3" name="__tabbed_1" type="radio" /><div class="tabbed-labels"><label for="__tabbed_1_1">Linux with sudo (systemd)</label><label for="__tabbed_1_2">Linux without root (tmux)</label><label for="__tabbed_1_3">Mac (while logged in)</label></div>
+<div class="tabbed-content">
+<div class="tabbed-block">
+<p>A template unit is in <code>deploy/arxiv-digest.service</code>. Fill in <code>&lt;youruser&gt;</code>
+and the checkout path, then:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>sudo<span class="w"> </span>cp<span class="w"> </span>deploy/arxiv-digest.service<span class="w"> </span>/etc/systemd/system/
+</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>sudo<span class="w"> </span>systemctl<span class="w"> </span>daemon-reload
+</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>sudo<span class="w"> </span>systemctl<span class="w"> </span><span class="nb">enable</span><span class="w"> </span>--now<span class="w"> </span>arxiv-digest
+</span><span id="__span-6-4"><a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a>systemctl<span class="w"> </span>status<span class="w"> </span>arxiv-digest
+</span></code></pre></div>
+<p>Without root but with user lingering enabled (<code>loginctl enable-linger $USER</code>,
+which some distributions allow without sudo), copy the unit to
+<code>~/.config/systemd/user/</code>, remove its <code>User=</code> line, and use
+<code>systemctl --user enable --now arxiv-digest</code>.</p>
+</div>
+<div class="tabbed-block">
+<p>Check first that long-running processes are allowed on the machine.</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>tmux<span class="w"> </span>new<span class="w"> </span>-s<span class="w"> </span>digest
+</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="nb">cd</span><span class="w"> </span>~/arxiv-digest/server<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>uv<span class="w"> </span>run<span class="w"> </span>uvicorn<span class="w"> </span>app.main:app<span class="w"> </span>--host<span class="w"> </span><span class="m">127</span>.0.0.1<span class="w"> </span>--port<span class="w"> </span><span class="m">8000</span>
+</span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="c1"># detach: Ctrl-b then d · reattach: tmux attach -t digest</span>
+</span></code></pre></div>
+<p>tmux sessions don't survive a reboot; start it again afterwards.</p>
+</div>
+<div class="tabbed-block">
+<p>Run the step 2 command in a Terminal window, or in a
+<code>tmux</code>/<code>screen</code> session. The Mac must be awake for other devices to sync.</p>
+</div>
+</div>
+</div>
+<p><strong>Updating</strong>:
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="nb">cd</span><span class="w"> </span>~/arxiv-digest<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>git<span class="w"> </span>pull
+</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="nb">cd</span><span class="w"> </span>server<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>uv<span class="w"> </span>sync
+</span><span id="__span-8-3"><a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="c1"># then restart: Ctrl-C and rerun, or `sudo systemctl restart arxiv-digest`</span>
+</span></code></pre></div></p>
+<h2 id="7-back-up">7. Back up<a class="headerlink" href="#7-back-up" title="Permanent link">&para;</a></h2>
+<p>Everything is in <code>server/digest.db</code>. Copy it while the server is stopped, e.g.
+<code>cp server/digest.db ~/digest-backup-$(date +%F).db</code>.</p>
+<h2 id="copy-the-config-file-without-a-server">Copy the config file (without a server)<a class="headerlink" href="#copy-the-config-file-without-a-server" title="Permanent link">&para;</a></h2>
+<p>For <strong>On this device</strong> mode, or to move settings once: the config is a single
+JSON file with the same format everywhere.</p>
+<p><strong>Mac → iPhone</strong></p>
+<ol>
+<li>GUI → <strong>Profiles</strong> tab → <strong>Export</strong> next to a saved profile (save the current
+   config as a profile first if needed). This downloads <code>&lt;name&gt;.json</code>.</li>
+<li>AirDrop the file to the iPhone and choose <strong>arXiv Digest</strong>, or save it to
+   Files and use the app's Settings → <strong>Config file</strong> → <strong>Import config…</strong>.</li>
+<li>The app opens <strong>Config</strong> with the imported settings; tap <strong>Save</strong>.</li>
+</ol>
+<p><strong>iPhone → Mac</strong></p>
+<ol>
+<li>App → Settings → <strong>Config file</strong> → <strong>Export config</strong> → AirDrop to the Mac
+   (it arrives in Downloads as <code>arxiv-digest-config.json</code>).</li>
+<li>GUI → <strong>Profiles</strong> tab → <strong>Import profile from JSON</strong> → pick the file.</li>
+<li>Save it as a profile, or <strong>Write project config</strong> (and, if you sync,
+   <strong>⬆ Save to server</strong>).</li>
+</ol>
+<p>An import replaces the whole config (keywords, authors, feeds, weights, colors)
+and isn't kept until you save. Removed papers aren't part of the file.</p>
+<hr />
+<h2 id="reference">Reference<a class="headerlink" href="#reference" title="Permanent link">&para;</a></h2>
+<h3 id="server-settings-environment-variables">Server settings (environment variables)<a class="headerlink" href="#server-settings-environment-variables" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Variable</th>
+<th>Default</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>DIGEST_MODE</code></td>
+<td><code>local</code></td>
+<td><code>local</code>: one shared user, SQLite, access token (or this machine only). <code>remote</code>: JWT login, multi-user</td>
+</tr>
+<tr>
+<td><code>DIGEST_DATABASE_URL</code></td>
+<td><code>sqlite:///./digest.db</code></td>
+<td>Database (Postgres for <code>remote</code>)</td>
+</tr>
+<tr>
+<td><code>DIGEST_DEFAULT_CONFIG_PATH</code></td>
+<td>–</td>
+<td>GUI profile used for users without a stored config</td>
+</tr>
+<tr>
+<td><code>DIGEST_JWT_SECRET</code></td>
+<td><code>dev-secret-change-me</code></td>
+<td><strong>Change</strong> in <code>remote</code> mode</td>
+</tr>
+<tr>
+<td><code>DIGEST_ACCESS_TOKEN</code></td>
+<td>–</td>
+<td>Local mode: token every device must send; unset = this machine only</td>
+</tr>
+<tr>
+<td><code>DIGEST_CORS_ORIGINS</code></td>
+<td><code>[]</code> (none)</td>
+<td>Browser origins allowed to call the API; leave empty unless a web front end needs it</td>
+</tr>
+<tr>
+<td><code>ZOTERO_API_KEY</code>, <code>ZOTERO_LIBRARY_ID</code></td>
+<td>–</td>
+<td>Enable <em>Save to Zotero</em> from the app via the Zotero Web API</td>
+</tr>
+</tbody>
+</table>
+<p>Without the Zotero variables the app offers <strong>Share to Zotero</strong> (the iOS share
+sheet hands the paper to the Zotero app), and everything else works.</p>
+<h3 id="going-public-remote-mode">Going public (<code>remote</code> mode)<a class="headerlink" href="#going-public-remote-mode" title="Permanent link">&para;</a></h3>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="nb">export</span><span class="w"> </span><span class="nv">DIGEST_MODE</span><span class="o">=</span>remote
+</span><span id="__span-9-2"><a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="nb">export</span><span class="w"> </span><span class="nv">DIGEST_JWT_SECRET</span><span class="o">=</span><span class="s2">&quot;</span><span class="k">$(</span>openssl<span class="w"> </span>rand<span class="w"> </span>-hex<span class="w"> </span><span class="m">32</span><span class="k">)</span><span class="s2">&quot;</span>
+</span><span id="__span-9-3"><a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a><span class="nb">export</span><span class="w"> </span><span class="nv">DIGEST_DATABASE_URL</span><span class="o">=</span><span class="s2">&quot;postgresql+psycopg://user:pass@host/db&quot;</span>
+</span><span id="__span-9-4"><a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a><span class="nb">export</span><span class="w"> </span><span class="nv">DIGEST_CORS_ORIGINS</span><span class="o">=</span><span class="s1">&#39;[&quot;https://yourapp.example&quot;]&#39;</span>
+</span></code></pre></div>
+<p>Users register with <code>POST /auth/register</code> and log in with <code>POST /auth/token</code>.
+The iOS app has no login screen yet, so <code>remote</code> mode isn't usable from the
+app today. Put HTTPS in front (e.g. Caddy) before exposing it, and expect arXiv
+to rate-limit a busy shared server; the server caches fetches for an hour.</p>
 
 
 
@@ -1035,7 +1387,7 @@
     <span class="md-icon" title="Last update">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M21 13.1c-.1 0-.3.1-.4.2l-1 1 2.1 2.1 1-1c.2-.2.2-.6 0-.8l-1.3-1.3c-.1-.1-.2-.2-.4-.2m-1.9 1.8-6.1 6V23h2.1l6.1-6.1zM12.5 7v5.2l4 2.4-1 1L11 13V7zM11 21.9c-5.1-.5-9-4.8-9-9.9C2 6.5 6.5 2 12 2c5.3 0 9.6 4.1 10 9.3-.3-.1-.6-.2-1-.2s-.7.1-1 .2C19.6 7.2 16.2 4 12 4c-4.4 0-8 3.6-8 8 0 4.1 3.1 7.5 7.1 7.9l-.1.2z"/></svg>
     </span>
-    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="August 24, 2026 09:41:24 UTC"><span class="timeago" datetime="2026-08-24T09:41:24+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="August 24, 2026 09:41:24 UTC">2026-08-24</span>
+    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="October 8, 2026 10:01:28 UTC"><span class="timeago" datetime="2026-10-08T10:01:28+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="October 8, 2026 10:01:28 UTC">2026-10-08</span>
   </span>
 
     
@@ -1045,7 +1397,7 @@
     <span class="md-icon" title="Created">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M14.47 15.08 11 13V7h1.5v5.25l3.08 1.83c-.41.28-.79.62-1.11 1m-1.39 4.84c-.36.05-.71.08-1.08.08-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8c0 .37-.03.72-.08 1.08.69.1 1.33.32 1.92.64.1-.56.16-1.13.16-1.72 0-5.5-4.5-10-10-10S2 6.5 2 12s4.47 10 10 10c.59 0 1.16-.06 1.72-.16-.32-.59-.54-1.23-.64-1.92M18 15v3h-3v2h3v3h2v-3h3v-2h-3v-3z"/></svg>
     </span>
-    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="May 7, 2026 08:38:58 UTC"><span class="timeago" datetime="2026-05-07T08:38:58+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="May 7, 2026 08:38:58 UTC">2026-05-07</span>
+    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="October 8, 2026 10:01:28 UTC"><span class="timeago" datetime="2026-10-08T10:01:28+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="October 8, 2026 10:01:28 UTC">2026-10-08</span>
   </span>
 
     
@@ -1080,7 +1432,7 @@
       <nav class="md-footer__inner md-grid" aria-label="Footer" >
         
           
-          <a href="../cli-guide/" class="md-footer__link md-footer__link--prev" aria-label="Previous: CLI">
+          <a href="../ios-app/" class="md-footer__link md-footer__link--prev" aria-label="Previous: iPhone app">
             <div class="md-footer__button md-icon">
               
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
@@ -1090,20 +1442,20 @@
                 Previous
               </span>
               <div class="md-ellipsis">
-                CLI
+                iPhone app
               </div>
             </div>
           </a>
         
         
           
-          <a href="../ios-app/" class="md-footer__link md-footer__link--next" aria-label="Next: iPhone app">
+          <a href="../troubleshooting/" class="md-footer__link md-footer__link--next" aria-label="Next: Troubleshooting">
             <div class="md-footer__title">
               <span class="md-footer__direction">
                 Next
               </span>
               <div class="md-ellipsis">
-                iPhone app
+                Troubleshooting
               </div>
             </div>
             <div class="md-footer__button md-icon">
