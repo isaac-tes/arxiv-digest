@@ -844,7 +844,7 @@ def render_sidebar():
 
 _PAPER_CSS = """
 <style>
-.paper-title { font-size: 1.35rem; font-weight: 700; line-height: 1.3; margin: 0 0 .15rem 0; }
+.paper-title { display: block; font-size: 1.35rem; font-weight: 700; line-height: 1.3; margin: 0 0 .15rem 0; }
 .paper-authors { font-size: 1.02rem; color: #e6edf3; margin: 0 0 .25rem 0; }
 .paper-meta { font-size: .9rem; color: #8b949e; margin: .25rem 0 0 0; }
 .paper-meta a { color: #58a6ff; text-decoration: none; }
@@ -940,8 +940,9 @@ def _highlight_terms(
                 continue
             for m in pat.finditer(text):
                 spans.append((m.start(), m.end(), kind))
-    if not spans:
-        return html.escape(text)
+    # Inline LaTeX is left to Streamlit's KaTeX: never highlight inside it.
+    math = [(m.start(), m.end()) for m in _MATH_RE.finditer(text)]
+    spans = [s for s in spans if not any(s[0] < b and a < s[1] for a, b in math)]
 
     spans.sort(key=lambda s: (s[0], -(s[1] - s[0])))
     chosen: list[tuple[int, int, str]] = []
@@ -951,11 +952,20 @@ def _highlight_terms(
             chosen.append(s)
             last_end = s[1]
 
+    def plain(a: int, b: int) -> str:
+        """text[a:b] with its math kept for KaTeX and everything else literal."""
+        parts, i = [], a
+        for ma, mb in math:
+            if ma >= a and mb <= b:
+                parts += [_md_text(text[i:ma]), _math_text(text[ma:mb])]
+                i = mb
+        return "".join(parts) + _md_text(text[i:b])
+
     out: list[str] = []
     i = 0
     for start, end, kind in chosen:
-        out.append(html.escape(text[i:start]))
-        frag = html.escape(text[start:end])
+        out.append(plain(i, start))
+        frag = _md_text(text[start:end])
         if kind == "kw":
             tip = f"core keyword (+{kw_bonus})"
             color = color_kw
@@ -972,8 +982,30 @@ def _highlight_terms(
             f'<span class="hl-tip">{tip}</span></span>'
         )
         i = end
-    out.append(html.escape(text[i:]))
+    out.append(plain(i, len(text)))
     return "".join(out)
+
+
+# Inline math as Streamlit's Markdown (remark-math) delimits it. Card text is
+# rendered as Markdown with inline HTML, so math must stay verbatim and stay
+# out of block-level HTML such as <div> (Markdown isn't parsed inside those).
+_MATH_RE = re.compile(r"\$\$.+?\$\$|(?<!\\)\$[^$]+?(?<!\\)\$|\\\(.+?\\\)", re.S)
+_MD_SPECIAL_RE = re.compile(r"([\\`*_\[\]#~|$])")
+
+
+def _md_text(s: str) -> str:
+    """Plain text for Markdown-with-HTML: escape HTML and Markdown syntax."""
+    return _MD_SPECIAL_RE.sub(r"\\\1", html.escape(s, quote=False))
+
+
+def _math_text(s: str) -> str:
+    """A math span for KaTeX: verbatim, but `<`/`>` as \\lt/\\gt (no raw HTML)."""
+    return s.replace("<", r"\lt ").replace(">", r"\gt ")
+
+
+def _card_block(css_class: str, inner_html: str) -> str:
+    """Block-styled span: a <div> would stop Markdown (and KaTeX) inside it."""
+    return f'<span class="{css_class}">{inner_html}</span>'
 
 
 def _rgba(hex_color: str, alpha: float) -> str:
@@ -1272,9 +1304,9 @@ def render_papers_tab():
                 if cfg().highlight_terms_title:
                     title_html = _hl(e["title"])
                 else:
-                    title_html = html.escape(e["title"])
+                    title_html = _highlight_terms(e["title"], [], [], 0, 0)
                 st.markdown(
-                    f'<div class="paper-title">{e["rank"]}. {title_html}</div>',
+                    _card_block("paper-title", f'{e["rank"]}\\. {title_html}'),
                     unsafe_allow_html=True,
                 )
                 if cfg().highlight_authors:
@@ -1330,7 +1362,7 @@ def render_papers_tab():
                 abstract = paper_by_id.get(e["id"], {}).get("abstract", "") or "(unavailable)"
                 if cfg().highlight_terms_abstract and abstract != "(unavailable)":
                     st.markdown(
-                        f'<div class="paper-abstract">{_hl(abstract)}</div>',
+                        _card_block("paper-abstract", _hl(abstract)),
                         unsafe_allow_html=True,
                     )
                 else:
