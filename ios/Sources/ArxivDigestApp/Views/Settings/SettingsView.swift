@@ -60,10 +60,17 @@ struct SettingsView: View {
                             .foregroundStyle(.green)
                     case .unavailable:
                         VStack(alignment: .leading, spacing: 4) {
-                            Label("No Zotero key on the server", systemImage: "books.vertical")
-                            Text("Use Share to Zotero: it opens the share sheet, where the Zotero app saves the paper. To save directly, set ZOTERO_API_KEY and ZOTERO_LIBRARY_ID on the server.")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                            if model.mode == .standalone {
+                                Label("Saving through the Zotero app", systemImage: "books.vertical")
+                                Text("Use Share to Zotero: it opens the share sheet, where the Zotero app saves the paper.")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            } else {
+                                Label("No Zotero key on the server", systemImage: "books.vertical")
+                                Text("Use Share to Zotero: it opens the share sheet, where the Zotero app saves the paper. To save directly, set ZOTERO_API_KEY and ZOTERO_LIBRARY_ID on the server.")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
                         }
                     }
                 }

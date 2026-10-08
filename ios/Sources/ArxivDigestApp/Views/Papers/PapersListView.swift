@@ -32,7 +32,7 @@ struct PapersListView: View {
             VStack(spacing: 14) {
                 ProgressView().controlSize(.large)
                 Text("Fetching from arXiv…").font(.headline)
-                Text("The first past-week fetch queries each feed and can take about half a minute. Later loads come from the server's cache.")
+                Text("The first past-week fetch queries each feed and can take about half a minute. Later loads come from the \(model.mode == .standalone ? "cache on this phone" : "server's cache").")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
