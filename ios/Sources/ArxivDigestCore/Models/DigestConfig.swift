@@ -218,6 +218,13 @@ public struct DigestConfig: Codable, Sendable, Equatable {
         items.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
     }
 
+    /// A paper's authors (comma-separated) that are not already in `namedAuthors`.
+    public func addableAuthors(in authors: String) -> [String] {
+        let named = Set(namedAuthors.map { $0.lowercased() })
+        return DigestConfig.cleaned(authors.components(separatedBy: ","))
+            .filter { !named.contains($0.lowercased()) }
+    }
+
     /// Append `item` unless a case-insensitive duplicate exists. Returns false
     /// when nothing was added (blank or duplicate).
     @discardableResult

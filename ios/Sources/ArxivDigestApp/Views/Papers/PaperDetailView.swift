@@ -90,9 +90,20 @@ struct PaperDetailView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                 ScoreBadge(score: paper.score, large: true)
             }
-            Text(Highlight.authors(paper.authors, config: config, underline: underline))
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+            let addable = config.addableAuthors(in: paper.authors)
+            Menu {
+                Section("Add to highlighted authors") {
+                    ForEach(addable, id: \.self) { name in
+                        Button(name) { model.addNamedAuthor(name) }
+                    }
+                }
+            } label: {
+                Text(Highlight.authors(paper.authors, config: config, underline: underline))
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.leading)
+            }
+            .disabled(addable.isEmpty)
             HStack(spacing: 6) {
                 Text(paper.id).font(.caption.monospaced())
                 if !paper.section.isEmpty {

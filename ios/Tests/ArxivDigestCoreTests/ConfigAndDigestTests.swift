@@ -74,6 +74,16 @@ final class DigestConfigEditingTests: XCTestCase {
         XCTAssertEqual(list, ["Floquet", "anyon"])
     }
 
+    func testAddableAuthorsSkipsNamedCaseInsensitively() {
+        var cfg = DigestConfig()
+        cfg.namedAuthors = ["alice smith"]
+        XCTAssertEqual(cfg.addableAuthors(in: "Alice Smith, Bob Jones,  Carol Wu , "), ["Bob Jones", "Carol Wu"])
+        XCTAssertEqual(cfg.addableAuthors(in: ""), [])
+        XCTAssertTrue(DigestConfig.append("Bob Jones", to: &cfg.namedAuthors))
+        XCTAssertFalse(DigestConfig.append("BOB JONES", to: &cfg.namedAuthors))
+        XCTAssertEqual(cfg.addableAuthors(in: "Alice Smith, Bob Jones"), [])
+    }
+
     func testEquatableForDirtyTracking() {
         var a = DigestConfig()
         a.coreKeywords = ["x"]

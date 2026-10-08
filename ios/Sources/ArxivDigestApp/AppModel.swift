@@ -323,6 +323,12 @@ final class AppModel {
         }
     }
 
+    /// Adds to the working config only; Save persists it.
+    func addNamedAuthor(_ name: String) {
+        guard DigestConfig.append(name, to: &config.namedAuthors) else { return }
+        showToast("Added \(name) to highlighted authors - Save to apply")
+    }
+
     // MARK: - Toast
 
     func showToast(
