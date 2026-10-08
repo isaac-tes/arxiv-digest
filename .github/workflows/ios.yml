@@ -2,7 +2,7 @@ name: iOS app + digest service
 
 on:
   push:
-    branches: [feat/swift_ios]
+    branches: [main, feat/swift_ios]
     paths:
       - "ios/**"
       - "server/**"

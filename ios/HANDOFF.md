@@ -84,7 +84,7 @@ unused highlight path.
 
 ### CI (`.github/workflows/ios.yml`, new)
 
-On pushes to `feat/swift_ios`: server tests (Linux), `swift test` (Linux + macOS),
+On pushes to `main` and `feat/swift_ios`: server tests (Linux), `swift test` (Linux + macOS),
 app build + screenshots (artifact **ios-screenshots**).
 
 ---
@@ -125,9 +125,8 @@ iPhone the same day and reported no problems.
 - Not yet merged. `pyproject.toml` stays `0.6.3`, so merging alone cuts no release;
   bump the version + `uv.lock` and rename `[Unreleased]` in `CHANGELOG.md` when
   releasing (see `CONTRIBUTING.md`).
-- After merge: README/`docs/deploy.md` still say "branch `feat/swift_ios`" in the
-  clone steps; change to `main`. `.github/workflows/ios.yml` only triggers on
-  `feat/swift_ios`; add `main`.
+- Ready for `main`: `docs/deploy.md` clones `main`, and `.github/workflows/ios.yml`
+  also triggers on `main`.
 - Existing `server/digest.db` files keep the dropped `saved_lists` / `list_papers` /
   `feedback` tables; harmless, no migration.
 

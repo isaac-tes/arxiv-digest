@@ -31,7 +31,6 @@ reach, and switch each device to **Server**.
   ```bash
   git clone https://github.com/isaac-tes/arxiv-digest.git
   cd arxiv-digest
-  git switch feat/swift_ios   # until the iOS work is merged into main
   ```
 
 ## 2. Start the server
