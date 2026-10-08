@@ -103,6 +103,7 @@ struct PaperDetailView: View {
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.leading)
             }
+            .buttonStyle(.plain)  // keep the author text colors, not the accent tint
             .disabled(addable.isEmpty)
             HStack(spacing: 6) {
                 Text(paper.id).font(.caption.monospaced())
