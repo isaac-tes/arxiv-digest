@@ -6,6 +6,7 @@ import ArxivDigestCore
 /// the saved config, and why it did (or didn't) appear in the digest. Mirrors
 /// the GUI tab: the placement uses the same view as the Papers tab (ADR 0008).
 struct ScoreView: View {
+    @AppStorage(Highlight.underlineKey) private var underline = false
     @Environment(AppModel.self) private var model
     @Binding var input: String
     @Binding var runRequest: Int
@@ -93,17 +94,17 @@ struct ScoreView: View {
             Section {
                 VStack(alignment: .leading, spacing: 8) {
                     HStack(alignment: .top) {
-                        Text(Highlight.terms(paper.title, enabled: model.config.highlightTermsTitle, config: model.config))
+                        Text(Highlight.terms(paper.title, enabled: model.config.highlightTermsTitle, config: model.config, underline: underline))
                             .font(.headline)
                             .fixedSize(horizontal: false, vertical: true)
                             .frame(maxWidth: .infinity, alignment: .leading)
                         ScoreBadge(score: r.breakdown.total, large: true)
                     }
-                    Text(Highlight.authors(paper.authors, config: model.config))
+                    Text(Highlight.authors(paper.authors, config: model.config, underline: underline))
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                     if !paper.subjects.isEmpty {
-                        Text(Highlight.subjects(paper.subjects, config: model.config)).font(.caption)
+                        Text(Highlight.subjects(paper.subjects, config: model.config, underline: underline)).font(.caption)
                     }
                 }
                 .padding(.vertical, 4)
@@ -121,7 +122,7 @@ struct ScoreView: View {
 
             Section {
                 DisclosureGroup("Full abstract") {
-                    Text(Highlight.terms(paper.abstract, enabled: model.config.highlightTermsAbstract, config: model.config))
+                    Text(Highlight.terms(paper.abstract, enabled: model.config.highlightTermsAbstract, config: model.config, underline: underline))
                         .font(.callout)
                         .textSelection(.enabled)
                 }

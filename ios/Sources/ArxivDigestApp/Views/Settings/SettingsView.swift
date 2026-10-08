@@ -7,6 +7,7 @@ import ArxivDigestCore
 struct SettingsView: View {
     @Environment(AppModel.self) private var model
     @AppStorage("appearanceMode") private var appearanceRaw = AppearanceMode.system.rawValue
+    @AppStorage(Highlight.underlineKey) private var underlineHighlights = false
     @State private var serverURLText = ""
     @State private var modeChoice: AppModel.Mode = .server
     @State private var isConnecting = false
@@ -36,10 +37,11 @@ struct SettingsView: View {
                     Toggle("Highlight keywords in titles", isOn: $model.config.highlightTermsTitle)
                     Toggle("Highlight keywords in abstracts", isOn: $model.config.highlightTermsAbstract)
                     Toggle("Highlight keywords in summaries", isOn: $model.config.highlightTermsSummary)
+                    Toggle("Underline highlights", isOn: $underlineHighlights)
                 } header: {
                     Text("Display")
                 } footer: {
-                    Text("Summaries are the two-sentence previews on each paper card; off by default, as in the web GUI.")
+                    Text("Summaries are the two-sentence previews on each paper card; off by default, as in the web GUI. Underline adds a dotted line under highlighted terms; it applies right away and stays on this device.")
                 }
 
                 Section {
@@ -204,7 +206,7 @@ struct SettingsView: View {
         add("Ada Lovelace", .author)
         add("photonic", .lowPriority)
         add("quant-ph", .subject)
-        return Text(Highlight.attributed(text, spans: spans, config: cfg))
+        return Text(Highlight.attributed(text, spans: spans, config: cfg, underline: underlineHighlights))
             .font(.callout)
             .padding(.vertical, 4)
     }

@@ -5,6 +5,7 @@ import ArxivDigestCore
 /// "Full abstract" expanders, opened. The digest already carries the abstract
 /// and breakdown; an older server without them falls back to `/score`.
 struct PaperDetailView: View {
+    @AppStorage(Highlight.underlineKey) private var underline = false
     let paper: Paper
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
@@ -30,7 +31,7 @@ struct PaperDetailView: View {
                     if isFetching && paper.abstract.isEmpty {
                         HStack { ProgressView(); Text("Loading full abstract…").foregroundStyle(.secondary) }
                     }
-                    Text(Highlight.terms(abstract, enabled: config.highlightTermsAbstract, config: config))
+                    Text(Highlight.terms(abstract, enabled: config.highlightTermsAbstract, config: config, underline: underline))
                         .font(.body)
                         .textSelection(.enabled)
                         .fixedSize(horizontal: false, vertical: true)
@@ -83,13 +84,13 @@ struct PaperDetailView: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .top, spacing: 12) {
-                Text(Highlight.terms(paper.title, enabled: config.highlightTermsTitle, config: config))
+                Text(Highlight.terms(paper.title, enabled: config.highlightTermsTitle, config: config, underline: underline))
                     .font(.title2.weight(.bold))
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 ScoreBadge(score: paper.score, large: true)
             }
-            Text(Highlight.authors(paper.authors, config: config))
+            Text(Highlight.authors(paper.authors, config: config, underline: underline))
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
             HStack(spacing: 6) {
@@ -101,7 +102,7 @@ struct PaperDetailView: View {
             }
             .foregroundStyle(.tertiary)
             if !paper.subjects.isEmpty {
-                (Text("Subjects: ").foregroundStyle(.secondary) + Text(Highlight.subjects(paper.subjects, config: config)))
+                (Text("Subjects: ").foregroundStyle(.secondary) + Text(Highlight.subjects(paper.subjects, config: config, underline: underline)))
                     .font(.caption)
             }
         }

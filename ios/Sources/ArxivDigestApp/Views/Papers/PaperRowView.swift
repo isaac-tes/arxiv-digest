@@ -6,6 +6,7 @@ import ArxivDigestCore
 /// (highlighted only when "Highlight keywords in summaries" is on), and the
 /// subjects with feed-bonus highlights; the score metric sits on the right.
 struct PaperRowView: View {
+    @AppStorage(Highlight.underlineKey) private var underline = false
     let paper: Paper
     let config: DigestConfig
     var maxScore: Int = 0
@@ -13,7 +14,7 @@ struct PaperRowView: View {
     private var title: AttributedString {
         var rank = AttributedString("\(paper.rank). ")
         rank.foregroundColor = .secondary
-        return rank + Highlight.terms(paper.title, enabled: config.highlightTermsTitle, config: config)
+        return rank + Highlight.terms(paper.title, enabled: config.highlightTermsTitle, config: config, underline: underline)
     }
 
     var body: some View {
@@ -23,7 +24,7 @@ struct PaperRowView: View {
                     .font(.headline)
                     .fixedSize(horizontal: false, vertical: true)
 
-                Text(Highlight.authors(paper.authors, config: config))
+                Text(Highlight.authors(paper.authors, config: config, underline: underline))
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .lineLimit(3)
@@ -35,13 +36,13 @@ struct PaperRowView: View {
                         .labelStyle(.titleAndIcon)
                 }
 
-                Text(Highlight.terms(paper.summary, enabled: config.highlightTermsSummary, config: config))
+                Text(Highlight.terms(paper.summary, enabled: config.highlightTermsSummary, config: config, underline: underline))
                     .font(.callout)
                     .lineLimit(4)
                     .padding(.top, 2)
 
                 if !paper.subjects.isEmpty {
-                    Text(Highlight.subjects(paper.subjects, config: config))
+                    Text(Highlight.subjects(paper.subjects, config: config, underline: underline))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(2)

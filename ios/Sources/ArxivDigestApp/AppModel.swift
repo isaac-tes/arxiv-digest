@@ -71,7 +71,7 @@ final class AppModel {
 
     init(launch: LaunchOptions = .current) {
         let defaults = UserDefaults.standard
-        let storedMode = Mode(rawValue: defaults.string(forKey: Self.modeDefaultsKey) ?? "") ?? .server
+        let storedMode = Mode(rawValue: defaults.string(forKey: Self.modeDefaultsKey) ?? "") ?? .standalone  // works with no server; a stored choice wins
         let mode: Mode = launch.standalone ? .standalone : launch.demo ? .demo : storedMode
         let url = defaults.string(forKey: Self.baseURLDefaultsKey).flatMap(URL.init(string:))
             ?? URL(string: Self.defaultBaseURL)!

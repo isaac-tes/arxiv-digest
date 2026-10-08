@@ -2,18 +2,25 @@ import SwiftUI
 import ArxivDigestCore
 
 /// Builds highlighted text the way the web GUI renders a paper card: matched
-/// terms get a faint aspect-colored background with a dotted underline, and
-/// the font is tinted when the aspect's "color font" toggle is on; matched
-/// authors are bold. Spans come from `HighlightEngine`, which uses the
-/// scorer's matching, so highlights and scores never diverge.
+/// terms get a faint aspect-colored background (plus a dotted underline when
+/// Settings → *Underline highlights* is on, like the GUI), and the font is
+/// tinted when the aspect's "color font" toggle is on; matched authors are
+/// bold. Spans come from `HighlightEngine`, which uses the scorer's matching,
+/// so highlights and scores never diverge. Titles and abstracts show inline
+/// LaTeX as Unicode (`MathText`).
 enum Highlight {
-    static func attributed(_ text: String, spans: [HighlightSpan], config: DigestConfig) -> AttributedString {
+    /// `@AppStorage` key for the dotted underline (device-local display pref).
+    static let underlineKey = "underlineHighlights"
+
+    static func attributed(_ text: String, spans: [HighlightSpan], config: DigestConfig, underline: Bool) -> AttributedString {
         var attr = AttributedString(text)
         for span in spans {
             guard let range = attributedRange(span.range, in: text, attr) else { continue }
             let color = Color(hex: config.color(for: span.aspect))
             attr[range].backgroundColor = color.opacity(0.14)
-            attr[range].underlineStyle = Text.LineStyle(pattern: .dot, color: color)
+            if underline {
+                attr[range].underlineStyle = Text.LineStyle(pattern: .dot, color: color)
+            }
             if config.fontColor(for: span.aspect) {
                 attr[range].foregroundColor = color
             }
@@ -26,23 +33,25 @@ enum Highlight {
 
     /// Title / abstract / summary: keywords + low-priority terms, when the
     /// matching display toggle is on.
-    static func terms(_ text: String, enabled: Bool, config: DigestConfig) -> AttributedString {
+    static func terms(_ raw: String, enabled: Bool, config: DigestConfig, underline: Bool) -> AttributedString {
+        let text = MathText.render(raw)
         guard enabled else { return AttributedString(text) }
         let spans = HighlightEngine.spans(
             in: text, keywords: config.coreKeywords, lowPriority: config.lowPriorityKeywords,
             wordBoundary: config.wordBoundaryMatching)
-        return attributed(text, spans: spans, config: config)
+        return attributed(text, spans: spans, config: config, underline: underline)
     }
 
-    static func authors(_ text: String, config: DigestConfig) -> AttributedString {
+    static func authors(_ text: String, config: DigestConfig, underline: Bool) -> AttributedString {
         guard config.highlightAuthors else { return AttributedString(text) }
         let spans = HighlightEngine.authorSpans(
             in: text, named: config.namedAuthors, wordBoundary: config.wordBoundaryMatching)
-        return attributed(text, spans: spans, config: config)
+        return attributed(text, spans: spans, config: config, underline: underline)
     }
 
-    static func subjects(_ text: String, config: DigestConfig) -> AttributedString {
-        attributed(text, spans: HighlightEngine.subjectSpans(in: text, feedWeights: config.feedWeights), config: config)
+    static func subjects(_ text: String, config: DigestConfig, underline: Bool) -> AttributedString {
+        attributed(text, spans: HighlightEngine.subjectSpans(in: text, feedWeights: config.feedWeights),
+                   config: config, underline: underline)
     }
 }
 
