@@ -103,6 +103,7 @@ nav:
       - GUI: gui-guide.md
       - CLI: cli-guide.md
       - Scoring: scoring.md
+      - iPhone app: ios-app.md
       - Sync across devices: deploy.md
       - Troubleshooting: troubleshooting.md
   - Project:

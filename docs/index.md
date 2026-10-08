@@ -123,7 +123,7 @@ uv tool install '.[gui]' --reinstall   # rebuild the arxiv-digest / arxiv-gui to
 
 ---
 
-**📱 iPhone / iPad app (preview, branch `feat/swift_ios`)**: works on its own ("On this device"), or shares your settings across devices through a small self-hosted server. See [Share settings across devices](deploy.md).
+**📱 iPhone / iPad app (preview)**: works on its own ("On this device"), or shares your settings across devices through a small self-hosted server. Not on the App Store yet: [install it from Xcode](ios-app.md), then see [Share settings across devices](deploy.md).
 
 **👋 Most people should use the web app.** It runs in your browser, shows each paper's keyword / author / subject hits highlighted in color, explains *why* it scored what it did, and offers one-click **Save to Zotero**. The CLI is there for those who want a scriptable, terminal-first digest sharing the exact same preferences and config.
 

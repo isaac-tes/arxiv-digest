@@ -38,13 +38,11 @@ In Xcode: scheme **ArxivDigestApp**, pick an iPhone simulator, **Run** (⌘R).
   Connect. The first past-week load fetches from arXiv (~30 s); later loads use
   the server's 1 h cache. To start from your GUI profile:
   `DIGEST_DEFAULT_CONFIG_PATH=~/.arxiv_scraper/profiles/<name>.json uv run uvicorn app.main:app`.
-- **On your iPhone:** run the server with `--host 0.0.0.0`, select the phone as
-  the run destination (set your team under Signing & Capabilities once, then
-  trust the developer profile on the phone: Settings → General → VPN & Device
-  Management), and enter the Mac's LAN address, e.g. `http://192.168.1.20:8000`.
+- **On your iPhone:** see [`docs/ios-app.md`](../docs/ios-app.md) (development
+  install with a free Apple ID); the app starts in *On this device* mode.
 
-Tests: `cd ios && swift test` (Core, 103 tests, also on Linux), `cd server && uv run pytest`
-(48), `uv run pytest` at the root (290). Parity fixtures + engine defaults:
+Tests: `cd ios && swift test` (Core, 123 tests, also on Linux), `cd server && uv run pytest`
+(54), `uv run pytest` at the root (309). Parity fixtures + engine defaults:
 `uv run python ios/scripts/make_parity_fixture.py`.
 
 Screenshots are produced by CI (`.github/workflows/ios.yml`) on every push to
