@@ -184,13 +184,13 @@ The GUI opens `http://localhost:8501` in your browser automatically. The first t
 
 The GUI has eight tabs, in order: **Papers**, **Score a paper**, **Keywords**, **Authors**, **Low priority**, **Feeds**, **Scoring**, **Profiles**.
 
-- **Papers**: ranked list, search box (filters by title / authors / abstract substring), MD + JSON download buttons. Per paper: rank, title, authors, section, summary, arXiv link, score badge, a **Save to Zotero** button, a **✕** button to remove it from the list (the papers below move up and the next one fills the top N; removals are remembered per profile across reloads and later fetches, and can be restored from *Removed papers*), expandable score breakdown, expandable full abstract.
+- **Papers**: ranked list, search box (filters by title / authors / abstract substring), MD + JSON download buttons. Per paper: rank, title, authors, section, summary, arXiv link, score badge, **Save to Zotero**, **Add author**, **Open PDF** and **Remove** buttons (Remove takes it off the list; the papers below move up and the next one fills the top N; removals are remembered per profile across reloads and later fetches, and can be restored from *Removed papers*), expandable score breakdown, expandable full abstract.
 - **Score a paper**: paste an arXiv link or ID to see how it would score under your current config, why it did (or didn't) appear in the digest, and save it to Zotero.
-- **Keywords**: spreadsheet-style editor for `core_keywords`. Add/remove rows, click *Save core keywords*. *Reset to defaults* restores the built-in list. Each match adds the *Per-keyword bonus* (default +6) to a paper's score.
+- **Keywords**: spreadsheet-style editor for `core_keywords`. Add/remove rows, click *Save core keywords* (saves to the loaded profile, or `arxiv_config.json` without one). Unsaved entries are listed above the table and marked ● in it. *Reset to defaults* restores the built-in list. Each match adds the *Per-keyword bonus* (default +6) to a paper's score.
 - **Authors**: same pattern for `named_authors`. Default +6 per match. Match is case-insensitive substring on author string.
 - **Low priority**: penalty list. If *any* term matches, the paper takes the *Low-priority penalty* (default −5), once, not per hit.
 - **Feeds**: `name → URL` editor. Add custom arXiv lists (e.g. `hep-th=https://arxiv.org/list/hep-th/new`). The `/new` / `/pastweek` suffix is rewritten by the timeframe selector at fetch time, so you can paste any base URL.
-- **Scoring**: a **Whole-word matching** toggle (default on; untick for legacy substring matching), then number inputs for each weight: per-keyword bonus, per-author bonus, low-priority penalty, long-abstract bonus, the abstract-length threshold, and a **per-feed subject bonus** for every configured feed (subject scoring is driven by `feed_weights`; defaults `cond-mat.quant-gas` +4, `cond-mat.mes-hall` +4, `quant-ph` +2). *Apply weights* makes the change live; *Reset to defaults* puts it back.
+- **Scoring**: a **Whole-word matching** toggle (default on; untick for legacy substring matching), then number inputs for each weight: per-keyword bonus, per-author bonus, low-priority penalty, long-abstract bonus, the abstract-length threshold, and a **per-feed subject bonus** for every configured feed (subject scoring is driven by `feed_weights`; defaults `cond-mat.quant-gas` +4, `cond-mat.mes-hall` +4, `quant-ph` +2). *Apply weights* makes the change live and saves it like the list tabs; *Reset to defaults* puts it back.
 - **Profiles**: **Starter presets** at the top: pick a built-in bundle and **Load** (replace working config) or **Add** (merge it in), never touching your saved profiles or `arxiv_config.json`. Below, save the current full config under a name (e.g. `topology-mode`, `quantum-gas-mode`). Each profile keeps its own list of removed papers (under `~/.arxiv_scraper/removed/`). Files live in `~/.arxiv_scraper/profiles/<name>.json`. Buttons: **Load**, **Export** (download JSON), **Delete**, **Import** (upload JSON). Below: **Write project config** dumps the current config to `arxiv_config.json` next to `arxiv_digest.py`, which is what the **CLI** picks up on the next run. Use this to push your GUI tweaks back into your daily CLI digest.
 
 ### Saving papers to Zotero
@@ -234,7 +234,7 @@ tell at a glance whether saving is available. See the [GUI guide](gui-guide.md#z
 
 - The score breakdown is the fastest way to figure out why a low-priority hit overshadowed a keyword match. Open it before re-tweaking weights blindly.
 - Profiles are pure JSON; you can hand-edit them outside the GUI or check them into a separate dotfiles repo if you want them tracked.
-- The GUI never writes back to `arxiv_config.json` automatically. You must press **Write project config** in the Profiles tab. That keeps surprises out of your CLI workflow.
+- The GUI writes `arxiv_config.json` only when you ask: **Write project config** in the Profiles tab, or a tab **Save** / **Apply weights** / unsaved-bar **Save** while no profile is loaded (with a profile loaded those save to the profile instead).
 
 ---
 

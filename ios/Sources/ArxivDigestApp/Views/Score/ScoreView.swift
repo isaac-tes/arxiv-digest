@@ -94,7 +94,8 @@ struct ScoreView: View {
             Section {
                 VStack(alignment: .leading, spacing: 8) {
                     HStack(alignment: .top) {
-                        Text(Highlight.terms(paper.title, enabled: model.config.highlightTermsTitle, config: model.config, underline: underline))
+                        Text(Highlight.terms(paper.title, enabled: model.config.highlightTermsTitle, config: model.config, underline: underline,
+                                             style: .headline, weight: .semibold))
                             .font(.headline)
                             .fixedSize(horizontal: false, vertical: true)
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -122,7 +123,8 @@ struct ScoreView: View {
 
             Section {
                 DisclosureGroup("Full abstract") {
-                    Text(Highlight.terms(paper.abstract, enabled: model.config.highlightTermsAbstract, config: model.config, underline: underline))
+                    Text(Highlight.terms(paper.abstract, enabled: model.config.highlightTermsAbstract, config: model.config, underline: underline,
+                                         style: .callout))
                         .font(.callout)
                         .textSelection(.enabled)
                 }

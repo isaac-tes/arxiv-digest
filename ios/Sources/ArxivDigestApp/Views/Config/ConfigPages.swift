@@ -119,6 +119,10 @@ struct FeedsEditor: View {
             }
             .buttonStyle(.plain)
             Spacer()
+            if model.savedConfig.feeds[name] != model.config.feeds[name]
+                || model.savedConfig.isSubscribed(name) != model.config.isSubscribed(name) {
+                UnsavedDot()
+            }
             Toggle("Subscribed", isOn: Binding(
                 get: { model.config.isSubscribed(name) },
                 set: { model.config.setSubscribed($0, feed: name) }))

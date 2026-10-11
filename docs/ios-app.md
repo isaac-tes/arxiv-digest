@@ -54,6 +54,36 @@ the phone, with no server. Settings → Connection switches modes:
 To bring your GUI settings over without a server, export a profile in the GUI
 and open the file on the phone: see [Copy the config file](deploy.md#copy-the-config-file-without-a-server).
 
+## Web app and iOS app
+
+Both apps offer the same features. Where they look different, it is to suit a
+phone or a desktop browser.
+
+| Feature | Web app | iOS app |
+|---|---|---|
+| Ranked digest, day picker, search, Markdown/JSON export | Papers tab | Papers tab |
+| Remove and restore papers | **Remove** on a card, *Removed papers* | Swipe or long-press, *Removed papers* |
+| Open PDF | Button on each card | Paper page and long-press menu |
+| Add a paper's author to highlighted authors | *Add author* on a card | Authors menu on the paper page |
+| Score a paper | Score a paper tab | Score tab |
+| Keywords, authors, low-priority terms | Tabs with a table | Config pages with a list |
+| Feeds, subscriptions, replacement submissions | Feeds tab and sidebar | Config → Feeds |
+| Scoring weights and per-feed bonuses | Scoring tab | Config → Scoring |
+| Starter presets | Profiles tab | Config → Starter presets |
+| Unsaved changes | Bar listing changes per tab, dot on each tab, ● on unsaved rows | Save bar listing changes per section, dot on each page, ● on unsaved rows, tab badges |
+| Highlight colors and toggles | Sidebar → Display | Settings → Display |
+| Inline LaTeX | KaTeX | Titles and lists: Unicode with real raised/lowered scripts; paper page abstract: KaTeX |
+| Share settings between devices | Sidebar → Sync with server | Settings → Connection → Server |
+
+### Intended differences
+
+| Web app | iOS app | Why |
+|---|---|---|
+| Named profiles (save, load, export, import) | One config; *Config file* export/import | A phone needs one working config; files move it between devices |
+| A tab's Save writes only that tab | One Save for all changes | One Save fits a phone better |
+| Save to Zotero through the local Zotero app | Through the digest server's Zotero key, else *Share to Zotero* | Zotero's local API exists only on the computer |
+| Timeframe and Top N count as unsaved until Save | Saved as soon as you change them on the Papers tab | The Papers toolbar on iOS applies them at once |
+
 ## Update or renew
 
 ```bash

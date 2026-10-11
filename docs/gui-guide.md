@@ -97,7 +97,7 @@ paper**, **Keywords**, **Authors**, **Low priority**, **Feeds**, **Scoring**,
 **Profiles** (plus the sidebar with Timeframe / Top N / Feeds / fetch controls
 and the Display + Zotero status sections).
 
-- **Papers**: ranked list, search box (filters by title / authors / abstract), MD + JSON download buttons. Per paper: rank, title, authors, subjects, section, summary, arXiv link, score badge, a **Save to Zotero** button, a **✕** button to remove it from the list (the papers below move up and the next one fills the top N; removals are remembered per profile across reloads and later fetches, and can be restored from *Removed papers*), expandable score breakdown, expandable full abstract.
+- **Papers**: ranked list, search box (filters by title / authors / abstract), MD + JSON download buttons. Per paper: rank, title, authors, subjects, section, summary, arXiv link, score badge, **Save to Zotero**, **Add author**, **Open PDF** and **Remove** buttons (Remove takes it off the list; the papers below move up and the next one fills the top N; removals are remembered per profile across reloads and later fetches, and can be restored from *Removed papers*), expandable score breakdown, expandable full abstract.
 - **Score a paper**: paste an arXiv link or ID to see how it would score under your current config, why it did (or didn't) appear in the digest, and save it to Zotero.
 - **Keywords**: spreadsheet-style editor for `core_keywords`. Each match adds the *Per-keyword bonus* (default +6).
 - **Authors**: same pattern for `named_authors`. Default +6 per match. Whole-word match by default (configurable in Scoring, like keywords).
@@ -216,12 +216,14 @@ In short: **profiles are personal presets you swap inside the GUI; the project
 config is the single file your CLI command picks up.** Push a profile into your
 CLI workflow by loading it, then clicking **Write project config**.
 
-!!! warning "Save/Apply before saving"
-    Edits in the **Keywords / Authors / Low priority** tabs only enter the live
-    config when you click that tab's **Save** button; **Feeds** edits need
-    **Save feeds**; scoring/per-feed changes need **Apply weights**. A profile or
-    project-config save captures the *current* live config, so apply your tab
-    edits first, otherwise they won't be included.
+!!! note "Saving and unsaved changes"
+    A tab's **Save** button (**Keywords / Authors / Low priority**, **Save feeds**,
+    **Apply weights**) writes that tab's settings to the loaded profile, or to
+    `arxiv_config.json` when no profile is loaded; other unsaved edits stay unsaved. Other edits (sidebar settings,
+    *Add author* on a card, presets, imports) stay unsaved: a bar at the top lists
+    them by tab with **Discard** and **Save**, the affected tabs get an orange dot,
+    and each tab lists its unsaved entries above its table and marks
+    those rows ● in it.
 
 ## Moving settings to the iPhone (and back)
 
@@ -239,4 +241,4 @@ Two ways, both described step by step in [Sync across devices](deploy.md):
 
 - The score breakdown is the fastest way to figure out why a low-priority hit overshadowed a keyword match. Open it before re-tweaking weights blindly.
 - Profiles are pure JSON; you can hand-edit them outside the GUI or check them into a separate dotfiles repo.
-- Without sync, the GUI never writes back to `arxiv_config.json` automatically. You must press **Write project config** in the Profiles tab. That keeps surprises out of your CLI workflow. (With **Sync with server** on, downloading from the server also updates `arxiv_config.json`, so the CLI follows the shared config.)
+- The GUI writes `arxiv_config.json` only when you ask: **Write project config** in the Profiles tab, or a tab **Save** / **Apply weights** / unsaved-bar **Save** while no profile is loaded (with a profile loaded those save to the profile instead). (With **Sync with server** on, downloading from the server also updates `arxiv_config.json`, so the CLI follows the shared config.)

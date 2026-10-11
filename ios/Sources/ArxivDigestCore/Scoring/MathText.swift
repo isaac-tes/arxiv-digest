@@ -8,6 +8,8 @@ import Foundation
 /// operators, `\frac`, `\sqrt` and accents. Outside math only text-mode
 /// commands (`\textit{…}`, `\emph{…}`, …) and escapes (`\%`, `\&`, `\$`) are
 /// touched. Scoring and search keep the raw text; this is for the screen.
+/// The app draws with `styled`, which keeps sub/superscripts as plain text
+/// runs so they render as real lowered/raised text.
 ///
 /// ponytail: Unicode approximation, not a typesetter. Fractions, matrices and
 /// big operators read as plain text; a KaTeX web view is the upgrade path.
@@ -18,6 +20,35 @@ public enum MathText {
         return segments(c).map { seg in
             seg.isMath ? math(Array(c[seg.content])) : textMode(Array(c[seg.whole]))
         }.joined()
+    }
+
+    /// A sub- or superscript in `styled` output: character offsets into its text.
+    public struct ScriptRun: Equatable, Sendable {
+        public let range: Range<Int>
+        public let isSubscript: Bool
+
+        public init(range: Range<Int>, isSubscript: Bool) {
+            self.range = range
+            self.isSubscript = isSubscript
+        }
+    }
+
+    /// What the app draws: like `render`, but each top-level sub/superscript
+    /// stays plain text and is reported as a run, so the UI draws it as real
+    /// lowered/raised text. Unicode script letters are an uneven set (ˢʰᵃʳᵖ)
+    /// and many have no form at all (`ℤ_N`).
+    public static func styled(_ text: String) -> (text: String, scripts: [ScriptRun]) {
+        guard text.contains("$") || text.contains("\\") else { return (text, []) }
+        let c = Array(text)
+        var out = "", runs: [ScriptRun] = []
+        for seg in segments(c) {
+            guard seg.isMath else { out += textMode(Array(c[seg.whole])); continue }
+            let (s, r) = mathRuns(Array(c[seg.content]), collect: true)
+            let base = out.count
+            runs += r.map { ScriptRun(range: ($0.range.lowerBound + base)..<($0.range.upperBound + base), isSubscript: $0.isSubscript) }
+            out += s
+        }
+        return (out, runs)
     }
 
     /// The inline math regions (`$…$`, `$$…$$`, `\(…\)`), delimiters included.
@@ -166,8 +197,12 @@ public enum MathText {
 
     // MARK: - Math mode
 
-    private static func math(_ c: [Character]) -> String {
-        var out = ""
+    private static func math(_ c: [Character]) -> String { mathRuns(c, collect: false).text }
+
+    /// Math as text. With `collect`, top-level scripts are kept plain and
+    /// returned as runs; nested math (inside `\frac`, `\sqrt`, …) uses Unicode.
+    private static func mathRuns(_ c: [Character], collect: Bool) -> (text: String, scripts: [ScriptRun]) {
+        var out = "", runs: [ScriptRun] = []
         var i = 0
         while i < c.count {
             let ch = c[i]
@@ -179,7 +214,14 @@ public enum MathText {
                 i = after
             case "_", "^":
                 let (arg, next) = group(c, at: i + 1)
-                out += script(math(arg), sub: ch == "_")
+                let inner = math(arg)
+                if collect, !inner.isEmpty {
+                    let lo = out.count
+                    out += inner
+                    runs.append(ScriptRun(range: lo..<out.count, isSubscript: ch == "_"))
+                } else {
+                    out += script(inner, sub: ch == "_")
+                }
                 i = next
             case "{", "}":
                 i += 1
@@ -191,7 +233,7 @@ public enum MathText {
                 i += 1
             }
         }
-        return out
+        return (out, runs)
     }
 
     private static func command(_ name: String, _ c: [Character], _ next: Int) -> (String, Int) {

@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 import ArxivDigestCore
 
 /// Builds highlighted text the way the web GUI renders a paper card: matched
@@ -7,7 +8,7 @@ import ArxivDigestCore
 /// tinted when the aspect's "color font" toggle is on; matched authors are
 /// bold. Spans come from `HighlightEngine`, which uses the scorer's matching,
 /// so highlights and scores never diverge. Titles and abstracts show inline
-/// LaTeX as Unicode (`MathText`).
+/// LaTeX via `MathText`, sub/superscripts as real smaller lowered/raised text.
 enum Highlight {
     /// `@AppStorage` key for the dotted underline (device-local display pref).
     static let underlineKey = "underlineHighlights"
@@ -32,14 +33,25 @@ enum Highlight {
     }
 
     /// Title / abstract / summary: keywords + low-priority terms, when the
-    /// matching display toggle is on.
-    static func terms(_ raw: String, enabled: Bool, config: DigestConfig, underline: Bool) -> AttributedString {
-        let text = MathText.render(raw)
-        guard enabled else { return AttributedString(text) }
-        let spans = HighlightEngine.spans(
-            in: text, keywords: config.coreKeywords, lowPriority: config.lowPriorityKeywords,
-            wordBoundary: config.wordBoundaryMatching)
-        return attributed(text, spans: spans, config: config, underline: underline)
+    /// matching display toggle is on. `style` / `weight` must match the
+    /// `Text`'s font: sub/superscripts are sized and offset from it.
+    static func terms(_ raw: String, enabled: Bool, config: DigestConfig, underline: Bool,
+                      style: UIFont.TextStyle = .body, weight: Font.Weight = .regular) -> AttributedString {
+        let (text, scripts) = MathText.styled(raw)
+        var attr = AttributedString(text)
+        if enabled {
+            let spans = HighlightEngine.spans(
+                in: text, keywords: config.coreKeywords, lowPriority: config.lowPriorityKeywords,
+                wordBoundary: config.wordBoundaryMatching)
+            attr = attributed(text, spans: spans, config: config, underline: underline)
+        }
+        let size = UIFont.preferredFont(forTextStyle: style).pointSize
+        for run in scripts {
+            guard let range = attributedRange(run.range.lowerBound, run.range.upperBound, attr) else { continue }
+            attr[range].font = .system(size: size * 0.7, weight: weight)
+            attr[range].baselineOffset = run.isSubscript ? -size * 0.2 : size * 0.38
+        }
+        return attr
     }
 
     static func authors(_ text: String, config: DigestConfig, underline: Bool) -> AttributedString {
@@ -60,8 +72,12 @@ enum Highlight {
 private func attributedRange(
     _ range: Range<String.Index>, in text: String, _ attr: AttributedString
 ) -> Range<AttributedString.Index>? {
-    let lo = text.distance(from: text.startIndex, to: range.lowerBound)
-    let hi = text.distance(from: text.startIndex, to: range.upperBound)
+    attributedRange(text.distance(from: text.startIndex, to: range.lowerBound),
+                    text.distance(from: text.startIndex, to: range.upperBound), attr)
+}
+
+/// The `AttributedString` range for character offsets `lo..<hi`.
+private func attributedRange(_ lo: Int, _ hi: Int, _ attr: AttributedString) -> Range<AttributedString.Index>? {
     let count = attr.characters.count
     guard lo >= 0, lo < hi, hi <= count else { return nil }
     let start = attr.characters.index(attr.startIndex, offsetBy: lo)

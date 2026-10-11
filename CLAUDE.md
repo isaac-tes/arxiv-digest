@@ -100,6 +100,8 @@ Tests live in `tests/`; run with `uv run pytest` (~320 tests). `requests.get` is
 
 **Sync with a digest server** (`sync_client.py`, GUI sidebar): optional two-way sync of the config and removed papers with the FastAPI service in `server/` (the iOS app's Server mode). The server is the source of truth; offline the GUI keeps working from `arxiv_config.json`. Settings: `~/.arxiv_scraper/sync.json` (0600) or `ARXIV_DIGEST_SERVER` / `ARXIV_DIGEST_TOKEN`. User docs: `docs/deploy.md`; iOS app: `ios/HANDOFF.md`.
 
+**Web GUI and iOS app stay in step:** a user-facing feature lands on both sides in the same change, or gets a row under *Intended differences* in `docs/ios-app.md` (see `CONTRIBUTING.md`, *Web GUI and iOS app stay in step*). The iOS app version comes from `pyproject.toml` at build time; never set `MARKETING_VERSION`.
+
 **GUI tests must never touch real user files.** `AppTest` re-executes `arxiv_gui.py`, so patching `arxiv_gui.PROJECT_CONFIG` etc. has no effect; patch `Path.home` and `ad.DEFAULT_CONFIG_PATH` (see `tests/test_sync_client.py::fake_server`). `tests/conftest.py` already keeps the update check and sync settings away from `~/.arxiv_scraper`.
 
 ## Contributing & git conventions

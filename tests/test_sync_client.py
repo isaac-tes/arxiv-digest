@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import stat
+from dataclasses import replace
 
 import pytest
 import requests
@@ -275,3 +276,17 @@ def test_gui_bad_server_reply_does_not_crash(fake_server, monkeypatch):
     at = _app().run(timeout=15)
     assert not at.exception
     assert any("unexpected reply" in w.value for w in at.sidebar.warning)
+
+
+def test_gui_pending_push_on_tab_save_skips_unsaved_edits(fake_server):
+    """While a push is pending, a tab Save syncs the saved config, not unsaved edits."""
+    sc.save_settings(sc.SyncSettings(server="http://box:8000", token="tok", initialized=True))
+    at = _app()
+    at.session_state["papers"] = [{"id": "2601.00001", "title": "P", "authors": "Zed Quill",
+                                   "subjects": "", "abstract": "x" * 50, "link": "", "section": ""}]
+    at.run(timeout=15)
+    sc.save_settings(replace(sc.load_settings(), pending=True))
+    next(b for b in at.button if (b.key or "").startswith("add_author_card_")).click().run(timeout=15)
+    next(b for b in at.button if b.label == "Save core keywords").click().run(timeout=15)
+
+    assert "Zed Quill" not in fake_server["config"]["named_authors"]

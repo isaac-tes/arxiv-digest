@@ -14,7 +14,8 @@ struct PaperRowView: View {
     private var title: AttributedString {
         var rank = AttributedString("\(paper.rank). ")
         rank.foregroundColor = .secondary
-        return rank + Highlight.terms(paper.title, enabled: config.highlightTermsTitle, config: config, underline: underline)
+        return rank + Highlight.terms(paper.title, enabled: config.highlightTermsTitle, config: config, underline: underline,
+                                style: .headline, weight: .semibold)
     }
 
     var body: some View {
@@ -36,7 +37,8 @@ struct PaperRowView: View {
                         .labelStyle(.titleAndIcon)
                 }
 
-                Text(Highlight.terms(paper.summary, enabled: config.highlightTermsSummary, config: config, underline: underline))
+                Text(Highlight.terms(paper.summary, enabled: config.highlightTermsSummary, config: config, underline: underline,
+                                     style: .callout))
                     .font(.callout)
                     .lineLimit(4)
                     .padding(.top, 2)
