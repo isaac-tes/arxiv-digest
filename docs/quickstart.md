@@ -30,7 +30,7 @@ arxiv-digest --top 10         # CLI digest, prints ranked papers to stdout
 ```
 
 In the GUI, hit **Fetch papers** in the sidebar and start reading. Pick a
-[starter preset](index.md#starter-presets) under **Profiles** if you'd rather begin from
+[starter preset](gui-guide.md#starter-presets) under **Profiles** if you'd rather begin from
 a prepared topic bundle (e.g. *open quantum systems*). To tune what counts as a
 match, edit the **Keywords** / **Authors** / **Scoring** tabs; the Papers tab
 re-ranks instantly.
@@ -38,7 +38,7 @@ re-ranks instantly.
 Updating after a while? One command, no clone needed:
 
 ```bash
-arxiv-digest update    # reinstalls from the latest GitHub release
+arxiv-digest update    # reinstalls from the latest GitHub release (on Windows it prints the command to run)
 ```
 
 Or from inside the clone (e.g. to track a branch):
@@ -47,6 +47,12 @@ Or from inside the clone (e.g. to track a branch):
 git pull
 uv tool install '.[gui]' --reinstall    # rebuilds both commands on PATH
 ```
+
+`./scripts/update.sh` does both steps. The `--reinstall` matters: `uv tool`
+installs into an isolated environment that doesn't track your clone, so
+`git pull` alone doesn't update the commands. Both commands print a one-line
+notice when a newer release is out (checked at most once a day, silent
+offline; `--no-update-check` turns it off for the CLI).
 
 To remove: `uv tool uninstall arxiv-digest`.
 

@@ -1,5 +1,7 @@
 # iPhone / iPad app (preview)
 
+![The iPhone app: the ranked digest, a paper page with highlighted keywords and PDF and Zotero buttons, Score a paper, removing a paper, and the Config tab with unsaved changes](assets/ios-showcase.gif){ width="420" }
+
 The native app isn't on the App Store yet. Until it is, you can install it on
 your own iPhone or iPad from source with Xcode, as a development build.
 
@@ -74,6 +76,7 @@ phone or a desktop browser.
 | Highlight colors and toggles | Sidebar → Display | Settings → Display |
 | Inline LaTeX | KaTeX | Titles and lists: Unicode with real raised/lowered scripts; paper page abstract: KaTeX |
 | Share settings between devices | Sidebar → Sync with server | Settings → Connection → Server |
+| Copy or download the working config as JSON | Profiles → *Download* / *Copy working config (JSON)* | Settings → Config file → *Export config* / *Copy config JSON* |
 
 ### Intended differences
 

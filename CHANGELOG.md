@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **Copy or download the working config as JSON**: the GUI's Profiles tab has *Download working config (JSON)* and *Copy working config (JSON)* under Save (handy right after loading a starter preset), and the iOS app has *Copy config JSON* next to *Export config* in Settings → Config file. Same format as profile Export / Import.
+
+### Changed
+- **Shorter README with a new hero image and a tour of the web app**: what the app does, a four-line quick start, the iPhone app and CLI, and links to the guides; the detailed GUI, CLI and scoring reference lives in the docs. The starter-preset table moved to the GUI guide, and the update-from-a-clone steps to the Quickstart.
+- **Animated previews**: a zooming tour of the web app (GIF in the README, video in the GUI guide) and of the iPhone app (in the iPhone app docs). `scripts/record_showcase.py` re-records all of them from the live apps with a starter preset, without touching your own config.
+
+### Fixed
+- **Author names and card details are readable when the GUI's theme differs from the system's**: with a light macOS/Windows appearance and Streamlit set to Dark (or the reverse), they were drawn dark grey on dark (or light on light). They now follow the theme Streamlit shows.
+- **The Papers tab's JSON download button no longer drops onto its own row** next to the search box at common window widths.
+
 ## [0.7.1] - 2026-10-11
 
 ### Added

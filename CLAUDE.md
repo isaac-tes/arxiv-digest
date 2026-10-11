@@ -70,17 +70,35 @@ uv run python arxiv_digest.py --list-config --no-config              # inspect b
 uv run python arxiv_digest.py --timeframe today --include-replacements      # keep 'Replacement submissions'
 uv run streamlit run arxiv_gui.py                                    # Streamlit GUI
 uv run mkdocs build --strict                                         # docs build / link check
-uv run pytest                                                        # ~320-test suite, ~9s, no network
+uv run pytest                                                        # ~330-test suite, ~9s, no network
+cd server && uv sync --extra dev && uv run pytest                    # digest server tests (~55)
+cd server && uv run uvicorn app.main:app --port 8799                 # digest server (8765 is taken locally)
+cd ios && swift test                                                 # iOS Core tests (~125, also on Linux)
+cd ios && xcodegen generate && open ArxivDigest.xcodeproj            # iOS app; rerun xcodegen after adding Swift files
+uv run --group dev --with playwright --with imageio-ffmpeg python scripts/record_showcase.py  # re-record hero + web tour in docs/assets (live arXiv); `--ios <sim-udid>` for the iOS clip
 ```
 
 CLI uses `--timeframe {today,pastweek}`. There are no `--today` / `--pastweek` / `--days` flags despite older docs — confirm with `--help`. `--include-replacements` keeps arXiv "Replacement submissions" (hidden by default; only present in the `today`/`/new` feed).
 
 ## Architecture
 
-`arxiv_digest.py` is the single-file CLI; `arxiv_gui.py` is a Streamlit GUI that imports from it. Data flow:
+Monorepo (ADR 0006). `arxiv_digest.py` is the shared engine — everything else imports it, so scoring/fetch behaviour lives there once:
+
+| Path | Role |
+|------|------|
+| `arxiv_digest.py` | Engine + CLI (`arxiv-digest`): config, fetch, filter, score, format |
+| `arxiv_gui.py` | Streamlit GUI; `arxiv_gui_launcher.py` is the `arxiv-gui` console script |
+| `zotero_bridge.py` | Save to Zotero (local API, ADR 0001) + arXiv Atom lookup used by *Score a paper* |
+| `sync_client.py` | GUI ↔ digest-server two-way sync |
+| `update_check.py` | Cached release check + `arxiv-digest update` self-upgrade |
+| `server/` | FastAPI digest service (routers `auth/config/digest/removed/score/zotero`, SQLAlchemy, SQLite by default); `server/app/scoring.py` imports the root `arxiv_digest` |
+| `ios/` | SwiftUI app. `ArxivDigestCore` (SPM, tested) holds a Swift port of fetch/score/highlight; `ArxivDigestApp` the views. Modes: **Server**, **On device** (standalone, ADR 0009: `DigestRouter` + `LiveSource`), **Demo** |
+| `docs/` | MkDocs site; `docs/adr/` decisions; `CONTEXT.md` is the domain glossary |
+
+Data flow:
 
 1. **Config** (`Config` dataclass + `ScoringWeights` dataclass) — loaded from `arxiv_config.json` if present, then mutated by CLI flags via `apply_cli_modifications`. Persisted with `--save-config`. The GUI reads/writes the same file. Also persists: `include_replacements`, `feed_weights`, and the GUI display toggles (`highlight_authors` / `highlight_terms_title` / `highlight_terms_abstract` / `highlight_terms_summary`) and highlight colors.
-2. **Fetch** — `fetch_feeds` → `fetch_feed` scrapes arXiv HTML list pages (BeautifulSoup). Each paper keeps its section header in `paper["section"]` (e.g. `New submissions…` / `Cross submissions…` / `Replacement submissions…` on `/new`, or a date like `Fri, 19 Jun 2026` on `/pastweek`). Missing abstracts are back-filled in parallel via `ThreadPoolExecutor` calling `fetch_abstract`.
+2. **Fetch** — `today`: `fetch_feeds` → `fetch_feed` scrapes arXiv `/new` HTML list pages (BeautifulSoup). `pastweek`: `fetch_pastweek` → `fetch_feed_api` (export API, see below). Each paper keeps its section header in `paper["section"]` (e.g. `New submissions…` / `Cross submissions…` / `Replacement submissions…` on `/new`, or a date like `Fri, 19 Jun 2026` for past-week days). Missing abstracts are back-filled in parallel via `ThreadPoolExecutor` calling `fetch_abstract`. Raw fetches are cached on disk in `~/.arxiv_scraper/cache/` (`load_fetch_cache`/`save_fetch_cache`; GUI wraps it in `fetch_papers_cached`).
 3. **Filter** — `filter_papers(papers, include_replacements, days)` drops `Replacement submissions` by default (cross-lists kept) and optionally restricts to specific day labels. Helpers: `section_category`, `section_day_label`, `available_day_labels`. Applied post-fetch so the GUI re-filters without re-fetching.
 4. **Score** (`score_paper`) — delegates to `explain_score(paper, cfg)` which returns a per-rule breakdown. Scalar weights live in `cfg.weights`; **subject scoring is `cfg.feed_weights`** (a bonus per feed name found in a paper's subjects — defaults quant-gas 4 / mes-hall 4 / quant-ph 2 via `_default_feed_weights`). Named-author matches the author field **only**, not title/abstract. Keyword/author/low-priority matching is **whole-word by default** via `term_matches`/`term_pattern` (`(?<!\w)term(?!\w)`), gated by `cfg.word_boundary_matching` (set `False` for legacy substring); subjects/`feed_weights` always stay substring so a parent feed `cond-mat` still matches `cond-mat.quant-gas`. Defaults: +6 per keyword/author, per-feed subject bonus, −5 once if any low-priority hit, +1 long-abstract bonus.
 5. **Rank & format** — `build_ranked_entries` sorts and slices to `top_n`; `format_digest` / `format_markdown` produce output strings.
@@ -96,9 +114,15 @@ Starter presets must remain generic and must not reintroduce personal or group-s
 
 GUI display: `arxiv_gui.py` hover-highlights authors (in the author list), and matched keywords/low-priority terms in the title, abstract and (optionally) summary via `_highlight_terms`; toggled by the four `highlight_*` config flags. Inline LaTeX (`$...$`) is left verbatim for Streamlit's KaTeX: card text is a block-styled `<span>`, never a `<div>` (Markdown isn't parsed inside HTML blocks). The highlighters reuse the scorer's `ad.term_pattern` (honoring `word_boundary_matching`), so highlights and scores never diverge. Streamlit strips the `title` attribute, so tooltips use CSS (`.tip`/`.hl-tip`), not `title=`.
 
-Tests live in `tests/`; run with `uv run pytest` (~320 tests). `requests.get` is monkey-patched, so no network calls hit arXiv during the suite. GUI tests use `streamlit.testing.v1.AppTest` (headless).
+GUI paper cards also carry a ✕ (remove), *Save to Zotero* and *Add author* popovers. **Removed papers** are skipped before ranking (papers below move up), per profile: `~/.arxiv_scraper/removed/<profile>.json`, or `removed_papers.json` with no profile loaded (`removed_papers_path`). *Score a paper* explains a paper's rank or why it is absent (removed / replacement / other day / below cutoff / never fetched) and must agree with the Papers tab.
 
-**Sync with a digest server** (`sync_client.py`, GUI sidebar): optional two-way sync of the config and removed papers with the FastAPI service in `server/` (the iOS app's Server mode). The server is the source of truth; offline the GUI keeps working from `arxiv_config.json`. Settings: `~/.arxiv_scraper/sync.json` (0600) or `ARXIV_DIGEST_SERVER` / `ARXIV_DIGEST_TOKEN`. User docs: `docs/deploy.md`; iOS app: `ios/HANDOFF.md`.
+Tests live in `tests/`; run with `uv run pytest` (~330 tests). `requests.get` is monkey-patched, so no network calls hit arXiv during the suite. GUI tests use `streamlit.testing.v1.AppTest` (headless).
+
+**Sync with a digest server** (`sync_client.py`, GUI sidebar): optional two-way sync of the config and removed papers with the FastAPI service in `server/` (the iOS app's Server mode). The server is the source of truth; offline the GUI keeps working from `arxiv_config.json`. Settings: `~/.arxiv_scraper/sync.json` (0600) or `ARXIV_DIGEST_SERVER` / `ARXIV_DIGEST_TOKEN`. User docs: `docs/deploy.md`; iOS app: `ios/HANDOFF.md` (dev handoff, launch options) and `ios/STANDALONE.md`. Server security: `DIGEST_ACCESS_TOKEN` bearer (else localhost-only), CORS off, arxiv.org-only feed URLs, remote mode refuses the default JWT secret.
+
+**Python ↔ Swift parity.** The iOS Core re-implements scoring and parsing; `ios/scripts/make_parity_fixture.py` regenerates fixtures from the Python engine, and `swift test` pins the Swift side to them. After changing scoring/fetch in `arxiv_digest.py`, rerun it and check `git diff ios/`.
+
+CI (`.github/workflows/`): `ci.yml` (root tests), `ios.yml` (server tests, `swift test` on Linux + macOS, iOS build), `docs.yml`, plus the release pair below.
 
 **Web GUI and iOS app stay in step:** a user-facing feature lands on both sides in the same change, or gets a row under *Intended differences* in `docs/ios-app.md` (see `CONTRIBUTING.md`, *Web GUI and iOS app stay in step*). The iOS app version comes from `pyproject.toml` at build time; never set `MARKETING_VERSION`.
 

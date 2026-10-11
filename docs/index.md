@@ -7,367 +7,74 @@
 [![Docs](https://img.shields.io/badge/docs-GitHub%20Pages-2ea44f)](https://isaac-tes.github.io/arxiv-digest/)
 
 <p align="center">
-  <img src="assets/showcase.jpg" alt="A ranked paper card in the GUI, with matched keywords and authors highlighted, a score breakdown, and a Save to Zotero button" width="900">
-  <br>
-  <em>Matched keywords and authors highlighted, a live score breakdown, one-click Save to Zotero.</em>
+  <img src="assets/hero.png" alt="arXiv Digest: your arXiv, ranked by rules you control. A ranked paper card with followed authors and a matched keyword highlighted, its score, and Save to Zotero, Add author, Open PDF and Remove buttons" width="900">
 </p>
 
-## 🖥️ Start with the web app (recommended)
+arXiv Digest reads the new papers in the arXiv categories you follow and ranks
+them by your own keywords, authors and categories, so the papers you care
+about come first.
 
-Three steps: install `uv`, clone and install the app, run `arxiv-gui`. Your browser opens with the ranked digest and you can start tuning right away.
+- **Rules, not a language model.** Every score comes with a breakdown of what
+  matched. No API key, no account.
+- **Any category.** `quant-ph`, `hep-th`, `cs.LG`, `math.AG`, …
+- **Built for reading.** Matches are highlighted, Zotero is one click away, and
+  papers you've read can be removed so the next one moves up.
+- **Web app, iPhone app and CLI**, with the same features and the same config.
 
-### 1. Install uv
+## Quick start
 
-<details>
-<summary><b>Only if you don't have <code>uv</code> yet</b>: install it on your OS (one command), then come back</summary>
-
-`uv` is a fast, single-binary Python package manager. Official install scripts:
-
-- **macOS / Linux (curl)**
-  ```bash
-  curl -LsSf https://astral.sh/uv/install.sh | sh
-  ```
-- **Windows (PowerShell)**
-  ```powershell
-  powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
-  ```
-- **Homebrew (macOS / Linux)**
-  ```bash
-  brew install uv
-  ```
-
-Then restart your terminal (so the `uv` command is on your `PATH`) and verify with `uv --version`. See the official [uv install docs](https://docs.astral.sh/uv/getting-started/installation/).
-
-</details>
-
-Already have `uv`? Skip straight to step 2.
-
-### 2. Get the app
+You need [`uv`](https://docs.astral.sh/uv/getting-started/installation/)
+(`curl -LsSf https://astral.sh/uv/install.sh | sh` on macOS and Linux).
 
 ```bash
 git clone https://github.com/isaac-tes/arxiv-digest.git
-# git clone git@github.com:isaac-tes/arxiv-digest.git
 cd arxiv-digest
-uv tool install '.[gui]'      # installs the arxiv-gui web app on your PATH
+uv tool install '.[gui]'
+arxiv-gui                     # opens the web app at http://localhost:8501
 ```
 
-> `.[gui]` pulls in the web app's dependencies (Streamlit + pandas). If you only
-> ever use the CLI, omit the `[gui]` extra: `uv tool install .`.
-
-### 3. Run it
-
-```bash
-arxiv-gui                     # web app — opens http://localhost:8501 in your browser
-arxiv-digest --top 10         # CLI digest, prints ranked papers to stdout
-```
-
-In the GUI, hit **Fetch papers** in the sidebar and start reading. Feeds default
-to a condensed-matter / quantum-physics set. Pick a
-[starter preset](#starter-presets) under **Profiles** if you'd rather start from
-a prepared topic bundle.
-
-### Alternatives
-
-**Prefer not to install anything?** `uvx` runs the app on the fly from the
-clone, with no PATH entry and nothing to uninstall:
-
-```bash
-uvx --from '.[gui]' arxiv-gui               # web app — opens your browser
-uvx --from '.[gui]' arxiv-digest --top 10   # CLI
-```
-
-**Want to hack on the code?** Run straight from the clone instead of installing
-as a tool:
-
-```bash
-uv sync --group dev                      # CLI + GUI + tests + docs
-uv run pytest -q                         # full test suite, ~10s, no network
-uv run streamlit run arxiv_gui.py        # GUI in browser at localhost:8501
-```
-
-`uv tool install` puts both commands on your PATH in an isolated environment;
-remove them with `uv tool uninstall arxiv-digest`. The `[gui]` extra pulls in
-Streamlit + pandas; use `uv tool install .` for a CLI-only install.
-
-### Updating to the latest version
-
-If you installed as a tool, one command, from anywhere, no clone needed:
-
-```bash
-arxiv-digest update          # (or: arxiv-digest upgrade)
-```
-
-It checks the latest release tag on GitHub and reinstalls the `arxiv-digest` /
-`arxiv-gui` tools from it (keeping CLI-only installs CLI-only). On Windows it
-prints the exact command to run, because the running `.exe` would lock the
-upgrade.
-
-You'll also get a one-line notice at the end of normal digest runs, and when
-starting `arxiv-gui` (in the terminal and as a small note in the GUI sidebar),
-when a newer release is out (checked against the GitHub releases API at most
-once a day, cached in `~/.arxiv_scraper/update_check.json`, silent when
-offline). Suppress the CLI notice with `--no-update-check`.
-
-Prefer updating from your clone (e.g. to track a branch or an unreleased
-commit)?
-
-```bash
-cd arxiv-digest
-git pull                               # newest code (or: git fetch && git checkout v0.3.0 for a tag)
-uv tool install '.[gui]' --reinstall   # rebuild the arxiv-digest / arxiv-gui tools
-```
-
-`./scripts/update.sh` does the same two steps in one shot.
-
-> **Why `--reinstall`?** `uv tool` installs into an isolated environment that does **not** auto-track your clone, so `git pull` alone won't update the `arxiv-digest` / `arxiv-gui` commands. The reinstall rebuilds them. (If you `uv run` from the clone instead of installing as a tool, just `git pull` is enough.)
-
----
-
-**📱 iPhone / iPad app (preview)**: works on its own ("On this device"), or shares your settings across devices through a small self-hosted server. Not on the App Store yet: [install it from Xcode](ios-app.md), then see [Share settings across devices](deploy.md).
-
-**👋 Most people should use the web app.** It runs in your browser, shows each paper's keyword / author / subject hits highlighted in color, explains *why* it scored what it did, and offers one-click **Save to Zotero**. The CLI is there for those who want a scriptable, terminal-first digest sharing the exact same preferences and config.
-
-Both share the same `Config` and `arxiv_config.json`; tweak in one, the other picks it up.
-
-Fetches arXiv listing pages for **any** category, scores papers by your keyword / author / subject preferences, and presents the ranked digest as a **web app** (`arxiv-gui`) for interactive browsing and tuning, or as a CLI report (terminal, Markdown, JSON) for automation. Works with any arXiv feed (`hep-th`, `cs.LG`, `math.AG`, …); the defaults just ship a condensed-matter / quantum-physics set you can replace.
-
-Other arXiv-digest tools already exist (see [Similar projects](#similar-projects)). This one is separate from them and scores a different way: with transparent keyword, author, and subject rules rather than a language model. It needs no API key, runs on any arXiv category, and can save matches into Zotero.
-
-## Defaults
-
-- **Feeds**: any arXiv listing works; ships defaulting to `cond-mat`, `cond-mat.mes-hall`, `cond-mat.quant-gas`, `quant-ph` (edit in the Feeds tab or `arxiv_config.json`)
-- **Timeframe**: `pastweek` (a true seven-day submission window)
-- **Top N**: 20
-- **Output**: stdout
-
-### Starter presets
-
-Three built-in, read-only topic bundles (keywords + authors + feeds) give you a starting point instead of the generic default:
-
-| Preset | Focus |
-|--------|-------|
-| `open-quantum-systems` | Lindbladian dynamics, dissipation, driven-dissipative & non-Markovian systems |
-| `quantum-many-body` | Thermalization, many-body localization, tensor networks, strongly correlated systems |
-| `floquet-topological` | Floquet engineering, periodically driven systems & topological matter |
-
-Pick one in the GUI **Profiles → Starter presets** (**Load** replaces your working config, **Add** merges it in) or on the CLI with `--preset NAME` / `--add-preset NAME` (see `--list-presets`). Presets never overwrite your saved profiles or `arxiv_config.json`; they only change the in-memory config until you explicitly save. Topic sets are editable starting points tuned for quantum physics.
-
----
-
-## GUI guide
-
-### Launching
-
-The quickest way to open it is the installed `arxiv-gui` command:
-
-```bash
-arxiv-gui                            # opens http://localhost:8501 in your browser
-```
-
-Or, running straight from a clone (after `uv sync --group gui`):
-
-```bash
-uv sync --group gui                  # one-time, installs Streamlit + pandas
-uv run streamlit run arxiv_gui.py    # opens http://localhost:8501 in your browser
-```
-
-The GUI opens `http://localhost:8501` in your browser automatically. The first time you launch, the app loads `arxiv_config.json` if present in the project root, otherwise the built-in defaults. Profiles you save go to `~/.arxiv_scraper/profiles/` and persist across sessions / project clones.
-
-### The daily flow
-
-1. **Sidebar**: pick **Timeframe** (`today` or `pastweek`), **Top N**, and which **Feeds** to fetch from. Click **Fetch papers**. Fetches are cached per `(timeframe, feeds)` in two layers — in-memory for the session and on disk under `~/.arxiv_scraper/cache/` keyed on the UTC day — so re-clicking (or reopening the app the same day) is instant and never re-triggers arXiv's rate limiter; use **Clear fetch cache** to force a fresh fetch. The `pastweek` fetch queries each selected category and uses arXiv's announcement sections for its day labels.
-2. **Papers tab**: papers appear ranked. Open *Why this score?* under any paper to see exactly which keywords / authors / subjects contributed. Open *Full abstract* to read more without leaving the page.
-3. **Tweak preferences** in the **Keywords**, **Authors**, **Low priority**, and **Scoring** tabs. The Papers tab re-ranks live on the cached fetch, with no re-fetch needed. Want to check a specific paper outside the current fetch? Use the **Score a paper** tab.
-4. **Download** the current ranked list as Markdown or JSON via the buttons above the search box. The Markdown is ``--output-markdown``'s format; the JSON holds the same ranked ``entries`` as ``--output-json`` (it omits the CLI-only ``feed_urls``/``sections`` header fields), so consumers that read the ``entries`` keep working.
-
-### Tabs in detail
-
-The GUI has eight tabs, in order: **Papers**, **Score a paper**, **Keywords**, **Authors**, **Low priority**, **Feeds**, **Scoring**, **Profiles**.
-
-- **Papers**: ranked list, search box (filters by title / authors / abstract substring), MD + JSON download buttons. Per paper: rank, title, authors, section, summary, arXiv link, score badge, **Save to Zotero**, **Add author**, **Open PDF** and **Remove** buttons (Remove takes it off the list; the papers below move up and the next one fills the top N; removals are remembered per profile across reloads and later fetches, and can be restored from *Removed papers*), expandable score breakdown, expandable full abstract.
-- **Score a paper**: paste an arXiv link or ID to see how it would score under your current config, why it did (or didn't) appear in the digest, and save it to Zotero.
-- **Keywords**: spreadsheet-style editor for `core_keywords`. Add/remove rows, click *Save core keywords* (saves to the loaded profile, or `arxiv_config.json` without one). Unsaved entries are listed above the table and marked ● in it. *Reset to defaults* restores the built-in list. Each match adds the *Per-keyword bonus* (default +6) to a paper's score.
-- **Authors**: same pattern for `named_authors`. Default +6 per match. Match is case-insensitive substring on author string.
-- **Low priority**: penalty list. If *any* term matches, the paper takes the *Low-priority penalty* (default −5), once, not per hit.
-- **Feeds**: `name → URL` editor. Add custom arXiv lists (e.g. `hep-th=https://arxiv.org/list/hep-th/new`). The `/new` / `/pastweek` suffix is rewritten by the timeframe selector at fetch time, so you can paste any base URL.
-- **Scoring**: a **Whole-word matching** toggle (default on; untick for legacy substring matching), then number inputs for each weight: per-keyword bonus, per-author bonus, low-priority penalty, long-abstract bonus, the abstract-length threshold, and a **per-feed subject bonus** for every configured feed (subject scoring is driven by `feed_weights`; defaults `cond-mat.quant-gas` +4, `cond-mat.mes-hall` +4, `quant-ph` +2). *Apply weights* makes the change live and saves it like the list tabs; *Reset to defaults* puts it back.
-- **Profiles**: **Starter presets** at the top: pick a built-in bundle and **Load** (replace working config) or **Add** (merge it in), never touching your saved profiles or `arxiv_config.json`. Below, save the current full config under a name (e.g. `topology-mode`, `quantum-gas-mode`). Each profile keeps its own list of removed papers (under `~/.arxiv_scraper/removed/`). Files live in `~/.arxiv_scraper/profiles/<name>.json`. Buttons: **Load**, **Export** (download JSON), **Delete**, **Import** (upload JSON). Below: **Write project config** dumps the current config to `arxiv_config.json` next to `arxiv_digest.py`, which is what the **CLI** picks up on the next run. Use this to push your GUI tweaks back into your daily CLI digest.
-
-### Saving papers to Zotero
-
-The GUI can save papers straight into your **local Zotero library**, using the
-same mechanism the official Zotero Connector uses, with **no API-key setup**. A
-**Save to Zotero** popover sits next to each paper's score (and in the **Score a
-paper** tab). It fetches the paper from the arXiv export API and writes a
-`preprint` item with the same fields, category tags, and PDF/Snapshot
-attachments the Zotero Connector would produce, plus an `arxiv-digest` source
-tag.
-
-From the popover you choose a **collection** in your personal **My Library**
-(or its root) and click **Save**. A transient **Saved ✓** confirms a successful
-save for ~30 seconds before the Save button returns. Failed or denied saves are
-shown as errors. You are free to re-save a paper later; the
-bridge prevents creating a duplicate of the same arXiv item in My Library.
-
-> **Group libraries:** The local Zotero HTTP API does not expose a supported
-> group-library listing or write route, so this app intentionally offers
-> **personal My Library only**. To put a saved paper in a group, drag or copy it
-> from My Library to the group in Zotero.
-
-To enable saving, Zotero's **local HTTP API** must be switched on:
-
-1. **Install/run Zotero 10 or newer**: older versions expose a read-only local
-   API and cannot save.
-2. Open Zotero → **Settings** (macOS: *Preferences*) → **Advanced** tab.
-3. Tick **"Allow other applications on this computer to communicate with
-   Zotero"**.
-4. Restart Zotero if prompted. The GUI sidebar should now show **Zotero:
-   connected**.
-5. On the **first save**, Zotero pops an *"Allow this application to modify your
-   library?"* dialog: click **Allow** (or **Always Allow**) once, then save
-   again.
-
-The sidebar shows a **Zotero: connected / not running** status pill so you can
-tell at a glance whether saving is available. See the [GUI guide](gui-guide.md#zotero-bridge) for full details.
-
-### Tips
-
-- The score breakdown is the fastest way to figure out why a low-priority hit overshadowed a keyword match. Open it before re-tweaking weights blindly.
-- Profiles are pure JSON; you can hand-edit them outside the GUI or check them into a separate dotfiles repo if you want them tracked.
-- The GUI writes `arxiv_config.json` only when you ask: **Write project config** in the Profiles tab, or a tab **Save** / **Apply weights** / unsaved-bar **Save** while no profile is loaded (with a profile loaded those save to the profile instead).
-
----
-
-## CLI guide
-
-Prefer a terminal / scriptable digest (for cron, CI, or `--output-markdown/--json`
-reports)? The `arxiv-digest` CLI shares the exact same `Config`, `arxiv_config.json`,
-and starter presets as the web app: tweak in one, the other picks it up.
-
-### Basic invocations
-
-```bash
-# Default run: pastweek, top 20, all four configured feeds
-uv run python arxiv_digest.py
-
-# Today's papers, top 10
-uv run python arxiv_digest.py --timeframe today --top 10
-
-# Pastweek with specific feeds
-uv run python arxiv_digest.py --timeframe pastweek --feed cond-mat --feed quant-ph
-
-# Write reports to ./reports/digest-YYYY-MM-DD.{md,json}
-uv run python arxiv_digest.py --output-markdown --output-json
-
-# Add a keyword and persist the change to arxiv_config.json
-uv run python arxiv_digest.py --add-core "rydberg" --save-config
-
-# Inspect the resolved config without fetching anything
-uv run python arxiv_digest.py --list-config --no-config
-```
-
-### All flags
-
-| Flag | Purpose |
-|------|---------|
-| `--feed NAME` | Select feed (repeatable). Either a name from `feeds` config or a full URL. |
-| `--top N` | Override number of entries to print (default: 20). |
-| `--timeframe {today,pastweek}` | Override which arXiv listing window to scrape. |
-| `--sections NAME ...` | Limit to specific date-section titles (e.g. `"Thu, 4 Dec 2025"`). |
-| `--include-replacements` | Keep arXiv *Replacement submissions* (hidden by default; only present in the `today` feed). |
-| `--score ID_OR_URL` | Score a single arXiv paper (by id or URL) against the current config and print its per-aspect breakdown, without fetching the whole digest. |
-| `--output-json [PATH]` | Write JSON. Bare flag → `reports/digest-YYYY-MM-DD.json`. |
-| `--output-markdown [PATH]` | Write Markdown. Bare flag → `reports/digest-YYYY-MM-DD.md`. |
-| `--config PATH` | Use a non-default config JSON path. |
-| `--no-config` | Ignore the config file even if present (use built-in defaults). |
-| `--preset NAME` | Start from a built-in [starter preset](#starter-presets) (replaces the config's content). |
-| `--add-preset NAME` | Union a starter preset's keywords/authors/feeds onto the current config (repeatable). |
-| `--list-presets` | List the built-in starter presets and exit. |
-| `--save-config` | Persist current (modified) config back to `--config` path. |
-| `--list-config` | Print the resolved config as JSON and exit. |
-| `--no-update-check` | Skip the cached check for a newer release at the end of the run. |
-| `--verbose` | Log fetch progress to stderr. |
-| `--add-core W` / `--remove-core W` / `--rename-core OLD:NEW` | Mutate `core_keywords`. |
-| `--add-author N` / `--remove-author N` / `--rename-author OLD:NEW` | Mutate `named_authors`. |
-| `--add-low-priority W` / `--remove-low-priority W` / `--rename-low-priority OLD:NEW` | Mutate `low_priority_kw`. |
-| `--add-url NAME=URL` / `--rename-url OLD:NEW` / `--delete-url NAME` | Mutate the feeds map. |
-| `--set-default-feed NAME` | Set which feed(s) are used when `--feed` is omitted (repeatable). |
-
-The `--add-* / --remove-* / --rename-*` flags only stick if combined with `--save-config`; otherwise they apply for that run only.
-
-### Configuration file
-
-`arxiv_config.json` lives next to `arxiv_digest.py` (gitignored). Structure:
-
-```json
-{
-  "feeds": { "cond-mat": "https://arxiv.org/list/cond-mat/new", ... },
-  "default_feeds": ["cond-mat.quant-gas", "cond-mat.mes-hall", "quant-ph", "cond-mat"],
-  "core_keywords": ["topological", "fqhe", ...],
-  "named_authors": ["bloch", "cirac", ...],
-  "low_priority_kw": ["film", "growth", ...],
-  "top_n": 20,
-  "timeframe": "pastweek",
-  "include_replacements": false,
-  "word_boundary_matching": true,
-  "feed_weights": {
-    "cond-mat.quant-gas": 4, "cond-mat.mes-hall": 4, "quant-ph": 2
-  },
-  "weights": {
-    "core_keyword": 6, "named_author": 6,
-    "low_priority_penalty": -5,
-    "long_abstract_bonus": 1, "long_abstract_threshold": 200
-  }
-}
-```
-
-The CLI never exposes flags for `weights`. To tune scoring weights, use the GUI's Scoring tab and click *Write project config*, or hand-edit the JSON. Subject scoring is driven by `feed_weights` (a bonus per feed name found in a paper's subjects); configs written before v0.3.0 auto-migrate on load.
-
-### Scoring (defaults)
-
-| Rule | Default weight |
-|------|---------------|
-| Per matched core keyword | **+6** |
-| Per matched named author | **+6** (author list only) |
-| Per-feed subject bonus | **per feed**: e.g. `cond-mat.quant-gas` +4, `cond-mat.mes-hall` +4, `quant-ph` +2 |
-| Any low-priority term matches (applied once) | **−5** |
-| Abstract longer than 200 chars | **+1** |
-
-Scalar weights live in `weights`; subject scoring in `feed_weights`, both configurable in `arxiv_config.json` or the GUI Scoring tab. Any arXiv category works: add a feed, give it a `feed_weights` bonus.
-
-**Matching is whole-word by default** (`word_boundary_matching: true`). Keywords, authors, and low-priority terms match only as complete tokens: `mpo` scores *MPO* / *MPO-based* / *the mpo ansatz* but **not** *temporal* or *composition*, and author `ma` no longer matches *Mao*. Hyphens, spaces, and punctuation count as boundaries. Set `word_boundary_matching: false` (or untick **Whole-word matching** in the GUI Scoring tab) for the legacy substring behavior. Subjects/`feed_weights` always use substring matching, so a parent feed `cond-mat` still matches `cond-mat.quant-gas`.
-
-### Output formats
-
-- **Console** (default): copy-paste friendly digest, ranked.
-- **JSON** (`--output-json`): structured data with `generated_at`, `feed_urls`, `top_n`, `total_papers`, and the ranked `entries`.
-- **Markdown** (`--output-markdown`): formatted for Notion / Obsidian / Slack.
-- **Plain text**: redirect stdout: `... > digest.txt`.
-
----
-
-## Tests
-
-```bash
-uv sync --group test
-uv run pytest             # full suite (~10s, no network)
-uv run pytest -k weight   # filter by name
-```
-
-Covers `Config` defaults & JSON round-trips, every scoring rule independently, a property test that `score_paper == explain_score(...)["total"]`, CLI flag handling, formatting helpers, HTML parsing of `fetch_feed` against a fixture, and a Streamlit GUI render smoke test. `requests.get` is monkey-patched so no network calls hit arXiv during tests.
-
-`uv sync --group dev` installs both `test` and `gui` groups in one shot.
-
----
+Click **Fetch papers**, then start from a
+[starter preset](gui-guide.md#starter-presets) or type your own keywords and
+authors. The list re-ranks as you edit. Update later with `arxiv-digest update`.
+
+<p align="center">
+  <img src="assets/showcase.gif" alt="A tour of the web app: fetching and ranking papers, opening Why this score?, adding an author and saving from the unsaved-changes bar, Open PDF, removing a paper so the next moves up, and scoring a pasted arXiv link" width="900">
+</p>
+
+## Also available
+
+- **📱 iPhone and iPad app (preview).** Works on its own, fetching and scoring on
+  the phone, or shares your settings with the web app through a small
+  self-hosted server. Not on the App Store yet:
+  [install it with Xcode](ios-app.md).
+- **⌨️ CLI.** `arxiv-digest --top 10` prints the same ranking in the terminal,
+  or writes Markdown and JSON for cron jobs and notes apps. It reads the same
+  `arxiv_config.json` as the web app. See the [CLI guide](cli-guide.md).
+
+## Documentation
+
+| | |
+|---|---|
+| [Quickstart](quickstart.md) | Install options, updating, running from a clone |
+| [GUI guide](gui-guide.md) | Every tab, highlighting, Zotero, profiles and presets |
+| [Scoring](scoring.md) | The rules, default weights and how to tune them |
+| [CLI guide](cli-guide.md) | All flags, the config file, output formats |
+| [iPhone app](ios-app.md) | Install, modes, web ↔ iOS feature table |
+| [Sync across devices](deploy.md) | Run the digest server, connect your devices |
+| [Troubleshooting](troubleshooting.md) | Common problems and fixes |
+
+Or browse them all on the [documentation site](https://isaac-tes.github.io/arxiv-digest/).
 
 ## Similar projects
 
-[AutoLLM/ArxivDigest](https://github.com/AutoLLM/ArxivDigest) is the other project in this space. It uses GPT to rank papers against a plain-language description of your interests and can email you the digest, but it has not been updated since May 2024. It expects an OpenAI API key and a SendGrid account.
+[AutoLLM/ArxivDigest](https://github.com/AutoLLM/ArxivDigest) asks GPT how
+relevant each paper is to a description of your interests and emails you the
+result. It needs an OpenAI key and a SendGrid account and hasn't been updated
+since May 2024. arXiv Digest is unrelated to it and shares no code: it scores
+with rules you can read and change, runs locally on demand, and adds the
+browser and iPhone apps and Zotero saving. Both are MIT-licensed.
 
-This project is independent of it and shares no code with it. The two suit different workflows:
+## Contributing
 
-- AutoLLM/ArxivDigest asks a language model how relevant a paper is; arxiv-digest applies fixed scoring rules you can inspect and tune.
-- AutoLLM/ArxivDigest is set up to run as a scheduled GitHub Action that emails results; arxiv-digest runs locally, on demand, and writes console, Markdown, or JSON output.
-- arxiv-digest adds a browser GUI, per-paper score breakdowns, and one-click Save to Zotero; AutoLLM/ArxivDigest does not.
-
-Both are MIT-licensed. Neither depends on the other.
+Bug reports and pull requests are welcome; see [CONTRIBUTING.md](https://github.com/isaac-tes/arxiv-digest/blob/main/CONTRIBUTING.md).
+`uv sync --group dev && uv run pytest` runs the test suite (no network needed).

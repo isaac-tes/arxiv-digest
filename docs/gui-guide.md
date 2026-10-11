@@ -1,5 +1,8 @@
 # GUI guide
 
+<video src="../assets/showcase.mp4" autoplay loop muted playsinline controls width="100%"
+       aria-label="A tour of the web app: fetching and ranking papers, Why this score?, Add author with the unsaved-changes bar, Open PDF, removing a paper, and Score a paper"></video>
+
 The GUI is a [Streamlit](https://streamlit.io/) app that imports `arxiv_digest` directly, so every fetch / score / format function used by the CLI is also what the GUI runs. No duplication; tweaks in one show up in the other.
 
 ## Launching
@@ -197,6 +200,22 @@ Paste an arXiv link or ID (full URL, bare ID, or `arXiv:xxxx`) into the
   on a day the fetch didn't cover, or in a category you don't subscribe to.
 - A **Save to Zotero** button to save it directly.
 
+## Starter presets
+
+Three built-in, read-only topic bundles (keywords + authors + feeds) give you a
+starting point instead of the generic default:
+
+| Preset | Focus |
+|--------|-------|
+| `open-quantum-systems` | Lindbladian dynamics, dissipation, driven-dissipative & non-Markovian systems |
+| `quantum-many-body` | Thermalization, many-body localization, tensor networks, strongly correlated systems |
+| `floquet-topological` | Floquet engineering, periodically driven systems & topological matter |
+
+Pick one under **Profiles → Starter presets**: **Load** replaces your working
+config, **Add** merges it in. On the CLI use `--preset NAME` / `--add-preset NAME`
+(see `--list-presets`). Presets never overwrite your saved profiles or
+`arxiv_config.json`; they change only the working config until you save.
+
 ## Profiles vs project config
 
 Both save the **complete** configuration: every feed, the keyword / author /
@@ -215,6 +234,11 @@ it*:
 In short: **profiles are personal presets you swap inside the GUI; the project
 config is the single file your CLI command picks up.** Push a profile into your
 CLI workflow by loading it, then clicking **Write project config**.
+
+Under **Save**, **Download working config (JSON)** and **Copy working config
+(JSON)** hand you the config you are working with (say, a preset you just
+loaded), unsaved edits included, in the same format as **Export** and
+**Import profile from JSON**.
 
 !!! note "Saving and unsaved changes"
     A tab's **Save** button (**Keywords / Authors / Low priority**, **Save feeds**,
