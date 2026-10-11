@@ -1111,16 +1111,11 @@ _UNSAVED_BAR_CSS = """
 _PAPER_CSS = """
 <style>
 .paper-title { display: block; font-size: 1.35rem; font-weight: 700; line-height: 1.3; margin: 0 0 .15rem 0; }
-.paper-authors { font-size: 1.02rem; color: #e6edf3; margin: 0 0 .25rem 0; }
-.paper-meta { font-size: .9rem; color: #8b949e; margin: .25rem 0 0 0; }
+/* Authors and meta derive from the theme's text color (currentColor), so they
+   follow Streamlit's Light/Dark setting, which can differ from the OS scheme. */
+.paper-authors { font-size: 1.02rem; color: color-mix(in srgb, currentColor 90%, transparent); margin: 0 0 .25rem 0; }
+.paper-meta { font-size: .9rem; color: color-mix(in srgb, currentColor 60%, transparent); margin: .25rem 0 0 0; }
 .paper-meta a { color: #58a6ff; text-decoration: none; }
-/* The colors above are tuned for Streamlit's dark theme (near-white/mid-grey
-   on a dark background) and are barely legible on light theme's white
-   background. Override just for light, so dark theme is untouched. */
-@media (prefers-color-scheme: light) {
-  .paper-authors { color: #24292f; }
-  .paper-meta { color: #57606a; }
-}
 .paper-meta a:hover { text-decoration: underline; }
 .paper-authors .hl-author {
   font-weight: 700; border-bottom: 1px dotted; cursor: help; padding: 0 1px;
@@ -1503,7 +1498,7 @@ def render_papers_tab():
 
     paper_by_id = {p["id"]: p for p in papers}
 
-    col_search, col_export_md, col_export_json = st.columns([3, 1, 1])
+    col_search, col_export_md, col_export_json = st.columns([2, 1, 1])
     with col_search:
         query = st.text_input("Search title / authors / abstract", placeholder="e.g. fractional")
     with col_export_md:
@@ -1891,6 +1886,18 @@ def render_profiles_tab():
                 _sync_upload_config()
                 st.success(f"Saved profile '{target}'.")
                 st.rerun()
+
+    # The working config (e.g. a just-loaded preset), unsaved edits included, in the Export/Import format.
+    current_json = json.dumps(asdict(cfg()), indent=2, ensure_ascii=False)
+    st.download_button(
+        "Download working config (JSON)",
+        data=current_json,
+        file_name=f"{loaded_profile() or 'arxiv-digest-config'}.json",
+        mime="application/json",
+        key="export_current",
+    )
+    with st.expander("Copy working config (JSON)"):
+        st.code(current_json, language="json")  # the code block has a copy-to-clipboard button
 
     profiles = list_profiles()
     if profiles:
