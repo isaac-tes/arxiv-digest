@@ -5,19 +5,6 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
-
-### Added
-- **Copy or download the working config as JSON**: the GUI's Profiles tab has *Download working config (JSON)* and *Copy working config (JSON)* under Save (handy right after loading a starter preset), and the iOS app has *Copy config JSON* next to *Export config* in Settings → Config file. Same format as profile Export / Import.
-
-### Changed
-- **Shorter README with a new hero image and a tour of the web app**: what the app does, a four-line quick start, the iPhone app and CLI, and links to the guides; the detailed GUI, CLI and scoring reference lives in the docs. The starter-preset table moved to the GUI guide, and the update-from-a-clone steps to the Quickstart.
-- **Animated previews**: a zooming tour of the web app (GIF in the README, video in the GUI guide) and of the iPhone app (in the iPhone app docs). `scripts/record_showcase.py` re-records all of them from the live apps with a starter preset, without touching your own config.
-
-### Fixed
-- **Author names and card details are readable when the GUI's theme differs from the system's**: with a light macOS/Windows appearance and Streamlit set to Dark (or the reverse), they were drawn dark grey on dark (or light on light). They now follow the theme Streamlit shows.
-- **The Papers tab's JSON download button no longer drops onto its own row** next to the search box at common window widths.
-
 ## [0.7.1] - 2026-10-11
 
 ### Added
@@ -25,17 +12,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Open PDF** button on each paper card (the arXiv `/pdf/` page).
 - **iOS: unsaved-changes marks like the web app.** The save bar lists what changed per section (e.g. *Keywords: + quantum geometry*), changed Config pages get a dot, unsaved keywords, authors, low-priority terms and feeds are marked ●, and the Config and Settings tabs get their own badge.
 - **Web app and iOS app feature table** in the iPhone app docs, and a contributing rule that new features land on both sides.
+- **Copy or download the working config as JSON**: the GUI's Profiles tab has *Download working config (JSON)* and *Copy working config (JSON)* under Save (handy right after loading a starter preset), and the iOS app has *Copy config JSON* next to *Export config* in Settings → Config file. Same format as profile Export / Import.
 
 ### Changed
 - **Tab Save buttons persist**: *Save core keywords / authors / low-priority terms*, *Save feeds* and *Apply weights* now write that tab's settings to the loaded profile, or to `arxiv_config.json` when no profile is loaded, instead of only the session. Other unsaved edits are not written with them.
 - **Paper card actions**: Save to Zotero, Add author, Open PDF and Remove (formerly ✕) form one equal-width column under the centred score; on a narrow card they move below the abstract as a 2×2 grid. Column layouts across the GUI wrap instead of squeezing labels letter by letter.
 - **The iOS app version now follows `pyproject.toml`**: a build step copies it into the app, so the app always shows the release it was built from.
+- **Shorter README with a new hero image and a tour of the web app**: what the app does, a four-line quick start, the iPhone app and CLI, and links to the guides; the detailed GUI, CLI and scoring reference lives in the docs. The starter-preset table moved to the GUI guide, and the update-from-a-clone steps to the Quickstart.
+- **Animated previews**: a zooming tour of the web app (GIF in the README, video in the GUI guide) and of the iPhone app (in the iPhone app docs). `scripts/record_showcase.py` re-records all of them from the live apps with a starter preset, without touching your own config.
 
 ### Fixed
 - **Typing in the keyword, author, low-priority and feed tables or the scoring weights no longer reruns the whole page** (which looked like a re-fetch); only that editor reruns until you save.
 - **iOS: sub- and superscripts in titles render properly.** They are drawn as real lowered and raised text, so `$\mathbb{Z}_N$` shows ℤ with a lowered N instead of ℤ_N, and `SC$^{\text{sharp}}$` no longer mixes odd superscript letters.
 - **A blank row added to a table is no longer saved as the text "None"** (keywords, authors, low-priority terms and feeds).
 - **Tests never touch your real files**: the suite now isolates `~/.arxiv_scraper` and `arxiv_config.json`; some GUI tests used to overwrite them.
+- **Author names and card details are readable when the GUI's theme differs from the system's**: with a light macOS/Windows appearance and Streamlit set to Dark (or the reverse), they were drawn dark grey on dark (or light on light). They now follow the theme Streamlit shows.
+- **The Papers tab's JSON download button no longer drops onto its own row** next to the search box at common window widths.
 
 ## [0.7.0] - 2026-10-08
 
