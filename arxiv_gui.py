@@ -1072,13 +1072,12 @@ _CARD_ACTIONS_CSS = """
 [data-testid="stLayoutWrapper"]:has(> [class*="st-key-paper_head_"]) { flex: 1 1 24rem !important; min-width: 0; }
 [data-testid="stLayoutWrapper"]:has(> [class*="st-key-paper_side_"]) { flex: 0 1 12rem !important; min-width: 0; margin-left: auto; }
 [class*="st-key-paper_actions_"], [class*="st-key-paper_score_"] { max-width: 12rem; }
-/* Compact: one-line score, short buttons, small gaps (card height stays near the text's). */
-.paper-score { text-align: center; font-size: .85rem; opacity: .85; line-height: 1.2; }
-.paper-score b { font-size: 1.6rem; font-weight: 600; margin-left: .3rem; }
-[class*="st-key-paper_score_"] [data-testid="stMarkdownContainer"] { margin-bottom: 0 !important; }
-[class*="st-key-paper_side_"], [class*="st-key-paper_actions_"] { gap: .4rem !important; }
-[class*="st-key-paper_actions_"] button, [class*="st-key-paper_actions_"] a {
-    min-height: 2rem; padding-top: .15rem !important; padding-bottom: .15rem !important;
+[class*="st-key-paper_score_"] [data-testid="stMetric"] { text-align: center; }
+[class*="st-key-paper_score_"] [data-testid="stMetric"] > div,
+[class*="st-key-paper_score_"] [data-testid="stMetric"] label,
+[class*="st-key-paper_score_"] [data-testid="stMetricValue"] { justify-content: center; }
+[class*="st-key-paper_score_"] [data-testid="stMetricLabel"] {
+    display: flex !important; justify-content: center !important; width: 100%;
 }
 @container (max-width: 38rem) {
     [data-testid="stLayoutWrapper"]:has(> [class*="st-key-paper_side_"]) { flex: 1 1 100% !important; margin-left: 0; padding-top: .5rem; }
@@ -1614,10 +1613,7 @@ def render_papers_tab():
                     )
             with score_col:
                 with st.container(key=f"paper_score_{e['id']}"):
-                    st.markdown(
-                        f'<div class="paper-score">Score <b>{e["score"]}</b></div>',
-                        unsafe_allow_html=True,
-                    )
+                    st.metric("Score", e["score"])
                 with st.container(key=f"paper_actions_{e['id']}"):
                     _render_zotero_save_button(e["id"], e["title"])
                     _render_add_author(e["authors"], paper_id=e["id"])

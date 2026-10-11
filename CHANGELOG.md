@@ -15,7 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - **Tab Save buttons persist**: *Save core keywords / authors / low-priority terms*, *Save feeds* and *Apply weights* now write that tab's settings to the loaded profile, or to `arxiv_config.json` when no profile is loaded, instead of only the session. Other unsaved edits are not written with them.
-- **Paper card actions**: Save to Zotero, Add author, Open PDF and Remove (formerly ✕) form one equal-width column under the centred score; on a narrow card they move below the abstract as a 2×2 grid. Column layouts across the GUI wrap instead of squeezing labels letter by letter. The score sits on one line and the buttons are compact, so short papers no longer leave empty space.
+- **Paper card actions**: Save to Zotero, Add author, Open PDF and Remove (formerly ✕) form one equal-width column under the centred score; on a narrow card they move below the abstract as a 2×2 grid. Column layouts across the GUI wrap instead of squeezing labels letter by letter.
 - **The iOS app version now follows `pyproject.toml`**: a build step copies it into the app, so the app always shows the release it was built from.
 
 ### Fixed
