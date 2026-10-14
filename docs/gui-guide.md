@@ -1,7 +1,7 @@
 # GUI guide
 
 <video src="../assets/showcase.mp4" autoplay loop muted playsinline controls width="100%"
-       aria-label="A tour of the web app: fetching and ranking papers, Why this score?, Add author with the unsaved-changes bar, Open PDF, removing a paper, and Score a paper"></video>
+       aria-label="A tour of the web app: fetching the past week, hovering highlighted keywords and authors to see their bonus, Why this score?, picking a day, searching, Markdown export, saving to a Zotero collection, the PDF, following an author with the unsaved-changes bar, removing and restoring a paper, scoring an arXiv link, the Keywords, Scoring and Profiles tabs, config as JSON, server sync and highlight colors"></video>
 
 The GUI is a [Streamlit](https://streamlit.io/) app that imports `arxiv_digest` directly, so every fetch / score / format function used by the CLI is also what the GUI runs. No duplication; tweaks in one show up in the other.
 

@@ -38,8 +38,9 @@ Click **Fetch papers**, then start from a
 authors. The list re-ranks as you edit. Update later with `arxiv-digest update`.
 
 <p align="center">
-  <img src="assets/showcase.gif" alt="A tour of the web app: fetching and ranking papers, opening Why this score?, adding an author and saving from the unsaved-changes bar, Open PDF, removing a paper so the next moves up, and scoring a pasted arXiv link" width="900">
+  <img src="assets/showcase.gif" alt="A tour of the web app: fetching the past week, hovering highlighted keywords and authors to see their bonus, Why this score?, picking a day, searching, Markdown export, saving to a Zotero collection, the PDF, following an author with the unsaved-changes bar, removing and restoring a paper, scoring an arXiv link, the Keywords, Scoring and Profiles tabs, config as JSON, server sync and highlight colors">
 </p>
+<p align="center"><sub><a href="https://isaac-tes.github.io/arxiv-digest/gui-guide/">Watch it as full-quality video</a></sub></p>
 
 ## Also available
 

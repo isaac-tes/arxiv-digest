@@ -1,6 +1,6 @@
 # iPhone / iPad app (preview)
 
-![The iPhone app: the ranked digest, a paper page with highlighted keywords and PDF and Zotero buttons, Score a paper, removing a paper, and the Config tab with unsaved changes](assets/ios-showcase.gif){ width="420" }
+![The iPhone app: the ranked digest, a paper page with highlights, PDF and Zotero, swiping a paper away and restoring it, filtering by day, Score a paper, the Config tab with unsaved changes, keywords, authors, categories, weights and presets, and Settings with on-device or server mode and config as JSON](assets/ios-showcase.gif){ width="420" }
 
 The native app isn't on the App Store yet. Until it is, you can install it on
 your own iPhone or iPad from source with Xcode, as a development build.
