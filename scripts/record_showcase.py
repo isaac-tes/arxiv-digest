@@ -703,6 +703,11 @@ def _close(a: Rect, b: Rect) -> bool:
     return all(abs(x - y) < 8 for x, y in zip(a, b))
 
 
+# Web-tour pacing in seconds: intro, camera move, typing per character, hold on a result
+# (sub step / normal), other-tab hold, outro zoom-out / final hold.
+PACE = dict(intro=.4, move=.7, type=.05, sub=.45, hold=.65, tab=1.0, zoom=.7, end=.6)
+
+
 def timeline(cap: Capture, aspect: float, chapter_cards: bool = False) -> list[Frame]:
     """An establishing shot, then per beat one camera move that frames the clicked
     element together with its result, while the cursor travels there; click,
@@ -715,7 +720,7 @@ def timeline(cap: Capture, aspect: float, chapter_cards: bool = False) -> list[F
         k = max(1, round(seconds * FPS))
         frames.extend(fn((i + 1) / k) for i in range(k))
 
-    run(.8, lambda _: Frame(shown, None, 0, FULL, cursor, None, "", 0, -1))
+    run(PACE["intro"], lambda _: Frame(shown, None, 0, FULL, cursor, None, "", 0, -1))
     chapter = None
     for i, bt in enumerate(beats):
         if chapter_cards and bt.chapter != chapter:
@@ -726,7 +731,7 @@ def timeline(cap: Capture, aspect: float, chapter_cards: bool = False) -> list[F
         shot = fit(clip(_union(*map(_rect, rects))), aspect, 60, 1050)
         start_cam, start_cur, prev = cam, cursor or bt.target, shown
         new_cap = bt.caption != caption
-        run(1.1, lambda t: Frame(prev, bt.before, ease(t * 4) if prev != bt.before else 0,
+        run(PACE["move"], lambda t: Frame(prev, bt.before, ease(t * 4) if prev != bt.before else 0,
                                  glide(start_cam, shot, t, aspect) if not _close(start_cam, shot) else shot,
                                  lerp(start_cur, bt.target, ease(t)), None, bt.caption,
                                  ease(t * 2) if new_cap else 1, i))
@@ -734,22 +739,22 @@ def timeline(cap: Capture, aspect: float, chapter_cards: bool = False) -> list[F
         run(.22, lambda t: Frame(bt.before, None, 0, shot, cursor, t if bt.click else None, bt.caption, 1, i))
         last = bt.before
         for s in bt.steps:  # typing, one frame per character
-            run(.09, lambda _, s=s: Frame(s, None, 0, shot, cursor, None, bt.caption, 1, i))
+            run(PACE["type"], lambda _, s=s: Frame(s, None, 0, shot, cursor, None, bt.caption, 1, i))
             last = s
         if bt.new_tab:  # cut to the other tab, framed on its content, then back to the app
             tab_cam = fit(clip(bt.focus), aspect, 40, 960)
             back = beats[i + 1].before if i + 1 < end else last
             run(.3, lambda t: Frame(last, bt.after, ease(t), shot, None, None, bt.caption, 1, i, cam_b=tab_cam))
-            run(1.6, lambda _: Frame(bt.after, None, 0, tab_cam, None, None, bt.caption, 1, i))
+            run(PACE["tab"], lambda _: Frame(bt.after, None, 0, tab_cam, None, None, bt.caption, 1, i))
             run(.3, lambda t: Frame(bt.after, back, ease(t), tab_cam, None, None, bt.caption, 1, i, cam_b=shot))
             shown = back
         else:
             run(.12, lambda t: Frame(last, bt.after, ease(t), shot, cursor, None, bt.caption, 1, i))
-            run(.7 if bt.sub else 1.05, lambda _: Frame(bt.after, None, 0, shot, cursor, None, bt.caption, 1, i))
+            run(PACE["sub"] if bt.sub else PACE["hold"], lambda _: Frame(bt.after, None, 0, shot, cursor, None, bt.caption, 1, i))
             shown = bt.after
         cam = shot
-    run(1.1, lambda t: Frame(shown, None, 0, lerp(cam, FULL, ease(t)), cursor, None, caption, 1 - t, end))
-    run(1.0, lambda _: Frame(shown, None, 0, FULL, cursor, None, "", 0, end))
+    run(PACE["zoom"], lambda t: Frame(shown, None, 0, lerp(cam, FULL, ease(t)), cursor, None, caption, 1 - t, end))
+    run(PACE["end"], lambda _: Frame(shown, None, 0, FULL, cursor, None, "", 0, end))
     return frames
 
 
