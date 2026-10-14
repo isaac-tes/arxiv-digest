@@ -1207,29 +1207,21 @@ def test_load_profile_clears_stale_color_and_font_widget_state(monkeypatch, tmp_
     assert _checkbox(at, "color_font_keyword").value is False, "widget stale after Load profile"
 
 
-def test_paper_authors_and_meta_text_readable_in_light_mode():
-    """Light-mode override must fix contrast without touching dark mode.
+def test_paper_authors_and_meta_follow_the_streamlit_theme():
+    """Authors/meta text must be readable in both Streamlit themes.
 
-    Regression: .paper-authors/.paper-meta hardcoded a near-white (#e6edf3)
-    / mid-grey (#8b949e) color tuned for Streamlit's dark theme, making both
-    barely visible on light theme's white background. A `prefers-color-scheme:
-    light` override should darken them, while the base (dark-mode) rule stays
-    exactly as it was.
+    Regression: fixed colors switched on the OS `prefers-color-scheme`, so a
+    light-OS user who picked Streamlit's Dark theme got dark-grey authors on a
+    dark background (and vice versa). Deriving from currentColor follows the
+    theme Streamlit actually renders.
     """
     import arxiv_gui
 
     css = arxiv_gui._PAPER_CSS
-    base_authors_rule = css.split(".paper-authors {")[1].split("}")[0]
-    base_meta_rule = css.split(".paper-meta {")[1].split("}")[0]
-    assert "#e6edf3" in base_authors_rule, "dark-mode authors color must be unchanged"
-    assert "#8b949e" in base_meta_rule, "dark-mode meta color must be unchanged"
-
-    assert "@media (prefers-color-scheme: light)" in css
-    light_block = css.split("@media (prefers-color-scheme: light)")[1]
-    light_authors_rule = light_block.split(".paper-authors {")[1].split("}")[0]
-    light_meta_rule = light_block.split(".paper-meta {")[1].split("}")[0]
-    assert "#e6edf3" not in light_authors_rule, "light mode must not keep the near-white color"
-    assert "#8b949e" not in light_meta_rule, "light mode should use a darker, more legible grey"
+    assert "prefers-color-scheme" not in css
+    for cls in (".paper-authors {", ".paper-meta {"):
+        rule = css.split(cls)[1].split("}")[0]
+        assert "currentColor" in rule and "#" not in rule, f"{cls} must not hardcode a color"
 
 
 def test_apply_weights_updates_cfg():
@@ -1623,3 +1615,21 @@ def test_loading_a_profile_applies_its_display_toggles(monkeypatch, tmp_path):
     assert boxes["Highlight keywords in summaries"] is True
     assert boxes["Highlight authors"] is False
     assert at.session_state["cfg"].highlight_terms_summary is True
+
+
+def test_profiles_tab_shows_current_config_json_for_copy(monkeypatch, tmp_path):
+    """After Load preset, the copyable JSON block holds that preset's config."""
+    import json
+    from dataclasses import asdict
+
+    from streamlit.testing.v1 import AppTest
+
+    import arxiv_digest as ad
+
+    _tmp_home(monkeypatch, tmp_path)
+    at = AppTest.from_file("arxiv_gui.py").run(timeout=15)
+    at.selectbox(key="starter_preset").set_value("quantum-many-body").run(timeout=15)
+    at.button(key="preset_load").click().run(timeout=15)
+    block = next(c for c in at.code if c.language == "json")
+    assert json.loads(block.value) == asdict(ad.preset_config("quantum-many-body"))
+    assert not list(at.exception)

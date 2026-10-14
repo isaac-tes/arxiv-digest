@@ -5,6 +5,33 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.1] - 2026-10-11
+
+### Added
+- **Unsaved-changes marks in the GUI**, like the iOS app's save bar. While the working config differs from the saved profile or project config, a bar at the top lists the changes by tab (e.g. *Authors: + Ada Lovelace*, *Sidebar: top n: 20 → 60*), with **Discard** and **Save**. The affected tabs get an orange dot, each tab lists its own unsaved entries above its table, and the keyword, author, low-priority and feed tables mark unsaved rows with ● and show edits typed but not saved yet.
+- **Open PDF** button on each paper card (the arXiv `/pdf/` page).
+- **iOS: unsaved-changes marks like the web app.** The save bar lists what changed per section (e.g. *Keywords: + quantum geometry*), changed Config pages get a dot, unsaved keywords, authors, low-priority terms and feeds are marked ●, and the Config and Settings tabs get their own badge.
+- **Web app and iOS app feature table** in the iPhone app docs, and a contributing rule that new features land on both sides.
+- **Copy or download the working config as JSON**: the GUI's Profiles tab has *Download working config (JSON)* and *Copy working config (JSON)* under Save (handy right after loading a starter preset), and the iOS app has *Copy config JSON* next to *Export config* in Settings → Config file. Same format as profile Export / Import.
+
+### Changed
+- **Tab Save buttons persist**: *Save core keywords / authors / low-priority terms*, *Save feeds* and *Apply weights* now write that tab's settings to the loaded profile, or to `arxiv_config.json` when no profile is loaded, instead of only the session. Other unsaved edits are not written with them.
+- **Paper card actions**: Save to Zotero, Add author, Open PDF and Remove (formerly ✕) form one equal-width column under the centred score; on a narrow card they move below the abstract as a 2×2 grid. Column layouts across the GUI wrap instead of squeezing labels letter by letter.
+- **Day lists start with the newest day**, in the web app's Day picker, the iOS app's day chips and the digest server's `available_days`.
+- **iOS: no refetch until arXiv has something new.** On this device, fetched papers are kept until arXiv's next announcement (Sunday to Thursday, 20:00 US Eastern), so opening the app again fetches nothing. After an announcement the app asks only for the latest days, keeps the rest of the week and drops papers older than seven days; a pull to refresh does the same. If a feed failed last time, or the cache is more than a week old, it fetches the whole week again.
+- **The iOS app version now follows `pyproject.toml`**: a build step copies it into the app, so the app always shows the release it was built from.
+- **Shorter README with a new hero image and a tour of the web app**: what the app does, a four-line quick start, the iPhone app and CLI, and links to the guides; the detailed GUI, CLI and scoring reference lives in the docs. The starter-preset table moved to the GUI guide, and the update-from-a-clone steps to the Quickstart.
+- **Animated previews**: a zooming tour of the web app (GIF in the README, video in the GUI guide) and of the iPhone app (in the iPhone app docs). `scripts/record_showcase.py` re-records all of them, plus the hero image and a GitHub social-preview image, from the live apps with a demo configuration, without touching your own config or showing your Zotero library.
+
+### Fixed
+- **Typing in the keyword, author, low-priority and feed tables or the scoring weights no longer reruns the whole page** (which looked like a re-fetch); only that editor reruns until you save.
+- **iOS: sub- and superscripts in titles render properly.** They are drawn as real lowered and raised text, so `$\mathbb{Z}_N$` shows ℤ with a lowered N instead of ℤ_N, and `SC$^{\text{sharp}}$` no longer mixes odd superscript letters.
+- **A blank row added to a table is no longer saved as the text "None"** (keywords, authors, low-priority terms and feeds).
+- **Tests never touch your real files**: the suite now isolates `~/.arxiv_scraper` and `arxiv_config.json`; some GUI tests used to overwrite them.
+- **Author names and card details are readable when the GUI's theme differs from the system's**: with a light macOS/Windows appearance and Streamlit set to Dark (or the reverse), they were drawn dark grey on dark (or light on light). They now follow the theme Streamlit shows.
+- **The Papers tab's JSON download button no longer drops onto its own row** next to the search box at common window widths.
+- **A paper's section shows just the day** (e.g. *Fri, 9 Oct 2026*) on GUI cards and in the text and Markdown digests, instead of arXiv's raw *(showing 24 of 24 entries )* header when the past week came from the listing pages.
+
 ## [0.7.0] - 2026-10-08
 
 > **Upgrading from 0.6.x:** the `arxiv-digest update` in 0.6.x has the bug fixed here (#12), so it fails one last time. Upgrade once by hand; later updates work again:

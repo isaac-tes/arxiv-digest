@@ -27,11 +27,12 @@ struct RootView: View {
             ConfigView(path: $configPath)
                 .tabItem { Label("Config", systemImage: "slider.horizontal.3") }
                 .tag(AppTab.config)
-                .badge(model.isDirty ? Text("•") : nil)
+                .badge(model.unsavedChanges.contains { $0.section != .settings } ? Text("•") : nil)
 
             SettingsView()
                 .tabItem { Label("Settings", systemImage: "gearshape") }
                 .tag(AppTab.settings)
+                .badge(model.isUnsaved(.settings) ? Text("•") : nil)
         }
         .overlay(alignment: .bottom) {
             if let toast = model.toast {

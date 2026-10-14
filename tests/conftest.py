@@ -69,3 +69,17 @@ def _no_real_sync(monkeypatch, tmp_path):
     monkeypatch.setattr(sync_client, "SETTINGS_PATH", tmp_path / "sync-settings.json")
     monkeypatch.delenv("ARXIV_DIGEST_SERVER", raising=False)
     monkeypatch.delenv("ARXIV_DIGEST_TOKEN", raising=False)
+
+
+@pytest.fixture(autouse=True)
+def _isolate_user_files(monkeypatch, tmp_path_factory):
+    """Never let a test touch the real ~/.arxiv_scraper or the project arxiv_config.json.
+
+    GUI tests run `arxiv_gui.py` through AppTest, and its Save buttons write
+    the config and profiles. Tests that need their own paths override these.
+    """
+    import arxiv_digest as ad
+
+    home = tmp_path_factory.mktemp("home")  # outside tmp_path: tests list that dir
+    monkeypatch.setattr(Path, "home", lambda: home)
+    monkeypatch.setattr(ad, "DEFAULT_CONFIG_PATH", home / "arxiv_config.json")

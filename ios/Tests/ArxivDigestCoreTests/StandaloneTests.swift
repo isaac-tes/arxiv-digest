@@ -43,7 +43,7 @@ final class StandaloneTests: XCTestCase {
         XCTAssertEqual(first.papers.map(\.id), ["2610.00001", "2610.00002"])
         XCTAssertEqual(first.papers[0].score, 6)
         XCTAssertEqual(first.papers[0].summary, "Driven lattices. Second sentence.")
-        XCTAssertEqual(first.availableDays, ["Mon, 5 Oct 2026", "Tue, 6 Oct 2026"])
+        XCTAssertEqual(first.availableDays, ["Tue, 6 Oct 2026", "Mon, 5 Oct 2026"])  // newest first
         XCTAssertEqual(first.feeds, ["quant-ph"])
 
         var cfg = try await client.getConfig()
@@ -134,7 +134,7 @@ final class EngineTextParityTests: XCTestCase {
         let sections = ["Fri, 2 Oct 2026 (showing 3 of 3 entries )", "Mon, 28 Sep 2026",
                         "New submissions (showing 2 of 2 entries)", "Thu, 01 Oct 2026"]
         XCTAssertEqual(DigestRouter.availableDayLabels(sections),
-                       ["Mon, 28 Sep 2026", "Thu, 01 Oct 2026", "Fri, 2 Oct 2026"])
+                       ["Fri, 2 Oct 2026", "Thu, 01 Oct 2026", "Mon, 28 Sep 2026"])  // newest first, as the engine
     }
 }
 

@@ -157,6 +157,14 @@ struct SettingsView: View {
                 }
             }
             Button {
+                if let data = try? ConfigFile.write(model.config) {
+                    UIPasteboard.general.string = String(decoding: data, as: UTF8.self)
+                    model.showToast("Copied config JSON")
+                }
+            } label: {
+                Label("Copy config JSON", systemImage: "doc.on.doc")
+            }
+            Button {
                 isImporting = true
             } label: {
                 Label("Import config…", systemImage: "square.and.arrow.down")
@@ -170,7 +178,7 @@ struct SettingsView: View {
         } header: {
             Text("Config file")
         } footer: {
-            Text("Share the current config as a JSON file (AirDrop it to your Mac and use the GUI's Profiles → Import profile from JSON), or import one exported by the GUI (Profiles → Export) or another device. An import replaces the config and is saved when you tap Save.")
+            Text("Share or copy the current config as JSON (AirDrop it to your Mac and use the GUI's Profiles → Import profile from JSON), or import one exported by the GUI (Profiles → Export) or another device. An import replaces the config and is saved when you tap Save.")
         }
     }
 

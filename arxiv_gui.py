@@ -8,6 +8,7 @@ one place. The CLI flow (`python arxiv_digest.py ...`) is unaffected.
 """
 from __future__ import annotations
 
+import copy
 import html
 import json
 import os
@@ -15,10 +16,10 @@ import re
 import tempfile
 import threading
 import time
-from dataclasses import asdict, fields, replace
+from dataclasses import asdict, fields, is_dataclass, replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Iterable, Tuple
+from typing import Callable, Iterable, Tuple
 
 import pandas as pd
 import streamlit as st
@@ -107,6 +108,11 @@ def _set_loaded_profile(name: str | None) -> None:
     _persist_active_profile(name)
     st.session_state.loaded_profile = name
     st.session_state.reset_active_profile_widget = True
+    if name is None:  # Save now targets the project config: compare against it
+        try:
+            st.session_state.saved_cfg = ad.Config.load(PROJECT_CONFIG)
+        except (OSError, ValueError):  # unreadable: Save would overwrite it anyway
+            st.session_state.saved_cfg = ad.Config()
 
 
 def delete_profile(name: str) -> None:
@@ -392,7 +398,7 @@ def _add_named_author(name: str) -> None:
         return
     cfg().named_authors.append(name)
     _reset_widget_state("editor_named_authors")
-    st.toast(f"Added {name} to highlighted authors - Save to apply")
+    st.toast(f"Added {name} to highlighted authors (unsaved)")
 
 
 def _render_add_author(authors: str, scope: str = "card", paper_id: str = "") -> None:
@@ -413,6 +419,18 @@ def _render_add_author(authors: str, scope: str = "card", paper_id: str = "") ->
                 on_click=_add_named_author,
                 args=(name,),
             )
+
+
+def _render_pdf_button(link: str) -> None:
+    """'Open PDF' like the iOS app: the arXiv /pdf/ twin of the /abs/ page."""
+    if "/abs/" not in link:
+        return
+    st.link_button(
+        "Open PDF",
+        link.replace("/abs/", "/pdf/"),
+        icon=":material/picture_as_pdf:",
+        width="stretch",
+    )
 
 
 # ────────────────────────── Fetching with cache ──────────────────────────
@@ -522,6 +540,8 @@ def init_state():
         st.session_state.zotero_saved_at = {}
     if "zotero_saving" not in st.session_state:
         st.session_state.zotero_saving = set()
+    if "saved_cfg" not in st.session_state:
+        _mark_saved()
 
 
 def cfg() -> ad.Config:
@@ -570,6 +590,152 @@ def _reset_widget_state(*keys: str) -> None:
         st.session_state.pop(k, None)
 
 
+# ────────────────────────── Unsaved changes ──────────────────────────
+#
+# "Saved" is the config as last loaded from or written to a profile or the project
+# file. Sidebar settings, Add author, presets and imports change cfg() in memory
+# only and the bar lists them until Save, like the iOS app's SaveBar. A tab's own
+# Save button writes just that tab's fields (_save_edit), so other edits stay unsaved.
+
+def _mark_saved() -> None:
+    st.session_state.saved_cfg = copy.deepcopy(cfg())
+
+
+def _discard_unsaved() -> None:
+    st.session_state.cfg = copy.deepcopy(st.session_state.saved_cfg)
+    fw_keys = [k for k in st.session_state if str(k).startswith("fw_")]
+    _reset_widget_state(*_WEIGHT_KEYS, *_EDITOR_KEYS, *_DISPLAY_KEYS, *fw_keys)
+
+
+def _write_config(config: ad.Config) -> bool:
+    """Write `config` to the loaded profile, or the project config without one."""
+    profile = loaded_profile()
+    try:
+        if profile:
+            save_profile(config, profile)
+            where = f"profile '{profile}'"
+        else:
+            config.dump(PROJECT_CONFIG)
+            where = "project config"
+    except (OSError, ValueError) as exc:
+        st.toast(f"Couldn't save ({exc}).", icon="\u26a0\ufe0f")
+        return False
+    _sync_write(lambda c: c.put_config(config), config)
+    st.toast(f"Saved to {where}.")
+    return True
+
+
+def _save_working_config() -> None:
+    """The bar's Save: write every unsaved change."""
+    if _write_config(cfg()):
+        _mark_saved()
+
+
+def _save_edit(edit: Callable[[ad.Config], None]) -> None:
+    """A tab's Save: apply `edit` to the working config and write it on top of
+    the saved snapshot, so unrelated unsaved edits are not written with it."""
+    edit(cfg())
+    target = copy.deepcopy(st.session_state.saved_cfg)
+    edit(target)
+    if _write_config(target):
+        st.session_state.saved_cfg = target
+
+
+# Which tab edits each Config field; fields not listed live in the sidebar.
+_TAB_LABELS = ["Papers", "Score a paper", "Keywords", "Authors", "Low priority",
+               "Feeds", "Scoring", "Profiles"]
+_FIELD_TABS = {
+    "core_keywords": "Keywords",
+    "named_authors": "Authors",
+    "low_priority_kw": "Low priority",
+    "feeds": "Feeds",
+    "weights": "Scoring",
+    "feed_weights": "Scoring",
+    "word_boundary_matching": "Scoring",
+}
+# Fields that are the whole content of their tab; others get a field-name prefix.
+_OWN_TAB_FIELDS = {"core_keywords", "named_authors", "low_priority_kw", "feeds", "weights"}
+
+
+def _describe_change(old, new) -> list[str]:
+    """Short '+ added', '− removed', 'a → b' lines for one changed field."""
+    if isinstance(old, list) and isinstance(new, list):
+        lines = [f"+ {x}" for x in new if x not in old] + [f"− {x}" for x in old if x not in new]
+        return lines or ["reordered"]
+    if isinstance(old, dict) and isinstance(new, dict):
+        return (
+            [f"+ {k}" for k in new if k not in old]
+            + [f"− {k}" for k in old if k not in new]
+            + [f"{k}: {old[k]} → {new[k]}" for k in new if k in old and old[k] != new[k]]
+        )
+    if is_dataclass(old):
+        return [
+            f"{f.name.replace('_', ' ')}: {getattr(old, f.name)} → {getattr(new, f.name)}"
+            for f in fields(old) if getattr(old, f.name) != getattr(new, f.name)
+        ]
+    return [f"{old} → {new}"]
+
+
+def _unsaved_changes(saved: ad.Config, current: ad.Config) -> dict[str, list[str]]:
+    """Unsaved edits grouped by the tab that edits them ('Sidebar' for the rest)."""
+    out: dict[str, list[str]] = {}
+    for f in fields(ad.Config):
+        old, new = getattr(saved, f.name), getattr(current, f.name)
+        if old == new:
+            continue
+        prefix = "" if f.name in _OWN_TAB_FIELDS else f.name.replace("_", " ") + ": "
+        lines = [prefix + line for line in _describe_change(old, new)]
+        out.setdefault(_FIELD_TABS.get(f.name, "Sidebar"), []).extend(lines)
+    return out
+
+
+def _unsaved_html(title: str, lines: list[str]) -> str:
+    shown = [html.escape(x) for x in lines[:6]]
+    if len(lines) > 6:
+        shown.append(f"+{len(lines) - 6} more")
+    return f'<span class="unsaved-note"><b>● {html.escape(title)}</b> {" · ".join(shown)}</span>'
+
+
+def _render_unsaved_note(tab: str) -> None:
+    """Orange note at the top of a tab listing that tab's unsaved entries."""
+    lines = _unsaved_changes(st.session_state.saved_cfg, cfg()).get(tab)
+    if lines:
+        st.markdown(_unsaved_html("Unsaved here:", lines), unsafe_allow_html=True)
+
+
+def _tab_marker_css(tabs: Iterable[str]) -> str:
+    """CSS that puts an orange dot after each named tab label (keeps tab identity)."""
+    rules = [
+        f'[data-testid="stTabs"] button[role="tab"]:nth-of-type({_TAB_LABELS.index(t) + 1}) p::after'
+        ' { content: " ●"; color: #f0a500; }'
+        for t in tabs if t in _TAB_LABELS
+    ]
+    return "<style>" + "\n".join(rules) + "</style>" if rules else ""
+
+
+def _render_unsaved_bar(slot) -> None:
+    with slot:
+        changes = _unsaved_changes(st.session_state.saved_cfg, cfg())
+        if not changes:
+            return
+        if css := _tab_marker_css(changes):
+            st.markdown(css, unsafe_allow_html=True)
+        with st.container(border=True, key="unsaved_box"):
+            st.markdown(
+                "**● Unsaved changes** — applied in this session only.",
+            )
+            for tab, lines in changes.items():
+                st.markdown(_unsaved_html(f"{tab}:", lines), unsafe_allow_html=True)
+            profile = loaded_profile()
+            with st.container(horizontal=True):
+                st.button("Discard", on_click=_discard_unsaved)
+                st.button(
+                    f"Save to '{profile}'" if profile else "Write project config",
+                    type="primary",
+                    on_click=_save_working_config,
+                )
+
+
 # ────────────────────────── Sidebar ──────────────────────────
 
 # ────────────────────────── Sync with a digest server ──────────────────────────
@@ -599,7 +765,7 @@ def _sync_call(action) -> bool:
     return True
 
 
-def _sync_push(c: sync_client.SyncClient) -> None:
+def _sync_push(c: sync_client.SyncClient, config: ad.Config | None = None) -> None:
     """Make the server match this computer: config, then removed papers.
 
     Only the differences are sent, so a push cut off halfway is finished by the next one.
@@ -609,7 +775,7 @@ def _sync_push(c: sync_client.SyncClient) -> None:
             local = _read_removed_ids(loaded_profile())
     except (OSError, ValueError) as exc:  # never push an unreadable list as "nothing removed"
         raise sync_client.SyncError(f"Can't read {removed_papers_path(loaded_profile())} ({exc}).") from exc
-    c.put_config(cfg())
+    c.put_config(config or cfg())
     server = c.get_removed()
     if server - local:
         c.restore(sorted(server - local))
@@ -617,12 +783,15 @@ def _sync_push(c: sync_client.SyncClient) -> None:
         c.remove(arxiv_id)
 
 
-def _sync_write(action) -> None:
-    """Send a local change; if that fails, push everything on the next try."""
+def _sync_write(action, config: ad.Config | None = None) -> None:
+    """Send a local change; if that fails, push everything on the next try.
+
+    `config` is what a catch-up push sends (default: the working config).
+    """
     s = _sync_settings()
     if not (s.enabled and s.initialized):
         return
-    ok = _sync_call(_sync_push if s.pending else action)
+    ok = _sync_call((lambda c: _sync_push(c, config)) if s.pending else action)
     if s.pending == ok:  # just went offline, or just caught up
         sync_client.save_settings(replace(s, pending=not ok))
 
@@ -641,6 +810,7 @@ def _sync_download() -> bool:
     if not _sync_call(pull):
         return False
     st.session_state.cfg = got["cfg"]
+    _mark_saved()
     _reset_widget_state()
     try:
         got["cfg"].dump(PROJECT_CONFIG)  # offline copy, and what the CLI reads
@@ -714,6 +884,7 @@ def render_sidebar():
         if latest := update_check.newer_release():
             st.caption(f"✨ arxiv-digest {latest} is available. Run `arxiv-digest update` in a terminal.")
 
+        sidebar_note = st.container()
         st.subheader("Profile")
         profiles = list_profiles()
         loaded = loaded_profile()
@@ -731,6 +902,7 @@ def render_sidebar():
                 st.error(f"Couldn't load profile '{active}': {exc}")
             else:
                 st.session_state.cfg = profile_cfg
+                _mark_saved()
                 _set_loaded_profile(active)
                 _reset_widget_state()
                 st.success(f"Loaded {active}")
@@ -872,23 +1044,78 @@ def render_sidebar():
             "Save papers to your personal Zotero library via the local API. "
             "Group-library saving is not available through Zotero's local API."
         )
+        with sidebar_note:
+            _render_unsaved_note("Sidebar")
 
 
 # ────────────────────────── Tab: Papers ──────────────────────────
 
+# Responsive columns: every st.columns row wraps when there is no room, and a
+# column never shrinks below a readable width. Applies to all tabs, so buttons,
+# popovers and labels stack instead of being squeezed letter by letter.
+_RESPONSIVE_COLUMNS_CSS = """
+<style>
+[data-testid="stHorizontalBlock"] { flex-wrap: wrap !important; }
+[data-testid="stHorizontalBlock"] > [data-testid="stColumn"] {
+    min-width: min(100%, 12rem) !important;
+}
+</style>
+"""
+
+# Card actions: one equal-width column (max 12rem) beside the title; when the
+# card is narrow the column drops below the title and the buttons share a row.
+# Container query on the card row, so it follows the card, not the viewport.
+_CARD_ACTIONS_CSS = """
+<style>
+[class*="st-key-paper_row_"] { container-type: inline-size; flex-wrap: wrap !important; }
+/* The flex items are Streamlit's layout wrappers around each keyed block. */
+[data-testid="stLayoutWrapper"]:has(> [class*="st-key-paper_head_"]) { flex: 1 1 24rem !important; min-width: 0; }
+[data-testid="stLayoutWrapper"]:has(> [class*="st-key-paper_side_"]) { flex: 0 1 12rem !important; min-width: 0; margin-left: auto; }
+[class*="st-key-paper_actions_"], [class*="st-key-paper_score_"] { max-width: 12rem; }
+[class*="st-key-paper_score_"] [data-testid="stMetric"] { text-align: center; }
+[class*="st-key-paper_score_"] [data-testid="stMetric"] > div,
+[class*="st-key-paper_score_"] [data-testid="stMetric"] label,
+[class*="st-key-paper_score_"] [data-testid="stMetricValue"] { justify-content: center; }
+[class*="st-key-paper_score_"] [data-testid="stMetricLabel"] {
+    display: flex !important; justify-content: center !important; width: 100%;
+}
+@container (max-width: 38rem) {
+    [data-testid="stLayoutWrapper"]:has(> [class*="st-key-paper_side_"]) { flex: 1 1 100% !important; margin-left: 0; padding-top: .5rem; }
+    [class*="st-key-paper_actions_"] {
+        max-width: none; flex-direction: row !important; flex-wrap: wrap;
+    }
+    [class*="st-key-paper_actions_"] > * { flex: 1 1 calc(50% - .5rem); min-width: 0; }
+    [class*="st-key-paper_score_"] { max-width: calc(50% - .5rem); }
+}
+</style>
+"""
+
+# Unsaved-changes bar (iOS SaveBar): sticky at the top while the working config
+# differs from the last saved snapshot. Colors use light-dark() so both themes read.
+_UNSAVED_BAR_CSS = """
+<style>
+.st-key-unsaved_bar { position: sticky; top: 0; z-index: 999; }
+.unsaved-note {
+    display: block; font-size: .85rem; padding: .3rem .6rem; margin: .1rem 0;
+    border-left: 3px solid #f0a500; border-radius: 4px;
+    background: rgba(240, 165, 0, .12);
+}
+.st-key-unsaved_box {
+    background: #3b2e12;
+    background: light-dark(#fff3d6, #3b2e12);
+    border-color: #f0a500 !important;
+}
+</style>
+"""
+
 _PAPER_CSS = """
 <style>
 .paper-title { display: block; font-size: 1.35rem; font-weight: 700; line-height: 1.3; margin: 0 0 .15rem 0; }
-.paper-authors { font-size: 1.02rem; color: #e6edf3; margin: 0 0 .25rem 0; }
-.paper-meta { font-size: .9rem; color: #8b949e; margin: .25rem 0 0 0; }
+/* Authors and meta derive from the theme's text color (currentColor), so they
+   follow Streamlit's Light/Dark setting, which can differ from the OS scheme. */
+.paper-authors { font-size: 1.02rem; color: color-mix(in srgb, currentColor 90%, transparent); margin: 0 0 .25rem 0; }
+.paper-meta { font-size: .9rem; color: color-mix(in srgb, currentColor 60%, transparent); margin: .25rem 0 0 0; }
 .paper-meta a { color: #58a6ff; text-decoration: none; }
-/* The colors above are tuned for Streamlit's dark theme (near-white/mid-grey
-   on a dark background) and are barely legible on light theme's white
-   background. Override just for light, so dark theme is untouched. */
-@media (prefers-color-scheme: light) {
-  .paper-authors { color: #24292f; }
-  .paper-meta { color: #57606a; }
-}
 .paper-meta a:hover { text-decoration: underline; }
 .paper-authors .hl-author {
   font-weight: 700; border-bottom: 1px dotted; cursor: help; padding: 0 1px;
@@ -1271,7 +1498,7 @@ def render_papers_tab():
 
     paper_by_id = {p["id"]: p for p in papers}
 
-    col_search, col_export_md, col_export_json = st.columns([3, 1, 1])
+    col_search, col_export_md, col_export_json = st.columns([2, 1, 1])
     with col_search:
         query = st.text_input("Search title / authors / abstract", placeholder="e.g. fractional")
     with col_export_md:
@@ -1322,7 +1549,11 @@ def render_papers_tab():
 
     for e in filtered:
         with st.container(border=True):
-            head, score_col, remove_col = st.columns([5, 1, 0.3])
+            # head | side; side drops below head when the card is narrow (see
+            # _CARD_ACTIONS_CSS, which also lays the buttons out in a row then).
+            with st.container(horizontal=True, key=f"paper_row_{e['id']}"):
+                head = st.container(key=f"paper_head_{e['id']}")
+                score_col = st.container(key=f"paper_side_{e['id']}")
 
             def _hl(t: str) -> str:
                 return _highlight_terms(
@@ -1356,7 +1587,7 @@ def render_papers_tab():
                     unsafe_allow_html=True,
                 )
                 if e["section"]:
-                    st.caption(f"Section: {e['section']}")
+                    st.caption(f"Section: {ad.section_display(e['section'])}")
                 if cfg().highlight_terms_summary:
                     st.markdown(f'{_hl(e["summary"])}', unsafe_allow_html=True)
                 else:
@@ -1376,17 +1607,21 @@ def render_papers_tab():
                         unsafe_allow_html=True,
                     )
             with score_col:
-                st.metric("Score", e["score"])
-                _render_zotero_save_button(e["id"], e["title"])
-                _render_add_author(e["authors"], paper_id=e["id"])
-            with remove_col:
-                st.button(
-                    "✕",
-                    key=f"remove_{e['id']}",
-                    help="Remove from this and later rankings; the papers below move up one place.",
-                    on_click=_remove_paper,
-                    args=(e["id"],),
-                )
+                with st.container(key=f"paper_score_{e['id']}"):
+                    st.metric("Score", e["score"])
+                with st.container(key=f"paper_actions_{e['id']}"):
+                    _render_zotero_save_button(e["id"], e["title"])
+                    _render_add_author(e["authors"], paper_id=e["id"])
+                    _render_pdf_button(e["link"])
+                    st.button(
+                        "Remove",
+                        key=f"remove_{e['id']}",
+                        icon=":material/visibility_off:",
+                        help="Remove from this and later rankings; the papers below move up one place.",
+                        on_click=_remove_paper,
+                        args=(e["id"],),
+                        width="stretch",
+                    )
 
             with st.expander("Why this score?"):
                 full_paper = paper_by_id.get(e["id"], {})
@@ -1405,22 +1640,47 @@ def render_papers_tab():
 
 # ────────────────────────── Tab: list editors ──────────────────────────
 
-def _render_list_editor(label: str, attr: str):
+def _cell_text(v: object) -> str:
+    """A table cell as trimmed text; new empty rows arrive as None/NaN and become ''."""
+    return v.strip() if isinstance(v, str) else ""
+
+
+# Marker column of the editor tables: ● on rows not in the saved config. Pinned,
+# so a stretched table keeps it narrow; never widen the text columns in pixels
+# (a 2000px column made the cell editor overflow the page).
+_UNSAVED_MARK = st.column_config.TextColumn("●", disabled=True, width=40, pinned=True, help="● = not saved yet")
+
+
+# A fragment: typing in the table reruns only this editor, not the whole app
+# (every paper card); Save/Reset trigger a full rerun via st.rerun().
+@st.fragment
+def _render_list_editor(label: str, attr: str, tab: str):
     st.subheader(label)
-    st.caption(f"Edit, add, or remove entries. Empty rows are dropped on save.")
-    df = pd.DataFrame({label: getattr(cfg(), attr)})
+    st.caption("Edit, add, or remove entries. Empty rows are dropped on save.")
+    _render_unsaved_note(tab)
+    values, saved = getattr(cfg(), attr), getattr(st.session_state.saved_cfg, attr)
+    df = pd.DataFrame({"unsaved": ["●" if v not in saved else "" for v in values], label: values})
     edited = st.data_editor(
         df,
         num_rows="dynamic",
         width="stretch",
         key=f"editor_{attr}",
-        column_config={label: st.column_config.TextColumn(label, required=False)},
+        column_config={
+            "unsaved": _UNSAVED_MARK,
+            label: st.column_config.TextColumn(label, required=False),
+        },
     )
+    cleaned = [t for v in edited[label].tolist() if (t := _cell_text(v))]
+    stored = [v.strip() for v in getattr(cfg(), attr) if v.strip()]
+    if cleaned != stored:
+        st.markdown(
+            _unsaved_html("Not saved yet:", _describe_change(stored, cleaned)),
+            unsafe_allow_html=True,
+        )
     col_save, col_reset = st.columns(2)
     with col_save:
         if st.button(f"Save {label.lower()}", key=f"save_{attr}", type="primary"):
-            cleaned = [str(v).strip() for v in edited[label].tolist() if str(v).strip() and v == v]
-            setattr(cfg(), attr, cleaned)
+            _save_edit(lambda c: setattr(c, attr, list(cleaned)))
             _reset_widget_state(f"editor_{attr}")
             st.success(f"Saved {len(cleaned)} entries.")
             st.rerun()
@@ -1437,43 +1697,56 @@ def _render_list_editor(label: str, attr: str):
 
 
 def render_keywords_tab():
-    _render_list_editor("Core keywords", "core_keywords")
+    _render_list_editor("Core keywords", "core_keywords", "Keywords")
 
 
 def render_authors_tab():
-    _render_list_editor("Highlighted authors", "named_authors")
+    _render_list_editor("Highlighted authors", "named_authors", "Authors")
 
 
 def render_low_priority_tab():
-    _render_list_editor("Low-priority terms", "low_priority_kw")
+    _render_list_editor("Low-priority terms", "low_priority_kw", "Low priority")
 
 
 # ────────────────────────── Tab: Feeds ──────────────────────────
 
+@st.fragment
 def render_feeds_tab():
     st.subheader("Feeds")
     st.caption("Map a short name to a full arXiv listing URL (e.g. `https://arxiv.org/list/cond-mat/new`).")
-    rows = [{"name": n, "url": u} for n, u in cfg().feeds.items()]
-    df = pd.DataFrame(rows or [{"name": "", "url": ""}])
+    _render_unsaved_note("Feeds")
+    saved = st.session_state.saved_cfg.feeds
+    rows = [{"unsaved": "●" if saved.get(n) != u else "", "name": n, "url": u}
+            for n, u in cfg().feeds.items()]
+    df = pd.DataFrame(rows or [{"unsaved": "", "name": "", "url": ""}])
     edited = st.data_editor(
         df,
         num_rows="dynamic",
         width="stretch",
         key="editor_feeds",
         column_config={
+            "unsaved": _UNSAVED_MARK,
             "name": st.column_config.TextColumn("name", required=True),
             "url": st.column_config.TextColumn("url", required=True),
         },
     )
+    new_feeds = {}
+    for _, row in edited.iterrows():
+        n = _cell_text(row.get("name"))
+        u = _cell_text(row.get("url"))
+        if n and u:
+            new_feeds[n] = u
+    if new_feeds != cfg().feeds:
+        st.markdown(
+            _unsaved_html("Not saved yet:", _describe_change(cfg().feeds, new_feeds)),
+            unsafe_allow_html=True,
+        )
     if st.button("Save feeds", type="primary"):
-        new_feeds = {}
-        for _, row in edited.iterrows():
-            n = str(row.get("name", "")).strip()
-            u = str(row.get("url", "")).strip()
-            if n and u:
-                new_feeds[n] = u
-        cfg().feeds = new_feeds
-        cfg().default_feeds = [f for f in cfg().default_feeds if f in new_feeds]
+        def edit(c: ad.Config) -> None:
+            c.feeds = dict(new_feeds)
+            c.default_feeds = [f for f in c.default_feeds if f in new_feeds]
+
+        _save_edit(edit)
         _reset_widget_state("editor_feeds")
         st.success(f"Saved {len(new_feeds)} feeds.")
         st.rerun()
@@ -1483,6 +1756,7 @@ def render_feeds_tab():
 
 def render_scoring_tab():
     st.subheader("Scoring weights")
+    _render_unsaved_note("Scoring")
     st.caption(
         "Tweak how strongly each rule contributes to a paper's score. "
         "Rankings update live in the **Papers** tab — no re-fetch needed."
@@ -1498,7 +1772,13 @@ def render_scoring_tab():
         ),
     )
     st.divider()
+    _render_weight_inputs()
 
+
+# A fragment so typing a weight reruns only these inputs, not every paper card;
+# Apply/Reset do a full rerun.
+@st.fragment
+def _render_weight_inputs() -> None:
     w = cfg().weights
     new_values: dict[str, int] = {}
     for f in fields(ad.ScoringWeights):
@@ -1535,8 +1815,14 @@ def render_scoring_tab():
     col_apply, col_reset = st.columns(2)
     with col_apply:
         if st.button("Apply weights", type="primary"):
-            cfg().weights = ad.ScoringWeights(**new_values)
-            cfg().feed_weights = {n: int(v) for n, v in new_feed_weights.items() if v}
+            whole_word = cfg().word_boundary_matching
+
+            def edit(c: ad.Config) -> None:
+                c.weights = ad.ScoringWeights(**new_values)
+                c.feed_weights = {n: int(v) for n, v in new_feed_weights.items() if v}
+                c.word_boundary_matching = whole_word
+
+            _save_edit(edit)
             _reset_widget_state(*_WEIGHT_KEYS, *feed_keys)
             st.success("Weights applied.")
             st.rerun()
@@ -1595,10 +1881,23 @@ def render_profiles_tab():
             # Transfer first; a failure must leave the source profile active.
             if _copy_removed_ids_or_warn(loaded_profile(), target):
                 save_profile(cfg(), target)
+                _mark_saved()
                 _set_loaded_profile(target)
                 _sync_upload_config()
                 st.success(f"Saved profile '{target}'.")
                 st.rerun()
+
+    # The working config (e.g. a just-loaded preset), unsaved edits included, in the Export/Import format.
+    current_json = json.dumps(asdict(cfg()), indent=2, ensure_ascii=False)
+    st.download_button(
+        "Download working config (JSON)",
+        data=current_json,
+        file_name=f"{loaded_profile() or 'arxiv-digest-config'}.json",
+        mime="application/json",
+        key="export_current",
+    )
+    with st.expander("Copy working config (JSON)"):
+        st.code(current_json, language="json")  # the code block has a copy-to-clipboard button
 
     profiles = list_profiles()
     if profiles:
@@ -1622,6 +1921,7 @@ def render_profiles_tab():
             else:
                 if cols[1].button("Load", key=f"load_{p}"):
                     st.session_state.cfg = profile_cfg
+                    _mark_saved()
                     _set_loaded_profile(p)
                     _reset_widget_state()
                     st.success(f"Loaded {p}")
@@ -1645,6 +1945,7 @@ def render_profiles_tab():
     if st.button("Write project config"):
         cfg().dump(PROJECT_CONFIG)
         _sync_upload_config()
+        _mark_saved()
         st.success(f"Wrote {PROJECT_CONFIG}")
 
     uploaded = st.file_uploader("Import profile from JSON", type="json")
@@ -1858,20 +2159,23 @@ def render_score_tab():
             st.caption("Fetch papers first to compare against the current digest.")
 
         st.divider()
-        _render_zotero_save_button(paper_id, paper["title"], scope="score")
-        _render_add_author(paper["authors"], scope="score", paper_id=paper_id)
+        with st.container(key="paper_actions_score"):
+            _render_zotero_save_button(paper_id, paper["title"], scope="score")
+            _render_add_author(paper["authors"], scope="score", paper_id=paper_id)
 
 
 # ────────────────────────── Main ──────────────────────────
 
 def main():
     st.set_page_config(page_title="arXiv Digest", layout="wide")
+    st.markdown(_RESPONSIVE_COLUMNS_CSS + _UNSAVED_BAR_CSS + _CARD_ACTIONS_CSS, unsafe_allow_html=True)
     init_state()
     _sync_on_session_start()
     render_sidebar()
 
+    unsaved_slot = st.container(key="unsaved_bar")  # filled after the tabs, so it sees their saves
     tab_papers, tab_score, tab_kw, tab_authors, tab_lp, tab_feeds, tab_scoring, tab_profiles = st.tabs(
-        ["Papers", "Score a paper", "Keywords", "Authors", "Low priority", "Feeds", "Scoring", "Profiles"]
+        _TAB_LABELS
     )
     with tab_papers:
         render_papers_tab()
@@ -1889,6 +2193,7 @@ def main():
         render_scoring_tab()
     with tab_profiles:
         render_profiles_tab()
+    _render_unsaved_bar(unsaved_slot)
 
 
 if __name__ == "__main__":

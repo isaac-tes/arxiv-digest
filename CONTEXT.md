@@ -33,6 +33,15 @@ discussions.
   stored under `~/.arxiv_scraper/profiles/`. The project config (`arxiv_config.json`)
   is the same shape.
 
+- **Working config**: the `Config` the GUI is currently using, including edits not
+  yet written anywhere. **Saved config** is the snapshot last loaded from or
+  written to a profile or the project config. When they differ, the GUI shows an
+  *unsaved changes* bar with Discard and Save. Save writes to the loaded profile,
+  or to the project config when no profile is loaded; the list, feed and weight tabs'
+  own Save buttons write only their own fields there. Loading a preset or importing a profile leaves
+  changes unsaved until then.
+  _Avoid_: draft, pending config
+
 - **Removed paper**: a paper the user has hidden from the digest. Removal is
   not a score change: the paper is skipped while ranking, so every paper below it
   moves up one place and the first paper past the top-N cutoff fills the freed

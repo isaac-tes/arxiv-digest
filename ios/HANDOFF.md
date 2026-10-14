@@ -2,6 +2,8 @@
 
 _Last updated: 2026-10-08 · merged to `main` in PR #13, released in v0.7.0_
 
+_v0.7.1 adds unsaved-changes marks (`ConfigDiff`), raised/lowered sub/superscripts (`MathText.styled`) and the app version taken from `pyproject.toml` at build time; see `CHANGELOG.md` and the feature table in `docs/ios-app.md`._
+
 Start here for the next round. It covers **everything this branch changes
 compared with `main`**, how to run and verify it, and what's left. Decisions live
 in ADRs (`docs/adr/`, not on the public site), terms in `CONTEXT.md`, user docs in

@@ -44,3 +44,33 @@ final class MathTextTests: XCTestCase {
         XCTAssertEqual(r("Plain title"), "Plain title")
     }
 }
+
+/// `styled` is what the app draws: scripts stay plain characters and are
+/// reported as runs, so they render as real lowered/raised text.
+final class MathTextStyledTests: XCTestCase {
+    private func sub(_ r: Range<Int>) -> MathText.ScriptRun { .init(range: r, isSubscript: true) }
+    private func sup(_ r: Range<Int>) -> MathText.ScriptRun { .init(range: r, isSubscript: false) }
+
+    func testScriptWithoutUnicodeFormIsLowered() {  // "Chiral Parafermions in Floquet ℤ_N Topological Order"
+        let s = MathText.styled("Floquet $\\mathbb{Z}_N$ Topological Order")
+        XCTAssertEqual(s.text, "Floquet ℤN Topological Order")
+        XCTAssertEqual(s.scripts, [sub(9..<10)])
+    }
+
+    func testTextSuperscriptIsRaisedAsAWord() {  // "SC^sharp: superconductivity intertwined with …"
+        let s = MathText.styled("SC$^{\\text{sharp}}$: superconductivity")
+        XCTAssertEqual(s.text, "SCsharp: superconductivity")
+        XCTAssertEqual(s.scripts, [sup(2..<7)])
+    }
+
+    func testEveryScriptIsARunDigitsToo() {
+        let s = MathText.styled("a $\\mathbb{Z}_2^{(n)}$ and $x^2$")
+        XCTAssertEqual(s.text, "a ℤ2(n) and x2")
+        XCTAssertEqual(s.scripts, [sub(3..<4), sup(4..<7), sup(13..<14)])
+    }
+
+    func testPlainTextHasNoRuns() {
+        XCTAssertEqual(MathText.styled("Plain title").text, "Plain title")
+        XCTAssertEqual(MathText.styled("T_c without math").scripts, [])
+    }
+}

@@ -44,6 +44,13 @@ uv run pytest -k weight                      # by name
 - The Streamlit app lives in `arxiv_gui.py` and imports `arxiv_digest as ad`. Don't duplicate scoring or fetch logic in the GUI; extend `arxiv_digest.py` and call it.
 - After GUI changes, run `tests/test_gui.py` (uses `streamlit.testing.v1.AppTest`, headless).
 
+## Web GUI and iOS app stay in step
+
+- A user-facing feature added to the web GUI gets its iOS counterpart in the same change, and the other way round. If one side can't or shouldn't have it, add a row to *Intended differences* in [`docs/ios-app.md`](docs/ios-app.md#web-app-and-ios-app) with the reason.
+- Keep the feature table in `docs/ios-app.md` current; it is the checklist for both sides.
+- Put shared logic in `ios/Sources/ArxivDigestCore` and test it with `cd ios && swift test` (runs on Linux CI too).
+- The app version is not set in `ios/project.yml`: a build step copies `version` from `pyproject.toml` into the app, so bumping `pyproject.toml` is the only version change a release needs.
+
 ## Docs
 
 ```bash

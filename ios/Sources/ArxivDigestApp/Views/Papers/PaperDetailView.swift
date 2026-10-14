@@ -88,7 +88,8 @@ struct PaperDetailView: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .top, spacing: 12) {
-                Text(Highlight.terms(paper.title, enabled: config.highlightTermsTitle, config: config, underline: underline))
+                Text(Highlight.terms(paper.title, enabled: config.highlightTermsTitle, config: config, underline: underline,
+                                     style: .title2, weight: .bold))
                     .font(.title2.weight(.bold))
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)

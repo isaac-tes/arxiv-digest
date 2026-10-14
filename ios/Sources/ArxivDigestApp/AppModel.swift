@@ -60,6 +60,15 @@ final class AppModel {
 
     var isDirty: Bool { hasLoadedConfig && config != savedConfig }
 
+    /// The unsaved edits by section, for the save bar, row dots and tab badges.
+    var unsavedChanges: [ConfigDiff.Change] {
+        hasLoadedConfig ? ConfigDiff.changes(saved: savedConfig, current: config) : []
+    }
+
+    func isUnsaved(_ section: ConfigDiff.Section) -> Bool {
+        unsavedChanges.contains { $0.section == section }
+    }
+
     // MARK: Zotero / feedback
 
     var zoteroAvailability: ZoteroSaveAvailability = .unavailable

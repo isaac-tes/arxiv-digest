@@ -1286,17 +1286,24 @@ def section_day_label(section: str) -> str | None:
     return m.group(0) if m else None
 
 
+def section_display(section: str) -> str:
+    """A section header for people: day sections lose the listing's
+    '(showing N of N entries )' tail; other sections are shown as they are."""
+    return section_day_label(section) or section
+
+
 def available_day_labels(papers: List[dict]) -> List[str]:
-    """Distinct day labels present in papers, sorted chronologically."""
+    """Distinct day labels present in papers, newest first (what a reader wants
+    to pick); an unparsable label goes last."""
     labels = {lbl for p in papers if (lbl := section_day_label(p.get("section", "")))}
 
     def _key(lbl: str):
         try:
-            return datetime.strptime(lbl, "%a, %d %b %Y")
+            return (datetime.strptime(lbl, "%a, %d %b %Y"), lbl)
         except ValueError:
-            return datetime.max
+            return (datetime.min, lbl)
 
-    return sorted(labels, key=_key)
+    return sorted(labels, key=_key, reverse=True)
 
 
 def filter_papers(
@@ -1577,7 +1584,7 @@ def format_digest(entries: List[dict], total_papers: int, requested_top: int) ->
         lines.append(f"{entry['rank']}. {entry['title']}")
         lines.append(f"   {entry['authors']}")
         if entry.get("section"):
-            lines.append(f"   Section: {entry['section']}")
+            lines.append(f"   Section: {section_display(entry['section'])}")
         if entry.get("link"):
             lines.append(f"   {entry['link']}")
         lines.append(f"   {entry['summary']}")
@@ -1596,7 +1603,7 @@ def format_markdown(entries: List[dict], total_papers: int, requested_top: int) 
         lines.append(f"## {entry['rank']}. {entry['title']}")
         lines.append(f"- **Authors:** {entry['authors']}")
         if entry.get("section"):
-            lines.append(f"- **Section:** {entry['section']}")
+            lines.append(f"- **Section:** {section_display(entry['section'])}")
         if entry.get("subjects"):
             lines.append(f"- **Subjects:** {entry['subjects']}")
         if entry.get("link"):

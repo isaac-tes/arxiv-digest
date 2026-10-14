@@ -85,6 +85,7 @@ struct ConfigView: View {
                         .foregroundStyle(color.map { Color(textHex: $0) } ?? Color.accentColor)
                 }
                 Spacer()
+                if let section = page.unsavedSection, model.isUnsaved(section) { UnsavedDot() }
                 if let count {
                     Text("\(count)").foregroundStyle(.secondary).monospacedDigit()
                 } else if let detail {
@@ -144,6 +145,7 @@ struct TermListEditor: View {
                             Circle().fill(Color(hex: model.config.color(for: aspect))).frame(width: 7, height: 7)
                             Text(term).foregroundStyle(.primary)
                             Spacer()
+                            if !model.savedConfig[keyPath: keyPath].contains(term) { UnsavedDot() }
                         }
                         .contentShape(Rectangle())
                     }
@@ -211,5 +213,19 @@ struct TermListEditor: View {
             model.showToast("“\(new)” is already in the list", kind: .info)
         }
         renaming = nil
+    }
+}
+
+extension ConfigPage {
+    /// The `ConfigDiff` section this page edits (presets edit several).
+    var unsavedSection: ConfigDiff.Section? {
+        switch self {
+        case .keywords: return .keywords
+        case .authors: return .authors
+        case .lowPriority: return .lowPriority
+        case .feeds: return .feeds
+        case .scoring: return .scoring
+        case .presets: return nil
+        }
     }
 }

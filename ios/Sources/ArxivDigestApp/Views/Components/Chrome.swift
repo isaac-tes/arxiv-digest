@@ -137,11 +137,34 @@ struct ToastView: View {
 }
 
 /// "Unsaved changes · Discard · Save", pinned above the tab bar in the
-/// Config and Settings tabs while the working config differs from the saved one.
+/// Config and Settings tabs while the working config differs from the saved one,
+/// with what changed per section (like the web GUI's unsaved bar).
 struct SaveBar: View {
     @Environment(AppModel.self) private var model
 
     var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            buttons
+            ForEach(model.unsavedChanges, id: \.section) { change in
+                (Text(change.section.rawValue + ": ").bold() + Text(Self.summary(change.lines)))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .background(.regularMaterial)
+        .overlay(alignment: .top) { Divider() }
+    }
+
+    /// Up to four entries, then "+N more".
+    static func summary(_ lines: [String]) -> String {
+        let shown = lines.prefix(4).joined(separator: " · ")
+        return lines.count > 4 ? shown + " · +\(lines.count - 4) more" : shown
+    }
+
+    private var buttons: some View {
         HStack(spacing: 12) {
             Image(systemName: "pencil.circle.fill").foregroundStyle(.orange)
             Text("Unsaved changes").font(.subheadline.weight(.medium))
@@ -160,10 +183,14 @@ struct SaveBar: View {
             .buttonStyle(.borderedProminent)
             .disabled(model.isSaving)
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
-        .background(.regularMaterial)
-        .overlay(alignment: .top) { Divider() }
+    }
+}
+
+/// The orange ● on unsaved rows and pages (the web GUI's marks).
+struct UnsavedDot: View {
+    var body: some View {
+        Text("●").font(.caption2).foregroundStyle(.orange)
+            .accessibilityLabel("Not saved yet")
     }
 }
 

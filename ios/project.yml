@@ -39,12 +39,32 @@ targets:
             LSHandlerRank: Alternate
             LSItemContentTypes: [public.json]
         LSSupportsOpeningDocumentsInPlace: false
+    postBuildScripts:
+      # The app version comes from ../pyproject.toml, so the app always matches
+      # the release. Input = the built Info.plist: this runs after Xcode writes
+      # it, and again whenever it or pyproject.toml changes.
+      - name: App version from pyproject.toml
+        inputFiles:
+          - $(TARGET_BUILD_DIR)/$(INFOPLIST_PATH)
+          - $(SRCROOT)/../pyproject.toml
+        outputFiles:
+          - $(DERIVED_FILE_DIR)/app-version.stamp
+        script: |
+          V=$(sed -n 's/^version = "\(.*\)"$/\1/p' "$SRCROOT/../pyproject.toml" | head -n 1)
+          if [ -z "$V" ]; then echo "error: no version in $SRCROOT/../pyproject.toml"; exit 1; fi
+          P="$TARGET_BUILD_DIR/$INFOPLIST_PATH"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $V" "$P" 2>/dev/null \
+            || /usr/libexec/PlistBuddy -c "Add :CFBundleShortVersionString string $V" "$P"
+          echo "$V" > "$DERIVED_FILE_DIR/app-version.stamp"
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.arxivdigest.app
         PRODUCT_NAME: ArxivDigest
-        MARKETING_VERSION: "0.7.0"
+        # The app version is not set here: the build script below copies it from
+        # ../pyproject.toml, so the app always matches the release.
         CURRENT_PROJECT_VERSION: "1"
+        # The script edits the built Info.plist, which the sandbox would block.
+        ENABLE_USER_SCRIPT_SANDBOXING: NO
         GENERATE_INFOPLIST_FILE: YES
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         INFOPLIST_KEY_CFBundleDisplayName: arXiv Digest
