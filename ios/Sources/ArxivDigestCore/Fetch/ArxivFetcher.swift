@@ -39,18 +39,24 @@ public struct ArxivFetcher: Sendable {
 
     // MARK: - Past week
 
-    /// The last seven days of each feed, deduplicated by id across feeds
-    /// (a parent `cond-mat` and its sub-categories share papers). Once the API
-    /// fails for one feed the rest are skipped, as the engine stops using it.
-    public func fetchPastweek(_ feeds: [String]) async throws -> LiveSource.RawFetch {
-        let end = now(), start = end.addingTimeInterval(-7 * 86_400)
+    /// The last seven days of each feed (or only those since `since`, for
+    /// topping up a cached week), deduplicated by id across feeds (a parent
+    /// `cond-mat` and its sub-categories share papers). Once the API fails for
+    /// one feed the rest are skipped, as the engine stops using it.
+    public func fetchPastweek(_ feeds: [String], since: Date? = nil) async throws -> LiveSource.RawFetch {
+        let end = now(), weekAgo = end.addingTimeInterval(-7 * 86_400)
+        let start = max(since ?? weekAgo, weekAgo)
         let names = feeds.filter { !$0.hasPrefix("http") }  // URL feeds only work on the HTML path
         var papers: [RawPaper] = [], seen = Set<String>(), failed: [String] = []
+        var submitted: [String: Date] = [:]
+        let iso = ISO8601DateFormatter()
         for (i, name) in names.enumerated() {
             if !failed.isEmpty { failed.append(name); continue }
             do {
-                for p in try await fetchCategory(name, start: start, end: end) where seen.insert(p.id).inserted {
-                    papers.append(p)
+                for e in try await fetchCategoryEntries(name, start: start, end: end)
+                where seen.insert(e.paper.id).inserted {
+                    papers.append(e.paper)
+                    submitted[e.paper.id] = iso.date(from: e.published)
                 }
             } catch is CancellationError {
                 throw CancellationError()
@@ -73,7 +79,7 @@ public struct ArxivFetcher: Sendable {
             "arXiv export API was rate-limited or timed out; could not fetch: \(failed.joined(separator: ", ")). "
                 + "Pull to refresh to try again.",
         ]
-        return LiveSource.RawFetch(papers: papers, notices: notices, fetchedAt: end)
+        return LiveSource.RawFetch(papers: papers, notices: notices, fetchedAt: end, submitted: submitted)
     }
 
     /// `fetch_feed_api`: papers in `category` submitted within [start, end].
@@ -83,15 +89,15 @@ public struct ArxivFetcher: Sendable {
             .map(\.paper)
     }
 
-    /// `fetchCategory` with each paper's `arxiv:primary_category`.
+    /// `fetchCategory` with each paper's `arxiv:primary_category` and submission time.
     func fetchCategoryEntries(_ category: String, start: Date, end: Date, pageSize: Int = 500,
-                              maxResults: Int = 2000) async throws -> [(paper: RawPaper, primary: String)] {
+                              maxResults: Int = 2000) async throws -> [(paper: RawPaper, primary: String, published: String)] {
         let f = DateFormatter()
         f.locale = Locale(identifier: "en_US_POSIX")
         f.timeZone = TimeZone(identifier: "UTC")
         f.dateFormat = "yyyyMMddHHmm"
         let query = "cat:\(category) AND submittedDate:[\(f.string(from: start)) TO \(f.string(from: end))]"
-        var papers: [(paper: RawPaper, primary: String)] = []
+        var papers: [(paper: RawPaper, primary: String, published: String)] = []
         var offset = 0
         while true {
             let data = try await get([
@@ -99,7 +105,7 @@ public struct ArxivFetcher: Sendable {
                 "sortBy": "submittedDate", "sortOrder": "descending",
             ])
             let (total, entries) = try Self.parseEntries(data)
-            papers += entries.map { ($0.paper, $0.primary) }
+            papers += entries.map { ($0.paper, $0.primary, $0.published) }
             if entries.isEmpty || papers.count >= total || papers.count >= maxResults { break }
             offset += pageSize
             try await sleep(Self.rateLimit)

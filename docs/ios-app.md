@@ -53,6 +53,11 @@ the phone, with no server. Settings → Connection switches modes:
 | **Server** | Share settings with your Mac (GUI) and other devices. See [Sync across devices](deploy.md). |
 | **Demo** | Built-in sample papers, to look around. |
 
+On this device, fetched papers are kept until arXiv announces new ones
+(Sunday to Thursday, 20:00 US Eastern). Opening the app in the meantime fetches nothing;
+afterwards it asks arXiv only for the latest days and keeps the rest of the
+week. Pulling down on the Papers list fetches the latest days the same way, at any time.
+
 To bring your GUI settings over without a server, export a profile in the GUI
 and open the file on the phone: see [Copy the config file](deploy.md#copy-the-config-file-without-a-server).
 
