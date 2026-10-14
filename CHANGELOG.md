@@ -30,6 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Tests never touch your real files**: the suite now isolates `~/.arxiv_scraper` and `arxiv_config.json`; some GUI tests used to overwrite them.
 - **Author names and card details are readable when the GUI's theme differs from the system's**: with a light macOS/Windows appearance and Streamlit set to Dark (or the reverse), they were drawn dark grey on dark (or light on light). They now follow the theme Streamlit shows.
 - **The Papers tab's JSON download button no longer drops onto its own row** next to the search box at common window widths.
+- **A paper's section shows just the day** (e.g. *Fri, 9 Oct 2026*) on GUI cards and in the text and Markdown digests, instead of arXiv's raw *(showing 24 of 24 entries )* header when the past week came from the listing pages.
 
 ## [0.7.0] - 2026-10-08
 

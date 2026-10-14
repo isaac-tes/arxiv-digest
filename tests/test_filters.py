@@ -6,6 +6,7 @@ from arxiv_digest import (
     filter_papers,
     section_category,
     section_day_label,
+    section_display,
 )
 
 NEW = "New submissions (showing 67 of 67 entries)"
@@ -35,6 +36,13 @@ def test_section_day_label_extracts_date_only_for_date_sections():
     assert section_day_label(NEW) is None
     assert section_day_label(REPL) is None
     assert section_day_label("") is None
+
+
+def test_section_display_drops_the_listing_entry_count():
+    """Cards and digests show 'Fri, 19 Jun 2026', not the HTML listing's raw header."""
+    assert section_display(DAY1) == "Fri, 19 Jun 2026"
+    assert section_display(NEW) == NEW
+    assert section_display("") == ""
 
 
 # ── replacement filtering (B) ──

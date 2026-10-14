@@ -1587,7 +1587,7 @@ def render_papers_tab():
                     unsafe_allow_html=True,
                 )
                 if e["section"]:
-                    st.caption(f"Section: {e['section']}")
+                    st.caption(f"Section: {ad.section_display(e['section'])}")
                 if cfg().highlight_terms_summary:
                     st.markdown(f'{_hl(e["summary"])}', unsafe_allow_html=True)
                 else:
