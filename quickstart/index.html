@@ -967,17 +967,22 @@
 </span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>arxiv-digest<span class="w"> </span>--top<span class="w"> </span><span class="m">10</span><span class="w">         </span><span class="c1"># CLI digest, prints ranked papers to stdout</span>
 </span></code></pre></div>
 <p>In the GUI, hit <strong>Fetch papers</strong> in the sidebar and start reading. Pick a
-<a href="../#starter-presets">starter preset</a> under <strong>Profiles</strong> if you'd rather begin from
+<a href="../gui-guide/#starter-presets">starter preset</a> under <strong>Profiles</strong> if you'd rather begin from
 a prepared topic bundle (e.g. <em>open quantum systems</em>). To tune what counts as a
 match, edit the <strong>Keywords</strong> / <strong>Authors</strong> / <strong>Scoring</strong> tabs; the Papers tab
 re-ranks instantly.</p>
 <p>Updating after a while? One command, no clone needed:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>arxiv-digest<span class="w"> </span>update<span class="w">    </span><span class="c1"># reinstalls from the latest GitHub release</span>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>arxiv-digest<span class="w"> </span>update<span class="w">    </span><span class="c1"># reinstalls from the latest GitHub release (on Windows it prints the command to run)</span>
 </span></code></pre></div>
 <p>Or from inside the clone (e.g. to track a branch):</p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>git<span class="w"> </span>pull
 </span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>uv<span class="w"> </span>tool<span class="w"> </span>install<span class="w"> </span><span class="s1">&#39;.[gui]&#39;</span><span class="w"> </span>--reinstall<span class="w">    </span><span class="c1"># rebuilds both commands on PATH</span>
 </span></code></pre></div>
+<p><code>./scripts/update.sh</code> does both steps. The <code>--reinstall</code> matters: <code>uv tool</code>
+installs into an isolated environment that doesn't track your clone, so
+<code>git pull</code> alone doesn't update the commands. Both commands print a one-line
+notice when a newer release is out (checked at most once a day, silent
+offline; <code>--no-update-check</code> turns it off for the CLI).</p>
 <p>To remove: <code>uv tool uninstall arxiv-digest</code>.</p>
 <hr />
 <h2 id="alternatives">Alternatives<a class="headerlink" href="#alternatives" title="Permanent link">&para;</a></h2>
@@ -1046,7 +1051,7 @@ install or uninstall:</p>
     <span class="md-icon" title="Last update">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M21 13.1c-.1 0-.3.1-.4.2l-1 1 2.1 2.1 1-1c.2-.2.2-.6 0-.8l-1.3-1.3c-.1-.1-.2-.2-.4-.2m-1.9 1.8-6.1 6V23h2.1l6.1-6.1zM12.5 7v5.2l4 2.4-1 1L11 13V7zM11 21.9c-5.1-.5-9-4.8-9-9.9C2 6.5 6.5 2 12 2c5.3 0 9.6 4.1 10 9.3-.3-.1-.6-.2-1-.2s-.7.1-1 .2C19.6 7.2 16.2 4 12 4c-4.4 0-8 3.6-8 8 0 4.1 3.1 7.5 7.1 7.9l-.1.2z"/></svg>
     </span>
-    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="September 11, 2026 16:53:54 UTC"><span class="timeago" datetime="2026-09-11T16:53:54+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="September 11, 2026 16:53:54 UTC">2026-09-11</span>
+    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="October 14, 2026 09:03:48 UTC"><span class="timeago" datetime="2026-10-14T09:03:48+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="October 14, 2026 09:03:48 UTC">2026-10-14</span>
   </span>
 
     

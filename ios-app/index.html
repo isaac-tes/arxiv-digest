@@ -572,6 +572,34 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#web-app-and-ios-app" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Web app and iOS app
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Web app and iOS app">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#intended-differences" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Intended differences
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#update-or-renew" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -835,6 +863,34 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#web-app-and-ios-app" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Web app and iOS app
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Web app and iOS app">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#intended-differences" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Intended differences
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#update-or-renew" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -914,6 +970,7 @@
 
 
 <h1 id="iphone-ipad-app-preview">iPhone / iPad app (preview)<a class="headerlink" href="#iphone-ipad-app-preview" title="Permanent link">&para;</a></h1>
+<p><img alt="The iPhone app: the ranked digest, a paper page with highlights, PDF and Zotero, swiping a paper away and restoring it, filtering by day, Score a paper, the Config tab with unsaved changes, keywords, authors, categories, weights and presets, and Settings with on-device or server mode and config as JSON" src="../assets/ios-showcase.gif" width="420" /></p>
 <p>The native app isn't on the App Store yet. Until it is, you can install it on
 your own iPhone or iPad from source with Xcode, as a development build.</p>
 <h2 id="what-you-need">What you need<a class="headerlink" href="#what-you-need" title="Permanent link">&para;</a></h2>
@@ -978,8 +1035,128 @@ the phone, with no server. Settings → Connection switches modes:</p>
 </tr>
 </tbody>
 </table>
+<p>On this device, fetched papers are kept until arXiv announces new ones
+(Sunday to Thursday, 20:00 US Eastern). Opening the app in the meantime fetches nothing;
+afterwards it asks arXiv only for the latest days and keeps the rest of the
+week. Pulling down on the Papers list fetches the latest days the same way, at any time.</p>
 <p>To bring your GUI settings over without a server, export a profile in the GUI
 and open the file on the phone: see <a href="../deploy/#copy-the-config-file-without-a-server">Copy the config file</a>.</p>
+<h2 id="web-app-and-ios-app">Web app and iOS app<a class="headerlink" href="#web-app-and-ios-app" title="Permanent link">&para;</a></h2>
+<p>Both apps offer the same features. Where they look different, it is to suit a
+phone or a desktop browser.</p>
+<table>
+<thead>
+<tr>
+<th>Feature</th>
+<th>Web app</th>
+<th>iOS app</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Ranked digest, day picker, search, Markdown/JSON export</td>
+<td>Papers tab</td>
+<td>Papers tab</td>
+</tr>
+<tr>
+<td>Remove and restore papers</td>
+<td><strong>Remove</strong> on a card, <em>Removed papers</em></td>
+<td>Swipe or long-press, <em>Removed papers</em></td>
+</tr>
+<tr>
+<td>Open PDF</td>
+<td>Button on each card</td>
+<td>Paper page and long-press menu</td>
+</tr>
+<tr>
+<td>Add a paper's author to highlighted authors</td>
+<td><em>Add author</em> on a card</td>
+<td>Authors menu on the paper page</td>
+</tr>
+<tr>
+<td>Score a paper</td>
+<td>Score a paper tab</td>
+<td>Score tab</td>
+</tr>
+<tr>
+<td>Keywords, authors, low-priority terms</td>
+<td>Tabs with a table</td>
+<td>Config pages with a list</td>
+</tr>
+<tr>
+<td>Feeds, subscriptions, replacement submissions</td>
+<td>Feeds tab and sidebar</td>
+<td>Config → Feeds</td>
+</tr>
+<tr>
+<td>Scoring weights and per-feed bonuses</td>
+<td>Scoring tab</td>
+<td>Config → Scoring</td>
+</tr>
+<tr>
+<td>Starter presets</td>
+<td>Profiles tab</td>
+<td>Config → Starter presets</td>
+</tr>
+<tr>
+<td>Unsaved changes</td>
+<td>Bar listing changes per tab, dot on each tab, ● on unsaved rows</td>
+<td>Save bar listing changes per section, dot on each page, ● on unsaved rows, tab badges</td>
+</tr>
+<tr>
+<td>Highlight colors and toggles</td>
+<td>Sidebar → Display</td>
+<td>Settings → Display</td>
+</tr>
+<tr>
+<td>Inline LaTeX</td>
+<td>KaTeX</td>
+<td>Titles and lists: Unicode with real raised/lowered scripts; paper page abstract: KaTeX</td>
+</tr>
+<tr>
+<td>Share settings between devices</td>
+<td>Sidebar → Sync with server</td>
+<td>Settings → Connection → Server</td>
+</tr>
+<tr>
+<td>Copy or download the working config as JSON</td>
+<td>Profiles → <em>Download</em> / <em>Copy working config (JSON)</em></td>
+<td>Settings → Config file → <em>Export config</em> / <em>Copy config JSON</em></td>
+</tr>
+</tbody>
+</table>
+<h3 id="intended-differences">Intended differences<a class="headerlink" href="#intended-differences" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Web app</th>
+<th>iOS app</th>
+<th>Why</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Named profiles (save, load, export, import)</td>
+<td>One config; <em>Config file</em> export/import</td>
+<td>A phone needs one working config; files move it between devices</td>
+</tr>
+<tr>
+<td>A tab's Save writes only that tab</td>
+<td>One Save for all changes</td>
+<td>One Save fits a phone better</td>
+</tr>
+<tr>
+<td>Save to Zotero through the local Zotero app</td>
+<td>Through the digest server's Zotero key, else <em>Share to Zotero</em></td>
+<td>Zotero's local API exists only on the computer</td>
+</tr>
+<tr>
+<td>Timeframe and Top N count as unsaved until Save</td>
+<td>Saved as soon as you change them on the Papers tab</td>
+<td>The Papers toolbar on iOS applies them at once</td>
+</tr>
+</tbody>
+</table>
 <h2 id="update-or-renew">Update or renew<a class="headerlink" href="#update-or-renew" title="Permanent link">&para;</a></h2>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="nb">cd</span><span class="w"> </span>arxiv-digest<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>git<span class="w"> </span>pull
 </span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="nb">cd</span><span class="w"> </span>ios<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>xcodegen<span class="w"> </span>generate<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>open<span class="w"> </span>ArxivDigest.xcodeproj
@@ -1008,7 +1185,7 @@ same every 7 days on a free Apple ID; your config and removed papers are kept.</
     <span class="md-icon" title="Last update">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M21 13.1c-.1 0-.3.1-.4.2l-1 1 2.1 2.1 1-1c.2-.2.2-.6 0-.8l-1.3-1.3c-.1-.1-.2-.2-.4-.2m-1.9 1.8-6.1 6V23h2.1l6.1-6.1zM12.5 7v5.2l4 2.4-1 1L11 13V7zM11 21.9c-5.1-.5-9-4.8-9-9.9C2 6.5 6.5 2 12 2c5.3 0 9.6 4.1 10 9.3-.3-.1-.6-.2-1-.2s-.7.1-1 .2C19.6 7.2 16.2 4 12 4c-4.4 0-8 3.6-8 8 0 4.1 3.1 7.5 7.1 7.9l-.1.2z"/></svg>
     </span>
-    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="October 8, 2026 10:01:28 UTC"><span class="timeago" datetime="2026-10-08T10:01:28+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="October 8, 2026 10:01:28 UTC">2026-10-08</span>
+    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="October 14, 2026 09:03:48 UTC"><span class="timeago" datetime="2026-10-14T09:03:48+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="October 14, 2026 09:03:48 UTC">2026-10-14</span>
   </span>
 
     

@@ -605,6 +605,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#starter-presets" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Starter presets
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#profiles-vs-project-config" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1091,6 +1102,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#starter-presets" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Starter presets
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#profiles-vs-project-config" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1192,6 +1214,9 @@
 
 
 <h1 id="gui-guide">GUI guide<a class="headerlink" href="#gui-guide" title="Permanent link">&para;</a></h1>
+<video src="../assets/showcase.mp4" autoplay loop muted playsinline controls width="100%"
+       aria-label="A tour of the web app: fetching the past week, hovering highlighted keywords and authors to see their bonus, Why this score?, picking a day, searching, Markdown export, saving to a Zotero collection, the PDF, following an author with the unsaved-changes bar, removing and restoring a paper, scoring an arXiv link, the Keywords, Scoring and Profiles tabs, config as JSON, server sync and highlight colors"></video>
+
 <p>The GUI is a <a href="https://streamlit.io/">Streamlit</a> app that imports <code>arxiv_digest</code> directly, so every fetch / score / format function used by the CLI is also what the GUI runs. No duplication; tweaks in one show up in the other.</p>
 <h2 id="launching">Launching<a class="headerlink" href="#launching" title="Permanent link">&para;</a></h2>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>uv<span class="w"> </span>sync<span class="w"> </span>--group<span class="w"> </span>gui<span class="w">                       </span><span class="c1"># one-time</span>
@@ -1223,7 +1248,8 @@ from a script.)</p>
   replacements.</li>
 <li><strong>Day picker</strong> (Papers tab): when a fetch returns several days (i.e.
   <code>pastweek</code>), a <strong>Day</strong> selector lets you view just one past day's ranking,
-  useful if you skipped yesterday and want its dedicated list today.</li>
+  useful if you skipped yesterday and want its dedicated list today. The
+  newest day comes first.</li>
 <li><strong>Limitation:</strong> the fetch covers seven days of submissions, while the day
     labels follow the announcement sections currently shown by arXiv. Weekends
     and holidays may therefore be folded into the next announcement day. arXiv
@@ -1295,7 +1321,7 @@ paper</strong>, <strong>Keywords</strong>, <strong>Authors</strong>, <strong>Low
 <strong>Profiles</strong> (plus the sidebar with Timeframe / Top N / Feeds / fetch controls
 and the Display + Zotero status sections).</p>
 <ul>
-<li><strong>Papers</strong>: ranked list, search box (filters by title / authors / abstract), MD + JSON download buttons. Per paper: rank, title, authors, subjects, section, summary, arXiv link, score badge, a <strong>Save to Zotero</strong> button, a <strong>✕</strong> button to remove it from the list (the papers below move up and the next one fills the top N; removals are remembered per profile across reloads and later fetches, and can be restored from <em>Removed papers</em>), expandable score breakdown, expandable full abstract.</li>
+<li><strong>Papers</strong>: ranked list, search box (filters by title / authors / abstract), MD + JSON download buttons. Per paper: rank, title, authors, subjects, section, summary, arXiv link, score badge, <strong>Save to Zotero</strong>, <strong>Add author</strong>, <strong>Open PDF</strong> and <strong>Remove</strong> buttons (Remove takes it off the list; the papers below move up and the next one fills the top N; removals are remembered per profile across reloads and later fetches, and can be restored from <em>Removed papers</em>), expandable score breakdown, expandable full abstract.</li>
 <li><strong>Score a paper</strong>: paste an arXiv link or ID to see how it would score under your current config, why it did (or didn't) appear in the digest, and save it to Zotero.</li>
 <li><strong>Keywords</strong>: spreadsheet-style editor for <code>core_keywords</code>. Each match adds the <em>Per-keyword bonus</em> (default +6).</li>
 <li><strong>Authors</strong>: same pattern for <code>named_authors</code>. Default +6 per match. Whole-word match by default (configurable in Scoring, like keywords).</li>
@@ -1385,6 +1411,35 @@ tell at a glance whether saving is available.</p>
   on a day the fetch didn't cover, or in a category you don't subscribe to.</li>
 <li>A <strong>Save to Zotero</strong> button to save it directly.</li>
 </ul>
+<h2 id="starter-presets">Starter presets<a class="headerlink" href="#starter-presets" title="Permanent link">&para;</a></h2>
+<p>Three built-in, read-only topic bundles (keywords + authors + feeds) give you a
+starting point instead of the generic default:</p>
+<table>
+<thead>
+<tr>
+<th>Preset</th>
+<th>Focus</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>open-quantum-systems</code></td>
+<td>Lindbladian dynamics, dissipation, driven-dissipative &amp; non-Markovian systems</td>
+</tr>
+<tr>
+<td><code>quantum-many-body</code></td>
+<td>Thermalization, many-body localization, tensor networks, strongly correlated systems</td>
+</tr>
+<tr>
+<td><code>floquet-topological</code></td>
+<td>Floquet engineering, periodically driven systems &amp; topological matter</td>
+</tr>
+</tbody>
+</table>
+<p>Pick one under <strong>Profiles → Starter presets</strong>: <strong>Load</strong> replaces your working
+config, <strong>Add</strong> merges it in. On the CLI use <code>--preset NAME</code> / <code>--add-preset NAME</code>
+(see <code>--list-presets</code>). Presets never overwrite your saved profiles or
+<code>arxiv_config.json</code>; they change only the working config until you save.</p>
 <h2 id="profiles-vs-project-config">Profiles vs project config<a class="headerlink" href="#profiles-vs-project-config" title="Permanent link">&para;</a></h2>
 <p>Both save the <strong>complete</strong> configuration: every feed, the keyword / author /
 low-priority lists, <code>top_n</code>, timeframe, the replacement filter, scoring weights,
@@ -1429,13 +1484,19 @@ it</em>:</p>
 <p>In short: <strong>profiles are personal presets you swap inside the GUI; the project
 config is the single file your CLI command picks up.</strong> Push a profile into your
 CLI workflow by loading it, then clicking <strong>Write project config</strong>.</p>
-<div class="admonition warning">
-<p class="admonition-title">Save/Apply before saving</p>
-<p>Edits in the <strong>Keywords / Authors / Low priority</strong> tabs only enter the live
-config when you click that tab's <strong>Save</strong> button; <strong>Feeds</strong> edits need
-<strong>Save feeds</strong>; scoring/per-feed changes need <strong>Apply weights</strong>. A profile or
-project-config save captures the <em>current</em> live config, so apply your tab
-edits first, otherwise they won't be included.</p>
+<p>Under <strong>Save</strong>, <strong>Download working config (JSON)</strong> and <strong>Copy working config
+(JSON)</strong> hand you the config you are working with (say, a preset you just
+loaded), unsaved edits included, in the same format as <strong>Export</strong> and
+<strong>Import profile from JSON</strong>.</p>
+<div class="admonition note">
+<p class="admonition-title">Saving and unsaved changes</p>
+<p>A tab's <strong>Save</strong> button (<strong>Keywords / Authors / Low priority</strong>, <strong>Save feeds</strong>,
+<strong>Apply weights</strong>) writes that tab's settings to the loaded profile, or to
+<code>arxiv_config.json</code> when no profile is loaded; other unsaved edits stay unsaved. Other edits (sidebar settings,
+<em>Add author</em> on a card, presets, imports) stay unsaved: a bar at the top lists
+them by tab with <strong>Discard</strong> and <strong>Save</strong>, the affected tabs get an orange dot,
+and each tab lists its unsaved entries above its table and marks
+those rows ● in it.</p>
 </div>
 <h2 id="moving-settings-to-the-iphone-and-back">Moving settings to the iPhone (and back)<a class="headerlink" href="#moving-settings-to-the-iphone-and-back" title="Permanent link">&para;</a></h2>
 <p>Two ways, both described step by step in <a href="../deploy/">Sync across devices</a>:</p>
@@ -1452,7 +1513,7 @@ edits first, otherwise they won't be included.</p>
 <ul>
 <li>The score breakdown is the fastest way to figure out why a low-priority hit overshadowed a keyword match. Open it before re-tweaking weights blindly.</li>
 <li>Profiles are pure JSON; you can hand-edit them outside the GUI or check them into a separate dotfiles repo.</li>
-<li>Without sync, the GUI never writes back to <code>arxiv_config.json</code> automatically. You must press <strong>Write project config</strong> in the Profiles tab. That keeps surprises out of your CLI workflow. (With <strong>Sync with server</strong> on, downloading from the server also updates <code>arxiv_config.json</code>, so the CLI follows the shared config.)</li>
+<li>The GUI writes <code>arxiv_config.json</code> only when you ask: <strong>Write project config</strong> in the Profiles tab, or a tab <strong>Save</strong> / <strong>Apply weights</strong> / unsaved-bar <strong>Save</strong> while no profile is loaded (with a profile loaded those save to the profile instead). (With <strong>Sync with server</strong> on, downloading from the server also updates <code>arxiv_config.json</code>, so the CLI follows the shared config.)</li>
 </ul>
 
 
@@ -1476,7 +1537,7 @@ edits first, otherwise they won't be included.</p>
     <span class="md-icon" title="Last update">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M21 13.1c-.1 0-.3.1-.4.2l-1 1 2.1 2.1 1-1c.2-.2.2-.6 0-.8l-1.3-1.3c-.1-.1-.2-.2-.4-.2m-1.9 1.8-6.1 6V23h2.1l6.1-6.1zM12.5 7v5.2l4 2.4-1 1L11 13V7zM11 21.9c-5.1-.5-9-4.8-9-9.9C2 6.5 6.5 2 12 2c5.3 0 9.6 4.1 10 9.3-.3-.1-.6-.2-1-.2s-.7.1-1 .2C19.6 7.2 16.2 4 12 4c-4.4 0-8 3.6-8 8 0 4.1 3.1 7.5 7.1 7.9l-.1.2z"/></svg>
     </span>
-    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="October 8, 2026 10:01:28 UTC"><span class="timeago" datetime="2026-10-08T10:01:28+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="October 8, 2026 10:01:28 UTC">2026-10-08</span>
+    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="October 14, 2026 09:03:48 UTC"><span class="timeago" datetime="2026-10-14T09:03:48+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="October 14, 2026 09:03:48 UTC">2026-10-14</span>
   </span>
 
     
