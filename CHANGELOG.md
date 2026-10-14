@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - **Tab Save buttons persist**: *Save core keywords / authors / low-priority terms*, *Save feeds* and *Apply weights* now write that tab's settings to the loaded profile, or to `arxiv_config.json` when no profile is loaded, instead of only the session. Other unsaved edits are not written with them.
 - **Paper card actions**: Save to Zotero, Add author, Open PDF and Remove (formerly ✕) form one equal-width column under the centred score; on a narrow card they move below the abstract as a 2×2 grid. Column layouts across the GUI wrap instead of squeezing labels letter by letter.
+- **Day lists start with the newest day**, in the web app's Day picker, the iOS app's day chips and the digest server's `available_days`.
 - **The iOS app version now follows `pyproject.toml`**: a build step copies it into the app, so the app always shows the release it was built from.
 - **Shorter README with a new hero image and a tour of the web app**: what the app does, a four-line quick start, the iPhone app and CLI, and links to the guides; the detailed GUI, CLI and scoring reference lives in the docs. The starter-preset table moved to the GUI guide, and the update-from-a-clone steps to the Quickstart.
 - **Animated previews**: a zooming tour of the web app (GIF in the README, video in the GUI guide) and of the iPhone app (in the iPhone app docs). `scripts/record_showcase.py` re-records all of them from the live apps with a starter preset, without touching your own config.

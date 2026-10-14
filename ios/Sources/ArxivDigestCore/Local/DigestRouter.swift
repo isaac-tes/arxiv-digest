@@ -221,14 +221,15 @@ public actor DigestRouter {
         return String(section[r])
     }
 
-    /// The engine's `available_day_labels`: distinct day labels, chronological.
+    /// The engine's `available_day_labels`: distinct day labels, newest first
+    /// (an unparsable label last).
     static func availableDayLabels(_ sections: [String]) -> [String] {
         let f = DateFormatter()
         f.locale = Locale(identifier: "en_US_POSIX")
         f.timeZone = TimeZone(identifier: "UTC")
         f.dateFormat = "EEE, d MMM yyyy"
         let labels = Set(sections.compactMap(dayLabel))
-        return labels.sorted { (f.date(from: $0) ?? .distantFuture, $0) < (f.date(from: $1) ?? .distantFuture, $1) }
+        return labels.sorted { (f.date(from: $0) ?? .distantPast, $0) > (f.date(from: $1) ?? .distantPast, $1) }
     }
 
     // MARK: - Handlers

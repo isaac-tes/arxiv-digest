@@ -39,7 +39,8 @@ from a script.)
   replacements.
 - **Day picker** (Papers tab): when a fetch returns several days (i.e.
   `pastweek`), a **Day** selector lets you view just one past day's ranking,
-  useful if you skipped yesterday and want its dedicated list today.
+  useful if you skipped yesterday and want its dedicated list today. The
+  newest day comes first.
   - **Limitation:** the fetch covers seven days of submissions, while the day
     labels follow the announcement sections currently shown by arXiv. Weekends
     and holidays may therefore be folded into the next announcement day. arXiv

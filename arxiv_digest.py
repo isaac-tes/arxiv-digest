@@ -1287,16 +1287,17 @@ def section_day_label(section: str) -> str | None:
 
 
 def available_day_labels(papers: List[dict]) -> List[str]:
-    """Distinct day labels present in papers, sorted chronologically."""
+    """Distinct day labels present in papers, newest first (what a reader wants
+    to pick); an unparsable label goes last."""
     labels = {lbl for p in papers if (lbl := section_day_label(p.get("section", "")))}
 
     def _key(lbl: str):
         try:
-            return datetime.strptime(lbl, "%a, %d %b %Y")
+            return (datetime.strptime(lbl, "%a, %d %b %Y"), lbl)
         except ValueError:
-            return datetime.max
+            return (datetime.min, lbl)
 
-    return sorted(labels, key=_key)
+    return sorted(labels, key=_key, reverse=True)
 
 
 def filter_papers(

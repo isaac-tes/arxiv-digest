@@ -154,7 +154,7 @@ def test_ranking_matches_engine_and_hides_replacements(client):
     assert body["hidden_by_filters"] == 1
     assert body["total_papers"] == 4
     assert body["requested_top"] == 2
-    assert body["available_days"] == [DAY1, DAY2]
+    assert body["available_days"] == [DAY2, DAY1]  # newest first
     assert body["day"] is None
 
 
