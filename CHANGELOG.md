@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+- **Longer card summaries**: the abstract summary on each paper card now keeps the first four sentences instead of two, so the card fills out more (same rule in the iOS app; the "Full abstract" expander still shows everything).
+
 ## [0.7.1] - 2026-10-11
 
 ### Added

@@ -2,7 +2,7 @@ import SwiftUI
 import ArxivDigestCore
 
 /// One paper card, mirroring the web GUI's: "rank. title" with highlighted
-/// keywords, highlighted named authors, the section, the two-sentence summary
+/// keywords, highlighted named authors, the section, the four-sentence summary
 /// (highlighted only when "Highlight keywords in summaries" is on), and the
 /// subjects with feed-bonus highlights; the score metric sits on the right.
 struct PaperRowView: View {

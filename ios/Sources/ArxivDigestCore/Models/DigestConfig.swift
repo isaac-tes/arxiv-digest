@@ -198,7 +198,7 @@ public struct DigestConfig: Codable, Sendable, Equatable {
         set { data["highlight_terms_abstract"] = .bool(newValue) }
     }
 
-    /// Highlight the two-sentence summary on each paper card. Off by default,
+    /// Highlight the four-sentence summary on each paper card. Off by default,
     /// as in the GUI.
     public var highlightTermsSummary: Bool {
         get { data["highlight_terms_summary"]?.boolValue ?? false }

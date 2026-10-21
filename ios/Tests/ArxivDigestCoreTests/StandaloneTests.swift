@@ -42,7 +42,7 @@ final class StandaloneTests: XCTestCase {
         let first = try await client.fetchDigest(topN: 10)
         XCTAssertEqual(first.papers.map(\.id), ["2610.00001", "2610.00002"])
         XCTAssertEqual(first.papers[0].score, 6)
-        XCTAssertEqual(first.papers[0].summary, "Driven lattices. Second sentence.")
+        XCTAssertEqual(first.papers[0].summary, "Driven lattices. Second sentence. Third.")
         XCTAssertEqual(first.availableDays, ["Tue, 6 Oct 2026", "Mon, 5 Oct 2026"])  // newest first
         XCTAssertEqual(first.feeds, ["quant-ph"])
 
@@ -117,17 +117,19 @@ final class EngineTextParityTests: XCTestCase {
     func testSummarize() {
         XCTAssertEqual(Scorer.summarize(""), "(No abstract available.)")
         XCTAssertEqual(Scorer.summarize("   "), "(No abstract available.)")
-        XCTAssertEqual(Scorer.summarize("One. Two!  Three?\nFour."), "One. Two!")
+        XCTAssertEqual(Scorer.summarize("One. Two!  Three?\nFour."), "One. Two! Three? Four.")
         XCTAssertEqual(Scorer.summarize("No terminal punctuation here"), "No terminal punctuation here")
-        XCTAssertEqual(Scorer.summarize("e.g. this.  And\tthat. More."), "e.g. this. And that.")
+        XCTAssertEqual(Scorer.summarize("e.g. this.  And\tthat. More."), "e.g. this. And that. More.")
         XCTAssertEqual(Scorer.summarize("Ends with dot."), "Ends with dot.")
         // Citations, abbreviations, initials and parentheses don't end a sentence.
         XCTAssertEqual(
             Scorer.summarize("A recent experiment by Roy et al. (Nat. Commun. 17, 2853 (2026)) demonstrated a plateau. We prove a theorem. The corollary."),
-            "A recent experiment by Roy et al. (Nat. Commun. 17, 2853 (2026)) demonstrated a plateau. We prove a theorem.")
-        XCTAssertEqual(Scorer.summarize("Work by J. Smith shows it. Second. Third."), "Work by J. Smith shows it. Second.")
-        XCTAssertEqual(Scorer.summarize("Unbalanced (paren. Still one. Two. Three."), "Unbalanced (paren. Still one.")
+            "A recent experiment by Roy et al. (Nat. Commun. 17, 2853 (2026)) demonstrated a plateau. We prove a theorem. The corollary.")
+        XCTAssertEqual(Scorer.summarize("Work by J. Smith shows it. Second. Third."), "Work by J. Smith shows it. Second. Third.")
+        XCTAssertEqual(Scorer.summarize("Unbalanced (paren. Still one. Two. Three."), "Unbalanced (paren. Still one. Two. Three.")
         XCTAssertEqual(Scorer.summarize("Trailing abbrev et al."), "Trailing abbrev et al.")
+        // Four-sentence cap.
+        XCTAssertEqual(Scorer.summarize("One. Two. Three. Four. Five. Six. Seven."), "One. Two. Three. Four.")
     }
 
     func testAvailableDayLabels() {

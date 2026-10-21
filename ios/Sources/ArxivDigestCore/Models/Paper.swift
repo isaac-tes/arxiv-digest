@@ -63,7 +63,7 @@ public struct Paper: Codable, Identifiable, Hashable, Sendable {
         breakdown = try c.decodeIfPresent(ScoreBreakdown.self, forKey: .breakdown)
     }
 
-    /// The full abstract when the server sent it, else the two-sentence summary.
+    /// The full abstract when the server sent it, else the four-sentence summary.
     public var fullAbstract: String { abstract.isEmpty ? summary : abstract }
 
     /// The arXiv PDF URL (`/abs/` → `/pdf/`), or nil for a non-arXiv link.

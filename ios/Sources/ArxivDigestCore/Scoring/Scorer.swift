@@ -52,7 +52,7 @@ public enum Scorer {
         ("al e.g i.e cf vs fig figs eq eqs ref refs sec secs no vol nat phys rev lett " +
          "commun sci natl acad proc approx resp dr prof").split(separator: " ").map(String.init))
 
-    /// The engine's `summarize`: the first two sentences, whitespace collapsed.
+    /// The engine's `summarize`: the first four sentences, whitespace collapsed.
     /// No split inside balanced parentheses, after a known abbreviation, or
     /// after a single-letter initial ("Roy et al. (Nat. Commun. 17)").
     public static func summarize(_ text: String) -> String {
@@ -76,10 +76,10 @@ public enum Scorer {
                 }
                 sentences.append(String(c[start...i]))
                 start = i + 2
-                if sentences.count == 2 { break }
+                if sentences.count == 4 { break }
             }
         }
-        if sentences.count < 2, start < c.count { sentences.append(String(c[start...])) }
-        return sentences.prefix(2).joined(separator: " ")
+        if sentences.count < 4, start < c.count { sentences.append(String(c[start...])) }
+        return sentences.prefix(4).joined(separator: " ")
     }
 }

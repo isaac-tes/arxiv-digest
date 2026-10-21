@@ -44,7 +44,7 @@ struct SettingsView: View {
                 } header: {
                     Text("Display")
                 } footer: {
-                    Text("Summaries are the two-sentence previews on each paper card; off by default, as in the web GUI. Underline adds a dotted line under highlighted terms; it applies right away and stays on this device.")
+                    Text("Summaries are the four-sentence previews on each paper card; off by default, as in the web GUI. Underline adds a dotted line under highlighted terms; it applies right away and stays on this device.")
                 }
 
                 Section {

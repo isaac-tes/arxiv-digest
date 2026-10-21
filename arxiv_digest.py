@@ -1513,7 +1513,7 @@ _ABBREVIATIONS = frozenset(
 
 
 def summarize(text: str) -> str:
-    """The first two sentences, whitespace collapsed.
+    """The first four sentences, whitespace collapsed.
 
     A sentence ends at `.`, `!` or `?` followed by a space, except inside
     parentheses, after a known abbreviation, or after a single-letter initial,
@@ -1537,11 +1537,11 @@ def summarize(text: str) -> str:
                 continue
             sentences.append(cleaned[start : i + 1])
             start = i + 2
-            if len(sentences) == 2:
+            if len(sentences) == 4:
                 break
-    if len(sentences) < 2 and start < len(cleaned):
+    if len(sentences) < 4 and start < len(cleaned):
         sentences.append(cleaned[start:])
-    return " ".join(sentences[:2])
+    return " ".join(sentences[:4])
 
 
 def build_ranked_entries(papers: List[dict], cfg: Config, top_n: int | None = None) -> List[dict]:
