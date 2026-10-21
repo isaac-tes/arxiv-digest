@@ -1,22 +1,17 @@
-"""Zotero bridge: save arXiv papers to the user's local Zotero library.
+"""Save arXiv preprints to the user's local Zotero library.
 
-Uses Zotero's **local HTTP API** (``http://localhost:23119/api/``) — the same
-mechanism the official Zotero Connector browser extension uses. Reads need no
-authentication; writes (Zotero 10+) trigger a one-time "Allow this application?"
-dialog in Zotero that grants a local API key at runtime.
-
-The saved item replicates what the Zotero Connector's arXiv translator
-(``arXiv.org.js``) produces: it fetches the arXiv export API Atom feed and builds
-a ``preprint`` item with the same fields, category tags, and PDF/Snapshot
-attachments, plus a single ``arxiv-digest`` source tag.
-
-See docs/adr/0001-zotero-local-api-bridge.md for the rationale.
+Metadata comes from arXiv's Atom API; new saves use Zotero's local Connector
+HTTP API so PDFs and page snapshots are imported like the browser extension.
+Legacy records missing a PDF are repaired through the local file-upload API. See
+`docs/adr/0001-zotero-local-api-bridge.md` for the rationale.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import secrets
+import time
 import xml.etree.ElementTree as ET
 from typing import Dict, Optional
 
@@ -27,15 +22,7 @@ ZOTERO_API_VERSION = "3"
 ARXIV_EXPORT_API = "https://export.arxiv.org/api/query"
 SOURCE_TAG = "arxiv-digest"
 
-# Module-level cache for the Zotero 10+ write session: the server ID and the
-# authorized local API key. Caching avoids re-GETting the server ID and re-posting
-# the authorize dialog on every save (memory/UX efficient).
 _CACHE: Dict[str, Optional[str]] = {"server_id": None, "api_key": None}
-
-
-def _new_write_token() -> str:
-    """Generate a random 32-char Zotero-Write-Token (prevents duplicate writes)."""
-    return secrets.token_hex(16)
 
 # Atom namespace used by the arXiv export API.
 _ATOM = "{http://www.w3.org/2005/Atom}"
@@ -109,10 +96,15 @@ def arxiv_id_from_input(raw: str) -> str:
 
 
 def zotero_available(timeout: float = 1.0) -> bool:
-    """Return True if the Zotero local API is reachable (desktop app running)."""
+    """Return True if Zotero's local Connector API is reachable."""
     try:
-        resp = requests.get(f"{ZOTERO_LOCAL_BASE}/users/0/collections", timeout=timeout)
-        return resp.status_code < 500
+        resp = requests.post(
+            f"{ZOTERO_LOCAL_BASE.removesuffix('/api')}/connector/ping",
+            headers={"X-Zotero-Connector-API-Version": ZOTERO_API_VERSION},
+            json={},
+            timeout=timeout,
+        )
+        return resp.status_code == 200
     except requests.RequestException:
         return False
 
@@ -141,78 +133,21 @@ def list_collections(timeout: float = 10.0) -> list[Dict]:
     return out
 
 
-def _zotero_item_exists(archive_id: str, timeout: float = 10.0, page_limit: int = 100) -> bool:
-    """Return True if an item with the given ``archiveID`` already exists.
-
-    The Zotero ``q`` full-text search parameter does not index the ``url``
-    metadata field — it only matches title/creator/year (or, in ``everything``
-    mode, indexed attachment/note text) — so searching for an arXiv URL almost
-    never finds an existing item, which let the same paper be saved over and
-    over. Instead, this scopes the search to items carrying our own
-    ``arxiv-digest`` tag (a small, bounded set) and paginates through them
-    looking for an exact ``archiveID`` match, which is reliable regardless of
-    indexing delays.
-
-    Dedup runs against the personal My Library only.
-    """
-    items_url = f"{ZOTERO_LOCAL_BASE}/users/0/items"
-    start = 0
-    while True:
-        try:
-            resp = requests.get(
-                items_url,
-                headers={"Zotero-API-Version": ZOTERO_API_VERSION},
-                params={"tag": SOURCE_TAG, "start": start, "limit": page_limit},
-                timeout=timeout,
-            )
-            resp.raise_for_status()
-            items = resp.json()
-        except (requests.RequestException, ValueError):
-            return False
-        if not items:
-            return False
-        for it in items:
-            if (it.get("data") or {}).get("archiveID") == archive_id:
-                return True
-        if len(items) < page_limit:
-            return False
-        start += page_limit
-
-
-def _zotero_server_id(timeout: float = 2.0) -> Optional[str]:
-    """Return the Zotero-Server-ID header, or None if absent.
-
-    The header is only present in Zotero 10+. Its absence means the running
-    Zotero predates 10 and its local API is read-only (writes unsupported).
-    Cached so we don't re-GET on every save.
-    """
+def _zotero_server_id(timeout: float = 2.0) -> str | None:
+    """Return the local API server ID needed to authorize a repair upload."""
     if _CACHE["server_id"] is not None:
         return _CACHE["server_id"]
     try:
         resp = requests.get(f"{ZOTERO_LOCAL_BASE}/", timeout=timeout)
-        sid = resp.headers.get("Zotero-Server-ID")
     except requests.RequestException:
         return None
-    _CACHE["server_id"] = sid
-    return sid
+    server_id = resp.headers.get("Zotero-Server-ID")
+    _CACHE["server_id"] = server_id
+    return server_id
 
 
-def zotero_write_supported(timeout: float = 2.0) -> bool:
-    """Return True if the local Zotero supports writes (Zotero 10+).
-
-    Zotero < 10 exposes a read-only local API; write requests return
-    ``400 Endpoint does not support method``. Zotero 10+ adds the
-    ``Zotero-Server-ID`` header and the local write-authorization flow.
-    """
-    return _zotero_server_id(timeout=timeout) is not None
-
-
-def _authorize_write(server_id: str, app_name: str = "arXiv Digest") -> Optional[str]:
-    """Request a local API key from Zotero (pops the 'Allow this application?' dialog).
-
-    Returns the key, or None if the user denied or the request failed. The key is
-    cached so subsequent saves reuse it (no repeated dialogs / network calls).
-    """
+def _authorize_write(server_id: str) -> str | None:
+    """Get a local write key, caching it only when Zotero marks it persistent."""
     if _CACHE["api_key"] is not None:
         return _CACHE["api_key"]
     try:
@@ -223,20 +158,33 @@ def _authorize_write(server_id: str, app_name: str = "arXiv Digest") -> Optional
                 "Zotero-Server-ID": server_id,
                 "Content-Type": "application/json",
             },
-            data=json.dumps({"appName": app_name}),
+            json={"appName": "arXiv Digest"},
             timeout=30,
         )
-    except requests.RequestException:
+        if resp.status_code not in (200, 201):
+            return None
+        result = resp.json()
+    except (requests.RequestException, ValueError):
         return None
-    if resp.status_code not in (200, 201):
-        return None
-    try:
-        key = resp.json().get("key")
-    except (ValueError, AttributeError):
-        return None
-    if key:
+    key = result.get("key")
+    if key and result.get("remember"):
         _CACHE["api_key"] = key
     return key
+
+
+def _local_write_headers(
+    server_id: str, content_type: str
+) -> dict[str, str] | None:
+    api_key = _authorize_write(server_id)
+    if api_key is None:
+        return None
+    return {
+        "Zotero-API-Version": ZOTERO_API_VERSION,
+        "Zotero-Server-ID": server_id,
+        "Zotero-API-Key": api_key,
+        "Zotero-Write-Token": secrets.token_hex(16),
+        "Content-Type": content_type,
+    }
 
 
 def fetch_arxiv_atom(arxiv_id: str) -> Optional[ET.Element]:
@@ -343,13 +291,208 @@ def build_preprint_item(entry: ET.Element, version: Optional[str] = None) -> Dic
     return item
 
 
-def save_to_zotero(arxiv_id: str, collection_key: Optional[str] = None) -> Dict:
-    """Fetch an arXiv paper and save it to the local Zotero library.
+def _connector_url(endpoint: str) -> str:
+    """Build a URL for Zotero's local Connector API."""
+    return f"{ZOTERO_LOCAL_BASE.removesuffix('/api')}/connector/{endpoint}"
 
-    If ``collection_key`` is given, the item is added to that personal-library
-    collection. Group-library saving is not supported by Zotero's local API.
-    Returns a dict with ``ok`` (bool) and either ``item_key`` or ``error``.
-    Raises on network/API failures so the caller can surface a message.
+
+def _connector_headers() -> dict[str, str]:
+    return {
+        "X-Zotero-Connector-API-Version": ZOTERO_API_VERSION,
+        "Content-Type": "application/json",
+    }
+
+
+def _collection_target_id(collection_key: str, timeout: float = 10.0) -> str | None:
+    """Resolve a local API collection key to the Connector's tree-view ID."""
+    resp = requests.get(
+        f"{ZOTERO_LOCAL_BASE}/users/0/collections", timeout=timeout
+    )
+    resp.raise_for_status()
+    collections = resp.json() or []
+    by_key = {c.get("key"): c.get("data", {}) for c in collections}
+
+    path = []
+    seen = set()
+    key = collection_key
+    while key:
+        if key in seen or key not in by_key:
+            return None
+        seen.add(key)
+        collection = by_key[key]
+        name = collection.get("name")
+        if not name:
+            return None
+        path.append(name)
+        parent = collection.get("parentCollection")
+        key = parent if isinstance(parent, str) else None
+    path.reverse()
+    if not path:
+        return None
+
+    response = requests.post(
+        _connector_url("getSelectedCollection"),
+        headers=_connector_headers(),
+        json={},
+        timeout=timeout,
+    )
+    response.raise_for_status()
+    targets = response.json().get("targets", [])
+
+    target_path = []
+    in_my_library = False
+    matches = []
+    for target in targets:
+        target_id = target.get("id", "")
+        if target_id.startswith("L"):
+            in_my_library = target_id == "L1"
+            target_path = []
+            continue
+        if not in_my_library:
+            continue
+        level = target.get("level", 0)
+        if not isinstance(level, int) or level < 1:
+            continue
+        target_path = target_path[: level - 1]
+        target_path.append(target.get("name", ""))
+        if target_path == path:
+            matches.append(target_id)
+    return matches[0] if len(matches) == 1 else None
+
+
+def _zotero_item_key(archive_id: str, timeout: float = 10.0) -> str | None:
+    """Return the saved item key for an arXiv archive ID, if present."""
+    start = 0
+    while True:
+        try:
+            resp = requests.get(
+                f"{ZOTERO_LOCAL_BASE}/users/0/items",
+                headers={"Zotero-API-Version": ZOTERO_API_VERSION},
+                params={"tag": SOURCE_TAG, "start": start, "limit": 100},
+                timeout=timeout,
+            )
+            resp.raise_for_status()
+            items = resp.json() or []
+        except (requests.RequestException, ValueError):
+            return None
+        for item in items:
+            if (item.get("data") or {}).get("archiveID") == archive_id:
+                return item.get("key")
+        if len(items) < 100:
+            return None
+        start += 100
+
+
+def _existing_pdf_attachment(
+    item_key: str, timeout: float = 10.0
+) -> tuple[str, bool] | None:
+    """Return an existing PDF attachment key and whether it has file data."""
+    resp = requests.get(
+        f"{ZOTERO_LOCAL_BASE}/users/0/items/{item_key}/children",
+        headers={"Zotero-API-Version": ZOTERO_API_VERSION},
+        timeout=timeout,
+    )
+    resp.raise_for_status()
+    partial_key = None
+    for child in resp.json() or []:
+        data = child.get("data") or {}
+        if data.get("contentType") != "application/pdf":
+            continue
+        key = child.get("key")
+        has_file = bool(
+            data.get("filename")
+            and (child.get("links") or {}).get("enclosure", {}).get("length", 0) > 0
+        )
+        if has_file and key:
+            return key, True
+        if key and data.get("linkMode") == "imported_file":
+            partial_key = key
+    return (partial_key, False) if partial_key else None
+
+
+def _download_arxiv_pdf(url: str) -> bytes | None:
+    resp = requests.get(url, timeout=60)
+    resp.raise_for_status()
+    return resp.content if resp.content.startswith(b"%PDF-") else None
+
+
+def _repair_existing_item_pdf(
+    item_key: str, pdf_bytes: bytes, attachment_key: str | None = None
+) -> str | None:
+    """Import a PDF onto a legacy item using Zotero's local file-upload API."""
+    server_id = _zotero_server_id()
+    if server_id is None:
+        return "Could not identify Zotero's local API server for the PDF repair."
+
+    if attachment_key is None:
+        headers = _local_write_headers(server_id, "application/json")
+        if headers is None:
+            return "Zotero did not grant permission to repair the missing PDF."
+        attachment = {
+            "itemType": "attachment",
+            "linkMode": "imported_file",
+            "parentItem": item_key,
+            "title": "Preprint PDF",
+            "contentType": "application/pdf",
+            "filename": "preprint.pdf",
+        }
+        resp = requests.post(
+            f"{ZOTERO_LOCAL_BASE}/users/0/items",
+            headers=headers,
+            json=[attachment],
+            timeout=30,
+        )
+        resp.raise_for_status()
+        created = resp.json().get("successful", {}).get("0", {})
+        attachment_key = created.get("key")
+        if not attachment_key:
+            return "Zotero did not create the PDF attachment."
+
+    file_url = f"{ZOTERO_LOCAL_BASE}/users/0/items/{attachment_key}/file"
+    upload_fields = {
+        "md5": hashlib.md5(pdf_bytes, usedforsecurity=False).hexdigest(),
+        "filename": "preprint.pdf",
+        "filesize": len(pdf_bytes),
+        "mtime": int(time.time() * 1000),
+        "contentType": "application/pdf",
+    }
+    headers = _local_write_headers(server_id, "application/x-www-form-urlencoded")
+    if headers is None:
+        return "Zotero did not authorize the PDF upload."
+    headers["If-None-Match"] = "*"
+    resp = requests.post(file_url, headers=headers, data=upload_fields, timeout=30)
+    resp.raise_for_status()
+    upload = resp.json()
+
+    resp = requests.post(
+        upload["url"],
+        headers={"Content-Type": "application/octet-stream"},
+        data=pdf_bytes,
+        timeout=60,
+    )
+    resp.raise_for_status()
+
+    headers = _local_write_headers(server_id, "application/x-www-form-urlencoded")
+    if headers is None:
+        return "Zotero did not authorize finalizing the PDF upload."
+    headers["If-None-Match"] = "*"
+    resp = requests.post(
+        file_url,
+        headers=headers,
+        data={"upload": upload["uploadKey"]},
+        timeout=30,
+    )
+    resp.raise_for_status()
+    return None
+
+
+def save_to_zotero(arxiv_id: str, collection_key: Optional[str] = None) -> Dict:
+    """Save an arXiv preprint with imported attachments, like the Connector.
+
+    New items use Zotero's Connector save session. Existing metadata-only items
+    are repaired by importing the PDF through Zotero's local file-upload API.
+    ``collection_key`` selects a personal-library collection; group libraries
+    are not offered by the GUI.
     """
     clean = arxiv_id_from_input(arxiv_id)
     if not clean:
@@ -359,108 +502,109 @@ def save_to_zotero(arxiv_id: str, collection_key: Optional[str] = None) -> Dict:
     if entry is None:
         return {"ok": False, "error": f"No arXiv paper found for id '{clean}'."}
 
-    version = None
-    vm = re.search(r"v(\d+)$", clean)
-    if vm:
-        version = vm.group(1)
-
-    item = build_preprint_item(entry, version=version)
-    if collection_key:
-        item["collections"] = [collection_key]
-
-    # Dedup like the Zotero Connector: if an item for this arXiv id already
-    # exists in the library, skip the write so we can never create duplicates —
-    # even if the save is triggered repeatedly.
-    if _zotero_item_exists(item.get("archiveID", "")):
-        return {
-            "ok": False,
-            "already_exists": True,
-            "error": "Already in your Zotero library.",
-        }
-
-    # Zotero < 10 exposes a read-only local API — writes are unsupported.
-    server_id = _zotero_server_id()
-    if server_id is None:
-        return {
-            "ok": False,
-            "error": (
-                "Your Zotero version's local API is read-only (Zotero 10+ is "
-                "required for saving). Please upgrade Zotero to 10 or newer, "
-                "then try again."
-            ),
-        }
-
-    # Zotero 10+: request a local API key (pops the 'Allow this application?'
-    # dialog once, then cached), then write with it. If the cached key is
-    # consumed (single-use), re-authorize once and retry.
-    api_key = _authorize_write(server_id)
-    if api_key is None:
-        return {
-            "ok": False,
-            "error": (
-                "Zotero did not grant write access. In Zotero, click Allow when "
-                "the 'Allow this application to modify your library?' dialog "
-                "appears, then try again."
-            ),
-        }
-
-    headers = {
-        "Zotero-API-Version": ZOTERO_API_VERSION,
-        "Zotero-Server-ID": server_id,
-        "Zotero-API-Key": api_key,
-        "Zotero-Write-Token": _new_write_token(),
-        "Content-Type": "application/json",
-    }
-    resp = requests.post(
-        f"{ZOTERO_LOCAL_BASE}/users/0/items",
-        headers=headers,
-        data=json.dumps([item]),
-        timeout=30,
-    )
-    if resp.status_code == 401 and _CACHE["api_key"] is not None:
-        # Cached key was single-use and got consumed — clear it, re-authorize, retry.
-        _CACHE["api_key"] = None
-        api_key = _authorize_write(server_id)
-        if api_key is None:
+    item = build_preprint_item(entry)
+    archive_id = item.get("archiveID", "")
+    existing_item_key = _zotero_item_key(archive_id)
+    if existing_item_key:
+        existing_pdf = _existing_pdf_attachment(existing_item_key)
+        if existing_pdf and existing_pdf[1]:
             return {
                 "ok": False,
-                "error": (
-                    "Zotero did not authorize the write. In Zotero, click Allow "
-                    "when the 'Allow this application to modify your library?' "
-                    "dialog appears, then try again."
-                ),
+                "already_exists": True,
+                "error": "Already in your Zotero library.",
             }
-        headers["Zotero-API-Key"] = api_key
-        headers["Zotero-Write-Token"] = _new_write_token()
-        resp = requests.post(
-            f"{ZOTERO_LOCAL_BASE}/users/0/items",
-            headers=headers,
-            data=json.dumps([item]),
-            timeout=30,
+        pdf_url = item["attachments"][0]["url"]
+        pdf_bytes = _download_arxiv_pdf(pdf_url)
+        if pdf_bytes is None:
+            return {"ok": False, "error": "arXiv did not return a valid PDF."}
+        attachment_key = existing_pdf[0] if existing_pdf else None
+        error = _repair_existing_item_pdf(
+            existing_item_key, pdf_bytes, attachment_key=attachment_key
         )
-    if resp.status_code in (200, 201):
-        try:
-            created = resp.json()
-            key = created[0].get("key") if isinstance(created, list) and created else None
-        except (ValueError, AttributeError):
-            key = None
-        return {"ok": True, "item_key": key}
-    if resp.status_code == 401:
+        if error:
+            return {"ok": False, "error": error}
+        return {"ok": True, "item_key": existing_item_key}
+
+    target_id = "L1"
+    if collection_key:
+        target_id = _collection_target_id(collection_key)
+        if target_id is None:
+            return {
+                "ok": False,
+                "error": "Could not find that Zotero collection in My Library.",
+            }
+
+    pdf_url = item["attachments"][0]["url"]
+    pdf_bytes = _download_arxiv_pdf(pdf_url)
+    if pdf_bytes is None:
+        return {"ok": False, "error": "arXiv did not return a valid PDF."}
+
+    page_resp = requests.get(item["url"], timeout=30)
+    page_resp.raise_for_status()
+    snapshot_html = page_resp.content.decode("utf-8", errors="replace")
+
+    session_id = secrets.token_hex(16)
+    connector_item_id = secrets.token_hex(8)
+    item["id"] = connector_item_id
+    payload = {"sessionID": session_id, "url": item["url"], "items": [item]}
+
+    resp = requests.post(
+        _connector_url("saveItems"),
+        headers=_connector_headers(),
+        json=payload,
+        timeout=60,
+    )
+    resp.raise_for_status()
+    if resp.status_code != 201:
         return {
             "ok": False,
             "error": (
-                "Zotero did not authorize the write. In Zotero, click Allow when "
-                "the 'Allow this application to modify your library?' dialog appears, "
-                "then try again."
+                f"Zotero could not save the item (HTTP {resp.status_code})."
             ),
         }
-    if resp.status_code == 403:
-        return {
-            "ok": False,
-            "error": (
-                "Zotero's local API is disabled. Enable it in Zotero: "
-                "Settings → Advanced → 'Allow other applications on this computer "
-                "to communicate with Zotero', then restart Zotero."
-            ),
-        }
-    return {"ok": False, "error": f"Zotero returned HTTP {resp.status_code}."}
+
+    resp = requests.post(
+        _connector_url("updateSession"),
+        headers=_connector_headers(),
+        json={"sessionID": session_id, "target": target_id},
+        timeout=30,
+    )
+    resp.raise_for_status()
+
+    resp = requests.post(
+        _connector_url("saveSingleFile"),
+        headers=_connector_headers(),
+        json={
+            "sessionID": session_id,
+            "url": item["url"],
+            "title": "Snapshot",
+            "items": [{"id": connector_item_id}],
+            "snapshotContent": snapshot_html,
+        },
+        timeout=60,
+    )
+    resp.raise_for_status()
+    if resp.status_code != 201:
+        return {"ok": False, "error": "Zotero did not save the page snapshot."}
+
+    metadata = {
+        "sessionID": session_id,
+        "parentItemID": connector_item_id,
+        "title": "Preprint PDF",
+        "url": pdf_url,
+    }
+    resp = requests.post(
+        _connector_url("saveAttachment"),
+        params={"sessionID": session_id},
+        headers={
+            "Content-Type": "application/pdf",
+            "X-Metadata": json.dumps(metadata),
+        },
+        data=pdf_bytes,
+        timeout=60,
+    )
+    resp.raise_for_status()
+    if resp.status_code != 201:
+        return {"ok": False, "error": "Zotero did not save the PDF attachment."}
+
+    return {"ok": True, "item_key": _zotero_item_key(archive_id)}

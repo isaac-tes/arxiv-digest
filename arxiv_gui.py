@@ -230,7 +230,7 @@ def _copy_removed_ids_or_warn(source: str | None, target: str) -> bool:
 
 @st.cache_data(ttl=10, show_spinner=False)
 def _zotero_available_cached() -> bool:
-    """Cached reachability check for the Zotero local API (short TTL)."""
+    """Cached reachability check for Zotero's local Connector API."""
     return zb.zotero_available()
 
 
@@ -302,10 +302,9 @@ def _set_zotero_saved(arxiv_id: str) -> None:
 def _do_zotero_save(arxiv_id: str, title: str, col_key: str | None = None) -> None:
     """Callback for the Save button — runs exactly once per click.
 
-    Saves to the user's **personal** Zotero library via the local bridge (the
-    fast, no-key path that pops Zotero's own "Allow this application?" dialog).
-    Records a transient outcome so the render can show it. A denied/failed save
-    is stored as an error and must never show a success toast.
+    Saves to the user's **personal** Zotero library through the local Connector
+    API. New saves need no API key; repairing an older item may request local API
+    authorization. The outcome is stored so a failed save never shows success.
     """
     if arxiv_id in st.session_state.zotero_saving:
         return  # a save is already in flight for this paper
