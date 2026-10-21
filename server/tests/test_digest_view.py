@@ -169,7 +169,7 @@ def test_papers_carry_abstract_and_breakdown_matching_score(client):
     body = client.get("/digest").json()
     top = body["papers"][0]
     assert top["abstract"].startswith("An abstract about floquet anyon pumps.")
-    assert top["summary"] == "An abstract about floquet anyon pumps. Second sentence."
+    assert top["summary"] == "An abstract about floquet anyon pumps. Second sentence. Third one."
     kw = top["breakdown"]["signals"]["keyword"]
     assert top["breakdown"]["total"] == top["score"] == 20
     assert [k for k, _ in kw["authors"]] == ["Ada Lovelace"]  # middle initial tolerated
