@@ -1362,39 +1362,33 @@ too (authors are font-tinted by default, matching the original behavior).</p>
 write the project config.</p>
 <h2 id="zotero-bridge">Zotero bridge<a class="headerlink" href="#zotero-bridge" title="Permanent link">&para;</a></h2>
 <p>The GUI saves papers into your <strong>personal My Library</strong> through Zotero's local
-HTTP API, using the same mechanism as the official Zotero Connector and without
-an API key.</p>
+Connector HTTP API. It builds the arXiv <code>preprint</code> metadata, then uses Zotero's
+save-session endpoints to import the page snapshot and actual PDF file, like the
+browser Connector. A single <code>arxiv-digest</code> source tag supports duplicate checks.</p>
 <ul>
 <li><strong>Save to Zotero</strong> popover next to each paper's score, and in the <strong>Score a
-  paper</strong> tab. It fetches the paper from the arXiv export API and writes a
-  <code>preprint</code> item with the same fields, category tags, and PDF/Snapshot
-  attachments the Zotero Connector would produce, plus an <code>arxiv-digest</code> source
-  tag.</li>
+  paper</strong> tab.</li>
 <li><strong>Choose a collection</strong>: the popover lists the personal-library root
   (<code>(no collection)</code>) and My Library's collections. Group-library saving is not
-  offered because Zotero's local HTTP API has no supported group-library route.
-  To put a saved paper in a group, drag or copy it from My Library to that group
-  in Zotero.</li>
+  offered. To put a saved paper in a group, move it from My Library in Zotero.</li>
+<li><strong>Older incomplete saves are repaired</strong>: if the bridge finds its existing
+  item but no downloaded PDF, it imports the PDF onto that item instead of
+  reporting a false success or creating another preprint.</li>
 <li><strong>Confirmation</strong>: a transient <strong>Saved ✓</strong> appears next to the score for
-  ~30 seconds before the Save button returns. You can re-save a paper later;
-  the bridge prevents creating a duplicate of the same arXiv item in My Library.</li>
+  ~30 seconds. Existing complete records are not duplicated.</li>
 </ul>
 <h3 id="enabling-saving-to-zotero">Enabling saving to Zotero<a class="headerlink" href="#enabling-saving-to-zotero" title="Permanent link">&para;</a></h3>
-<p>Saving uses Zotero's <strong>local HTTP API</strong>, which must be switched on:</p>
 <ol>
-<li><strong>Install/run Zotero 10 or newer</strong>: older versions expose a read-only local
-   API and cannot save (the button explains this).</li>
-<li>Open Zotero → <strong>Settings</strong> (macOS: <em>Preferences</em>) → <strong>Advanced</strong> tab.</li>
-<li>Tick <strong>"Allow other applications on this computer to communicate with
-   Zotero"</strong>.</li>
-<li>Restart Zotero if prompted. The GUI sidebar should now show <strong>Zotero:
-   connected</strong>.</li>
-<li>On the <strong>first save</strong>, Zotero pops an <em>"Allow this application to modify your
-   library?"</em> dialog: click <strong>Allow</strong> (or <strong>Always Allow</strong>) once, then save
-   again.</li>
+<li><strong>Run Zotero</strong>. The sidebar shows <strong>Zotero: connected</strong> when the local
+   Connector endpoint is reachable.</li>
+<li>For the collection picker and duplicate detection, open Zotero → <strong>Settings</strong>
+   (macOS: <em>Preferences</em>) → <strong>Advanced</strong>, then enable <strong>"Allow other
+   applications on this computer to communicate with Zotero"</strong>. Restart if
+   prompted. New saves use Zotero's Connector API and do not need an API key.</li>
+<li>If an existing item needs its missing PDF repaired, Zotero may ask to
+   authorize the local API write. Choose <strong>Always Allow</strong> to avoid repeat prompts
+   during the multi-step file import.</li>
 </ol>
-<p>The sidebar shows a <strong>Zotero: connected / not running</strong> status pill so you can
-tell at a glance whether saving is available.</p>
 <h2 id="score-a-paper">Score a paper<a class="headerlink" href="#score-a-paper" title="Permanent link">&para;</a></h2>
 <p>Paste an arXiv link or ID (full URL, bare ID, or <code>arXiv:xxxx</code>) into the
 <strong>Score a paper</strong> tab and click <strong>Score this paper</strong>. It shows:</p>
@@ -1537,7 +1531,7 @@ those rows ● in it.</p>
     <span class="md-icon" title="Last update">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M21 13.1c-.1 0-.3.1-.4.2l-1 1 2.1 2.1 1-1c.2-.2.2-.6 0-.8l-1.3-1.3c-.1-.1-.2-.2-.4-.2m-1.9 1.8-6.1 6V23h2.1l6.1-6.1zM12.5 7v5.2l4 2.4-1 1L11 13V7zM11 21.9c-5.1-.5-9-4.8-9-9.9C2 6.5 6.5 2 12 2c5.3 0 9.6 4.1 10 9.3-.3-.1-.6-.2-1-.2s-.7.1-1 .2C19.6 7.2 16.2 4 12 4c-4.4 0-8 3.6-8 8 0 4.1 3.1 7.5 7.1 7.9l-.1.2z"/></svg>
     </span>
-    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="October 14, 2026 09:03:48 UTC"><span class="timeago" datetime="2026-10-14T09:03:48+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="October 14, 2026 09:03:48 UTC">2026-10-14</span>
+    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="October 22, 2026 11:37:55 UTC"><span class="timeago" datetime="2026-10-22T11:37:55+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="October 22, 2026 11:37:55 UTC">2026-10-22</span>
   </span>
 
     
