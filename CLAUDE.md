@@ -88,7 +88,7 @@ Monorepo (ADR 0006). `arxiv_digest.py` is the shared engine — everything else 
 |------|------|
 | `arxiv_digest.py` | Engine + CLI (`arxiv-digest`): config, fetch, filter, score, format |
 | `arxiv_gui.py` | Streamlit GUI; `arxiv_gui_launcher.py` is the `arxiv-gui` console script |
-| `zotero_bridge.py` | Save to Zotero (local API, ADR 0001) + arXiv Atom lookup used by *Score a paper* |
+| `zotero_bridge.py` | Zotero Connector save + arXiv Atom lookup (ADR 0001) |
 | `sync_client.py` | GUI ↔ digest-server two-way sync |
 | `update_check.py` | Cached release check + `arxiv-digest update` self-upgrade |
 | `server/` | FastAPI digest service (routers `auth/config/digest/removed/score/zotero`, SQLAlchemy, SQLite by default); `server/app/scoring.py` imports the root `arxiv_digest` |

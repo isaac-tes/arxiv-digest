@@ -149,40 +149,32 @@ write the project config.
 ## Zotero bridge
 
 The GUI saves papers into your **personal My Library** through Zotero's local
-HTTP API, using the same mechanism as the official Zotero Connector and without
-an API key.
+Connector HTTP API. It builds the arXiv `preprint` metadata, then uses Zotero's
+save-session endpoints to import the page snapshot and actual PDF file, like the
+browser Connector. A single `arxiv-digest` source tag supports duplicate checks.
 
 - **Save to Zotero** popover next to each paper's score, and in the **Score a
-  paper** tab. It fetches the paper from the arXiv export API and writes a
-  `preprint` item with the same fields, category tags, and PDF/Snapshot
-  attachments the Zotero Connector would produce, plus an `arxiv-digest` source
-  tag.
+  paper** tab.
 - **Choose a collection**: the popover lists the personal-library root
   (`(no collection)`) and My Library's collections. Group-library saving is not
-  offered because Zotero's local HTTP API has no supported group-library route.
-  To put a saved paper in a group, drag or copy it from My Library to that group
-  in Zotero.
+  offered. To put a saved paper in a group, move it from My Library in Zotero.
+- **Older incomplete saves are repaired**: if the bridge finds its existing
+  item but no downloaded PDF, it imports the PDF onto that item instead of
+  reporting a false success or creating another preprint.
 - **Confirmation**: a transient **Saved ✓** appears next to the score for
-  ~30 seconds before the Save button returns. You can re-save a paper later;
-  the bridge prevents creating a duplicate of the same arXiv item in My Library.
+  ~30 seconds. Existing complete records are not duplicated.
 
 ### Enabling saving to Zotero
 
-Saving uses Zotero's **local HTTP API**, which must be switched on:
-
-1. **Install/run Zotero 10 or newer**: older versions expose a read-only local
-   API and cannot save (the button explains this).
-2. Open Zotero → **Settings** (macOS: *Preferences*) → **Advanced** tab.
-3. Tick **"Allow other applications on this computer to communicate with
-   Zotero"**.
-4. Restart Zotero if prompted. The GUI sidebar should now show **Zotero:
-   connected**.
-5. On the **first save**, Zotero pops an *"Allow this application to modify your
-   library?"* dialog: click **Allow** (or **Always Allow**) once, then save
-   again.
-
-The sidebar shows a **Zotero: connected / not running** status pill so you can
-tell at a glance whether saving is available.
+1. **Run Zotero**. The sidebar shows **Zotero: connected** when the local
+   Connector endpoint is reachable.
+2. For the collection picker and duplicate detection, open Zotero → **Settings**
+   (macOS: *Preferences*) → **Advanced**, then enable **"Allow other
+   applications on this computer to communicate with Zotero"**. Restart if
+   prompted. New saves use Zotero's Connector API and do not need an API key.
+3. If an existing item needs its missing PDF repaired, Zotero may ask to
+   authorize the local API write. Choose **Always Allow** to avoid repeat prompts
+   during the multi-step file import.
 
 ## Score a paper
 

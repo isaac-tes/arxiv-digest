@@ -10,6 +10,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - **Longer card summaries**: the abstract summary on each paper card now keeps the first four sentences instead of two, so the card fills out more (same rule in the iOS app; the "Full abstract" expander still shows everything).
 
+### Fixed
+- **Zotero saves now import the arXiv PDF and page snapshot** through Zotero's
+  local Connector API; the previous direct item write silently ignored
+  attachment URLs. Retrying an older metadata-only item now adds its missing PDF
+  instead of treating it as complete.
+
 ## [0.7.1] - 2026-10-11
 
 ### Added

@@ -1,47 +1,46 @@
-# ADR 0001: Use Zotero's local HTTP API for the save bridge
+# ADR 0001: Use Zotero's local Connector API for the save bridge
 
 - **Status**: Accepted
 - **Date**: 2026-08-20
 
 ## Context
 
-The GUI needs a one-click "Save to Zotero" action that writes a paper into the
-user's Zotero library, behaving like the official Zotero Connector when saving an
-arXiv page. Two integration paths were considered:
-
-1. **Zotero local HTTP API** (`http://localhost:23119/api/`): the same mechanism
-   the Zotero Connector browser extension uses. Serves the user's local library;
-   reads need no auth; writes (Zotero 10+) require a local API key granted at
-   runtime via a Zotero "Allow this application?" dialog.
-2. **Zotero Web API** via `pyzotero`: requires the user to create a zotero.org
-   API key and provide their library ID, and writes to the *online* library (which
-   then syncs down to the desktop app).
+The GUI needs a one-click “Save to Zotero” action that behaves like the official
+Zotero Connector when saving an arXiv page. The local Zotero HTTP server exposes
+both a read-only library API (`/api/`) and the Connector API (`/connector/`).
+Writing item metadata directly through `/api/` is insufficient: Zotero ignores
+attachment URLs in item-creation requests, and Zotero 10+ local writes require
+per-session authorization.
 
 ## Decision
 
-Use the **Zotero local HTTP API** (`http://localhost:23119/api/`). Save actions
-POST a `preprint` item to `/users/0/items` with `Zotero-API-Version: 3`, replicating
-the Zotero Connector's arXiv translator output (fields, category tags, PDF/Snapshot
-attachments) plus a single `arxiv-digest` source tag.
+Use Zotero's local **Connector API** (`http://localhost:23119/connector/`) for
+new saves, and the local library API for collection lookup and duplicate
+detection. The save flow follows the Connector session protocol:
+
+1. Fetch arXiv Atom metadata and build the same `preprint` fields and category
+tags as Zotero's `arXiv.org.js` translator, plus the `arxiv-digest` source tag.
+2. Download the arXiv abstract-page HTML and PDF.
+3. Create the item through `/connector/saveItems`, move the session to the
+selected personal-library target through `/connector/updateSession`, attach the
+page snapshot through `/connector/saveSingleFile`, and stream the PDF bytes to
+`/connector/saveAttachment`.
+
+If duplicate detection finds a pre-existing item without a local PDF, repair that
+record with a child attachment and Zotero's local file-upload protocol. This
+Zotero 10+ fallback uses the local write-authorization flow and caches keys only
+when Zotero marks them persistent.
 
 ## Consequences
 
-- **No API-key setup** for the user: the first write triggers Zotero's native
-  authorization dialog, matching the connector's feel.
-- **Writes go to the local library** immediately; sync to zotero.org happens via
-  Zotero's own sync, not our code.
-- **Requires the Zotero desktop app to be running.** We surface this with a sidebar
-  status indicator and a graceful per-click error with the enable hint
-  (Settings → Advanced → "Allow other applications on this computer to communicate
-  with Zotero").
-- **Requires Zotero 10+ for writes.** Zotero versions before 10 expose a
-  read-only local API; write requests return `400 Endpoint does not support
-  method`. The bridge detects this via the missing `Zotero-Server-ID` header
-  (only present in Zotero 10+) and explains that Zotero 10+ is required. On
-  Zotero 10+, the bridge runs the local write-authorization flow
-  (`POST /api/local/authorize`) to obtain a key, then writes with it.
-- **No new dependency**: `requests` (already used) is sufficient; `pyzotero` is
-  not needed.
-- **Trade-off accepted**: the local API is desktop-only and cannot run headless.
-  If a headless/remote save path is ever needed, the web API can be added as a
-  separate fallback without removing the local bridge.
+- PDF and snapshot attachments are imported into Zotero's local storage instead
+  of being left as remote URL stubs or silently discarded.
+- Normal new saves use Zotero's Connector path and do not require an API key or
+  the Zotero 10+ local write-authorization dialog. Repairing a legacy item may
+  prompt for local write authorization.
+- The Zotero desktop app must be running with its local HTTP server available.
+- Group-library targets are not offered; the GUI selects My Library or one of
+  its collections.
+- The bridge still adds one `arxiv-digest` source tag for reliable duplicate
+  detection.
+- No new dependency is required; `requests` is already used by the project.
